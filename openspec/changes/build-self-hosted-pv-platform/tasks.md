@@ -31,7 +31,7 @@
 - [x] 3.6 Create PostgreSQL management/account-owned migrations with `account_id` in all owned keys and constraints plus schemas for teams, projections, jobs, and integrations.
 - [x] 3.7 Add PostgreSQL time partitions, partition-horizon management, B-tree/BRIN indexes, constraints, and query-plan fixtures for telemetry and rollups.
 - [x] 3.8 Implement bounded lazy SQLite account connection-pool routing, opaque path validation, per-account WAL/foreign keys/busy timeout/writer serialization, idle pool eviction, checkpoints, and integrity probes.
-- [ ] 3.9 Implement account-local transactional outbox, management inbox/projections, sequence checkpoints, idempotent replay, privacy-first invalidation, and reconciliation tests.
+- [x] 3.9 Implement account-local transactional outbox, management inbox/projections, sequence checkpoints, idempotent replay, privacy-first invalidation, and reconciliation tests.
 - [ ] 3.10 Implement user/account/session/credential/membership/routing/global-audit repositories and run shared authorization and isolation contract tests.
 - [ ] 3.11 Implement system/equipment/tariff/channel/account-audit repositories for routed SQLite account databases and PostgreSQL with shared effective-date tests.
 - [ ] 3.12 Implement hot telemetry/idempotency/correction repositories for routed SQLite account databases and PostgreSQL with shared transaction, uniqueness, and range-query tests.

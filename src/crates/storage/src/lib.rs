@@ -17,6 +17,8 @@ mod migrations;
 #[cfg(feature = "sqlite")]
 mod provisioning;
 #[cfg(feature = "sqlite")]
+mod sqlite_projection;
+#[cfg(feature = "sqlite")]
 mod sqlite_router;
 
 pub use migrations::{
@@ -27,6 +29,13 @@ pub use migrations::{
 pub use provisioning::{
     AccountDatabaseLifecycle, AccountProvisioningResult, ReconciliationReport,
     SqliteAccountProvisioner, SqliteProvisioningError,
+};
+#[cfg(feature = "sqlite")]
+pub use sqlite_projection::{
+    ProjectionActivityState, ProjectionError, ProjectionInvalidationReason,
+    ProjectionLocationPrecision, ProjectionReconciliationReport, ProjectionVisibility,
+    SqliteProjectionCoordinator, SystemDiscoveryProjection, SystemProjectionEvent,
+    append_projection_event,
 };
 #[cfg(feature = "sqlite")]
 pub use sqlite_router::{
