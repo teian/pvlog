@@ -65,6 +65,10 @@ path = "../../../tests/rust/storage/sqlite_projections.rs"
 name = "management-repositories"
 path = "../../../tests/rust/storage/management_repositories.rs"
 
+[[test]]
+name = "account-configuration-repositories"
+path = "../../../tests/rust/storage/account_configuration_repositories.rs"
+
 [lib]
 path = "src/lib.rs"
 

@@ -13,6 +13,7 @@ use sqlx::{
 };
 use thiserror::Error;
 
+mod account_repository;
 mod management_repository;
 mod migrations;
 #[cfg(feature = "sqlite")]
@@ -22,6 +23,14 @@ mod sqlite_projection;
 #[cfg(feature = "sqlite")]
 mod sqlite_router;
 
+#[cfg(feature = "postgres")]
+pub use account_repository::PostgresAccountConfigurationRepository;
+#[cfg(feature = "sqlite")]
+pub use account_repository::SqliteAccountConfigurationRepository;
+pub use account_repository::{
+    AccountAuditRecord, AccountConfigurationRepository, AccountRepositoryError,
+    ChannelDefinitionRecord, EquipmentRecord, SystemConfigurationRecord, TariffRecord,
+};
 pub use management_repository::{
     AccountRecord, ApiCredentialRecord, AuditRecord, AuthorizationGrant, ManagementRepository,
     ManagementRepositoryError, MembershipRecord, PostgresManagementRepository, RoutingBackend,
