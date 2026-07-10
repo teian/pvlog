@@ -12,6 +12,7 @@ postgres = ["sqlx/postgres"]
 sqlite = ["sqlx/sqlite"]
 
 [dependencies]
+async-trait.workspace = true
 blake3.workspace = true
 prost.workspace = true
 pvlog-application = { path = "../application" }
@@ -59,6 +60,10 @@ path = "../../../tests/rust/storage/sqlite_account_routing.rs"
 [[test]]
 name = "sqlite-projections"
 path = "../../../tests/rust/storage/sqlite_projections.rs"
+
+[[test]]
+name = "management-repositories"
+path = "../../../tests/rust/storage/management_repositories.rs"
 
 [lib]
 path = "src/lib.rs"
