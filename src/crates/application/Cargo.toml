@@ -10,10 +10,13 @@ repository.workspace = true
 argon2.workspace = true
 async-trait.workspace = true
 blake3.workspace = true
+chacha20poly1305.workspace = true
 openidconnect.workspace = true
+oauth2.workspace = true
 pvlog-domain = { path = "../domain" }
 secrecy.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 time.workspace = true
 tracing.workspace = true
@@ -33,6 +36,10 @@ tokio.workspace = true
 [[test]]
 name = "oidc-protocol"
 path = "../../../tests/rust/application/oidc_protocol.rs"
+
+[[test]]
+name = "oauth2-protocol"
+path = "../../../tests/rust/application/oauth2_protocol.rs"
 
 [lints]
 workspace = true

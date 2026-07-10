@@ -43,7 +43,7 @@
 - [x] 4.2 Implement Argon2id password verification/rehash, password change, single-use hashed recovery tokens, configurable password policy hooks, and brute-force/rate-limit controls.
 - [x] 4.3 Implement built-in and constrained custom RBAC role CRUD, permission assignment/delegation checks, effective-permission calculation, and privilege-escalation tests.
 - [x] 4.4 Implement multiple provider-neutral OIDC connectors with discovery, authorization callback, issuer/audience/signature/time validation, state, nonce, PKCE, secret references, and connector health tests.
-- [ ] 4.5 Implement generic OAuth2 Authorization Code connectors with configured endpoints, state/PKCE, normalized user-info subject/name/email/avatar mappings, encrypted server-side token handling, and fake-provider tests.
+- [x] 4.5 Implement generic OAuth2 Authorization Code connectors with configured endpoints, state/PKCE, normalized user-info subject/name/email/avatar mappings, encrypted server-side token handling, and fake-provider tests.
 - [ ] 4.6 Add versioned administrator-facing Google, GitHub, Facebook, and X preset definitions, setup validation, current-provider UI/configuration-catalog conformance tests under `tests/ui/`, and display metadata without vendor-named backend DTOs/services/settings/tests.
 - [ ] 4.7 Implement just-in-time local user provisioning plus explicit external identity link/unlink with connector-subject uniqueness, recent reauthentication, verified-email opt-in policy, last-login protection, and takeover tests.
 - [ ] 4.8 Implement secure browser session cookies, rotation, CSRF protection, idle/absolute expiry, concurrent-session policy, logout/revocation, and browser-focused security tests for every login method.
