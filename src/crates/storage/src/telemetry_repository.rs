@@ -6,9 +6,9 @@ use std::fmt;
 use async_trait::async_trait;
 use pvlog_domain::{AccountId, CorrectionId, ObservationId, SystemId};
 use serde_json::Value;
+use sqlx::Row as _;
 #[cfg(feature = "postgres")]
-use sqlx::PgConnection;
-use sqlx::{Connection as _, Row as _};
+use sqlx::{Connection as _, PgConnection};
 use thiserror::Error;
 use uuid::Uuid;
 

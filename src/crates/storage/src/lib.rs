@@ -4,8 +4,9 @@
 
 use std::{fmt, path::PathBuf};
 
+use sqlx::Connection as _;
 #[cfg(feature = "postgres")]
-use sqlx::{Connection as _, PgConnection};
+use sqlx::PgConnection;
 #[cfg(feature = "sqlite")]
 use sqlx::{
     SqliteConnection,
@@ -16,6 +17,7 @@ use thiserror::Error;
 mod account_repository;
 mod management_repository;
 mod migrations;
+mod operational_repository;
 #[cfg(feature = "sqlite")]
 mod provisioning;
 #[cfg(feature = "sqlite")]
@@ -40,6 +42,15 @@ pub use management_repository::{
 pub use migrations::{
     DatabaseMigrationStatus, MigrationError, MigrationKind, MigrationPlanItem, MigrationState,
     apply_migrations, ensure_schema_compatible, migration_plan, migration_status,
+};
+#[cfg(feature = "postgres")]
+pub use operational_repository::PostgresOperationalRepository;
+#[cfg(feature = "sqlite")]
+pub use operational_repository::SqliteOperationalRepository;
+pub use operational_repository::{
+    AlertRuleRecord, DailySummaryRecord, JobRecord, LifetimeSummaryRecord, OperationalRepository,
+    OperationalRepositoryError, ProviderRecord, RollupRecord, TeamRecord, TeamRollupRecord,
+    WebhookSubscriptionRecord,
 };
 #[cfg(feature = "sqlite")]
 pub use provisioning::{

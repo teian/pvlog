@@ -193,6 +193,7 @@ pub trait ManagementRepository: Send + Sync {
 /// `SQLite` management repository.
 #[derive(Clone, Debug)]
 pub struct SqliteManagementRepository {
+    #[cfg_attr(not(feature = "sqlite"), allow(dead_code))]
     path: PathBuf,
 }
 
@@ -217,6 +218,7 @@ impl SqliteManagementRepository {
 /// `PostgreSQL` management repository.
 #[derive(Clone, Debug)]
 pub struct PostgresManagementRepository {
+    #[cfg_attr(not(feature = "postgres"), allow(dead_code))]
     url: String,
 }
 
