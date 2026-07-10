@@ -24,7 +24,7 @@
 ## 3. Database Schemas and Repository Contracts
 
 - [x] 3.1 Implement migration discovery, checksums, status/plan/apply commands, PostgreSQL advisory locking, SQLite management/account lease locking, and incompatible-schema startup checks.
-- [ ] 3.2 Create SQLite management migrations for local users, Argon2id credentials, invitations/recovery, protocol-neutral auth connectors, external identities, encrypted provider token state, sessions, RBAC roles/permissions/assignments, accounts, memberships, API credential hashes/scopes, quotas, routing/schema state, provisioning, global audit, and privacy-safe projections.
+- [x] 3.2 Create SQLite management migrations for local users, Argon2id credentials, invitations/recovery, protocol-neutral auth connectors, external identities, encrypted provider token state, sessions, RBAC roles/permissions/assignments, accounts, memberships, API credential hashes/scopes, quotas, routing/schema state, provisioning, global audit, and privacy-safe projections.
 - [ ] 3.3 Implement recoverable SQLite account provisioning/deprovisioning with temporary creation, migration, integrity verification, opaque managed paths, atomic activation/quarantine, and orphan reconciliation.
 - [ ] 3.4 Create SQLite account-database migrations for systems, equipment, tariffs, channels, account audit, imports/exports, alerts, webhooks, providers, and account-local jobs.
 - [ ] 3.5 Create SQLite account and PostgreSQL migrations for hot telemetry, archived segment payloads, correction overlays, idempotency, rollups, summaries, invalidations, and data quality.
