@@ -37,6 +37,7 @@ fn sqlite_server_and_worker_boot_with_isolated_account_databases() -> Result<(),
         ),
     ];
 
+    run_migrations(&settings)?;
     run_worker(&settings)?;
     run_server(&settings)?;
 
@@ -56,8 +57,22 @@ fn postgres_server_and_worker_boot_when_test_database_is_available() -> Result<(
         ("PVLOG_DATABASE__POSTGRES__URL", url.as_str()),
     ];
 
+    run_migrations(&settings)?;
     run_worker(&settings)?;
     run_server(&settings)?;
+    Ok(())
+}
+
+fn run_migrations(settings: &[(&str, &str)]) -> Result<(), Box<dyn Error>> {
+    for action in ["plan", "apply", "status"] {
+        let status = configured_command(settings)
+            .args(["migrate", "--json", action])
+            .stdout(Stdio::null())
+            .status()?;
+        if !status.success() {
+            return Err(format!("migration {action} exited with {status}").into());
+        }
+    }
     Ok(())
 }
 

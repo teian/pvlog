@@ -29,6 +29,13 @@ zstd.workspace = true
 [build-dependencies]
 prost-build.workspace = true
 
+[dev-dependencies]
+tempfile.workspace = true
+
+[[test]]
+name = "migrations"
+path = "../../../tests/rust/storage/migrations.rs"
+
 [lib]
 path = "src/lib.rs"
 

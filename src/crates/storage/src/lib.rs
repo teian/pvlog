@@ -13,6 +13,13 @@ use sqlx::{
 };
 use thiserror::Error;
 
+mod migrations;
+
+pub use migrations::{
+    DatabaseMigrationStatus, MigrationError, MigrationKind, MigrationPlanItem, MigrationState,
+    apply_migrations, ensure_schema_compatible, migration_plan, migration_status,
+};
+
 /// Database topology selected for the current process.
 pub enum DatabaseTarget {
     /// Instance management database and directory of account-owned databases.
@@ -64,7 +71,9 @@ pub async fn probe_database(target: &DatabaseTarget) -> Result<(), ProbeError> {
             accounts_dir,
         } => probe_sqlite(management_path, accounts_dir).await,
         DatabaseTarget::Postgres { url } => probe_postgres(url).await,
-    }
+    }?;
+    ensure_schema_compatible(target).await?;
+    Ok(())
 }
 
 #[cfg(feature = "sqlite")]
@@ -79,7 +88,7 @@ async fn probe_sqlite(management_path: &PathBuf, accounts_dir: &PathBuf) -> Resu
     let mut account_paths = Vec::new();
     let mut entries = tokio::fs::read_dir(accounts_dir).await?;
     while let Some(entry) = entries.next_entry().await? {
-        if entry.file_type().await?.is_file() {
+        if entry.file_type().await?.is_file() && migrations::is_sqlite_database(&entry.path()) {
             account_paths.push(entry.path());
         }
     }
@@ -135,6 +144,9 @@ pub enum ProbeError {
     /// A database connection or query failed.
     #[error("database probe failed: {0}")]
     Sqlx(#[from] sqlx::Error),
+    /// The database schema does not match the migrations embedded in this release.
+    #[error(transparent)]
+    Migration(#[from] MigrationError),
     /// The binary was compiled without the selected adapter.
     #[error("the {0} database adapter is not enabled in this build")]
     AdapterDisabled(&'static str),

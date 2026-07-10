@@ -26,6 +26,7 @@ pvlog-storage = { path = "../storage", default-features = false }
 pvlog-worker = { path = "../worker", default-features = false }
 secrecy.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
