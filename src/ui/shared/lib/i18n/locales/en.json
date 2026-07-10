@@ -1,0 +1,12 @@
+{
+  "bootstrap": {
+    "failure": "PVLog could not load its runtime configuration."
+  },
+  "docs": {
+    "apiReferenceLabel": "PVLog API reference"
+  },
+  "home": {
+    "description": "Self-hosted photovoltaic monitoring.",
+    "title": "PVLog"
+  }
+}

@@ -1,0 +1,51 @@
+[package]
+name = "pvlog"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["postgres", "sqlite"]
+postgres = ["pvlog-storage/postgres", "pvlog-worker/postgres"]
+sqlite = ["pvlog-storage/sqlite", "pvlog-worker/sqlite"]
+
+[dependencies]
+axum.workspace = true
+clap.workspace = true
+figment.workspace = true
+opentelemetry.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry_sdk.workspace = true
+pvlog-api = { path = "../api" }
+pvlog-application = { path = "../application" }
+pvlog-compatibility = { path = "../compatibility" }
+pvlog-domain = { path = "../domain" }
+pvlog-storage = { path = "../storage", default-features = false }
+pvlog-worker = { path = "../worker", default-features = false }
+secrecy.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-opentelemetry.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bin]]
+name = "pvlog"
+path = "src/main.rs"
+
+[[test]]
+name = "runtime-smoke"
+path = "../../../tests/rust/smoke/runtime_smoke.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true

@@ -1,0 +1,23 @@
+[package]
+name = "pvlog-compatibility"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+axum.workspace = true
+pvlog-application = { path = "../application" }
+pvlog-domain = { path = "../domain" }
+serde.workspace = true
+serde_json.workspace = true
+time.workspace = true
+tracing.workspace = true
+url.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true

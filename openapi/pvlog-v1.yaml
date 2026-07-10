@@ -1,0 +1,110 @@
+openapi: 3.1.1
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+info:
+  title: PVLog REST API
+  version: 0.1.0
+  summary: Modern self-hosted photovoltaic monitoring API
+  description: >-
+    The versioned JSON contract for PVLog. PVOutput r2 compatibility endpoints
+    are documented separately because they use legacy form and CSV formats.
+  license:
+    name: Apache License 2.0
+    identifier: Apache-2.0
+servers:
+  - url: /
+    description: Current PVLog installation
+tags:
+  - name: Operations
+    description: Process and deployment health
+paths:
+  /api/v1/health/live:
+    get:
+      operationId: getLiveness
+      summary: Check process liveness
+      description: Confirms that the HTTP process can execute requests.
+      tags:
+        - Operations
+      security: []
+      responses:
+        "200":
+          description: Process is live
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+              examples:
+                live:
+                  summary: Live process
+                  value:
+                    status: ok
+                    service: pvlog
+                    version: 0.1.0
+        "406":
+          $ref: "#/components/responses/NotAcceptable"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+components:
+  responses:
+    NotAcceptable:
+      description: Requested response representation is not available
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    InternalServerError:
+      description: Unexpected server failure
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+  schemas:
+    HealthStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - status
+        - service
+        - version
+      properties:
+        status:
+          type: string
+          const: ok
+          description: Liveness result.
+        service:
+          type: string
+          description: Process service name.
+          examples:
+            - pvlog
+        version:
+          type: string
+          description: Running application version.
+          examples:
+            - 0.1.0
+    Problem:
+      type: object
+      additionalProperties: true
+      description: RFC 9457 problem details.
+      required:
+        - type
+        - title
+        - status
+        - requestId
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Stable problem type identifier.
+        title:
+          type: string
+          description: Short human-readable problem title.
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+          description: HTTP status code.
+        detail:
+          type: string
+          description: Safe occurrence-specific explanation.
+        requestId:
+          type: string
+          description: Request correlation identifier.

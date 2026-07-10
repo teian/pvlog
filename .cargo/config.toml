@@ -1,0 +1,12 @@
+[alias]
+check-all = "check --workspace --all-targets --all-features"
+check-postgres = "check --workspace --all-targets --no-default-features --features postgres"
+check-sqlite = "check --workspace --all-targets --no-default-features --features sqlite"
+clippy-all = "clippy --workspace --all-targets --all-features -- -D warnings"
+test-all = "test --workspace --all-targets --all-features"
+run-server = "run -p pvlog -- server"
+run-worker = "run -p pvlog -- worker --once"
+smoke = "test -p pvlog --test runtime-smoke --all-features"
+
+[env]
+CARGO_INCREMENTAL = "0"

@@ -1,0 +1,67 @@
+[workspace]
+resolver = "3"
+members = [
+    "src/crates/api",
+    "src/crates/application",
+    "src/crates/compatibility",
+    "src/crates/domain",
+    "src/crates/pvlog",
+    "src/crates/storage",
+    "src/crates/worker",
+    "tests/rust/config",
+    "tests/support/rust/application-fakes",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "Apache-2.0"
+repository = "https://github.com/pvlog/pvlog"
+
+[workspace.dependencies]
+argon2 = { version = "=0.5.3", features = ["std", "zeroize"] }
+async-trait = "=0.1.89"
+axum = { version = "=0.8.9", features = ["http2", "json", "macros", "multipart", "query", "tokio"] }
+blake3 = "=1.8.5"
+chrono-tz = "=0.10.4"
+clap = { version = "=4.6.1", features = ["derive", "env", "unicode", "wrap_help"] }
+figment = { version = "=0.10.19", features = ["env", "json", "toml"] }
+garde = { version = "=0.23.0", features = ["derive", "email", "serde", "url"] }
+opentelemetry = { version = "=0.32.0", features = ["metrics", "trace"] }
+opentelemetry-otlp = "=0.32.0"
+opentelemetry_sdk = { version = "=0.32.1", features = ["rt-tokio", "spec_unstable_metrics_views"] }
+prost = "=0.14.4"
+prost-build = "=0.14.4"
+secrecy = { version = "=0.10.3", features = ["serde"] }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+sqlx = { version = "=0.9.0", default-features = false, features = ["json", "macros", "migrate", "runtime-tokio", "time", "tls-rustls-ring-native-roots", "uuid"] }
+thiserror = "=2.0.18"
+time = { version = "=0.3.53", features = ["formatting", "macros", "parsing", "serde"] }
+tokio = { version = "=1.52.3", features = ["fs", "macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+tower = { version = "=0.5.3", features = ["buffer", "limit", "load-shed", "timeout", "util"] }
+tower-http = { version = "=0.7.0", features = ["compression-full", "cors", "limit", "request-id", "sensitive-headers", "set-header", "timeout", "trace"] }
+tracing = { version = "=0.1.44", features = ["attributes"] }
+tracing-opentelemetry = "=0.33.0"
+tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "fmt", "json"] }
+url = { version = "=2.5.8", features = ["serde"] }
+utoipa = { version = "=5.5.0", features = ["axum_extras", "time", "url", "uuid", "yaml"] }
+utoipa-axum = "=0.2.0"
+uuid = { version = "=1.23.4", features = ["serde", "std", "v4", "v7"] }
+zeroize = { version = "=1.9.0", features = ["derive"] }
+zstd = "=0.13.3"
+
+[workspace.dependencies.tempfile]
+version = "=3.27.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+dbg_macro = "deny"
+expect_used = "warn"
+todo = "deny"
+unwrap_used = "warn"

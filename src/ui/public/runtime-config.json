@@ -1,0 +1,8 @@
+{
+  "apiBaseUrl": "/api/v1",
+  "telemetry": {
+    "enabled": false,
+    "serviceName": "pvlog-ui",
+    "serviceVersion": "development"
+  }
+}

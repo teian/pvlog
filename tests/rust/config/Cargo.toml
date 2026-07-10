@@ -1,0 +1,21 @@
+[package]
+name = "pvlog-config-tests"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+figment.workspace = true
+pvlog = { path = "../../../src/crates/pvlog" }
+secrecy.workspace = true
+serde_json.workspace = true
+
+[[test]]
+name = "runtime_config"
+path = "runtime_config.rs"
+
+[lints]
+workspace = true
+

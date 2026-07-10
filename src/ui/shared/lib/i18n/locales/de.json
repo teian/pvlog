@@ -1,0 +1,12 @@
+{
+  "bootstrap": {
+    "failure": "PVLog konnte seine Laufzeitkonfiguration nicht laden."
+  },
+  "docs": {
+    "apiReferenceLabel": "PVLog-API-Referenz"
+  },
+  "home": {
+    "description": "Selbst gehostete Photovoltaik-Überwachung.",
+    "title": "PVLog"
+  }
+}

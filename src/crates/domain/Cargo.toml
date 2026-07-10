@@ -1,0 +1,50 @@
+[package]
+name = "pvlog-domain"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+chrono-tz.workspace = true
+garde.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+time.workspace = true
+url.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[[test]]
+name = "value-objects"
+path = "../../../tests/rust/domain/value_objects.rs"
+
+[[test]]
+name = "identity-models"
+path = "../../../tests/rust/domain/identity_models.rs"
+
+[[test]]
+name = "system-models"
+path = "../../../tests/rust/domain/system_models.rs"
+
+[[test]]
+name = "telemetry-models"
+path = "../../../tests/rust/domain/telemetry_models.rs"
+
+[[test]]
+name = "operations-models"
+path = "../../../tests/rust/domain/operations_models.rs"
+
+[[test]]
+name = "rbac-policy"
+path = "../../../tests/rust/domain/rbac_policy.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true

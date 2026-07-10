@@ -1,0 +1,26 @@
+[package]
+name = "pvlog-application"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+argon2.workspace = true
+async-trait.workspace = true
+pvlog-domain = { path = "../domain" }
+secrecy.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+time.workspace = true
+tracing.workspace = true
+url.workspace = true
+uuid.workspace = true
+zeroize.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true

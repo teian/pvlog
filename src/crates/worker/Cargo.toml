@@ -1,0 +1,25 @@
+[package]
+name = "pvlog-worker"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+default = ["postgres", "sqlite"]
+postgres = ["pvlog-storage/postgres"]
+sqlite = ["pvlog-storage/sqlite"]
+
+[dependencies]
+pvlog-application = { path = "../application" }
+pvlog-domain = { path = "../domain" }
+pvlog-storage = { path = "../storage", default-features = false }
+tokio.workspace = true
+tracing.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true

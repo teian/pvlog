@@ -1,0 +1,23 @@
+[package]
+name = "pvlog-application-fakes"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+blake3.workspace = true
+pvlog-application = { path = "../../../../src/crates/application" }
+pvlog-domain = { path = "../../../../src/crates/domain" }
+secrecy.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+url.workspace = true
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true

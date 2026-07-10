@@ -1,0 +1,35 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "ignoreFiles": ["dist/**", "node_modules/**", "tests/**"],
+  "rules": {
+    "at-rule-disallowed-list": ["apply"],
+    "color-named": "never",
+    "function-disallowed-list": [
+      "rgb",
+      "rgba",
+      "hsl",
+      "hsla",
+      "hwb",
+      "lch",
+      "oklch",
+      "lab",
+      "oklab"
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/ui/index.css"],
+      "rules": {
+        "at-rule-no-unknown": [
+          true,
+          { "ignoreAtRules": ["theme", "custom-variant", "source"] }
+        ],
+        "custom-property-empty-line-before": null,
+        "function-disallowed-list": null,
+        "hue-degree-notation": null,
+        "import-notation": null,
+        "lightness-notation": null
+      }
+    }
+  ]
+}
