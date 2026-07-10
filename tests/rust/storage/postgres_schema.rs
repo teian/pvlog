@@ -193,6 +193,169 @@ async fn postgres_auth_and_audit_constraints_are_provider_neutral_and_append_onl
     Ok(())
 }
 
+#[tokio::test]
+async fn postgres_telemetry_partitions_have_managed_horizons_and_expected_indexes()
+-> Result<(), Box<dyn Error>> {
+    let Some((url, mut connection)) = postgres().await? else {
+        return Ok(());
+    };
+    apply_migrations(&DatabaseTarget::Postgres { url }).await?;
+
+    let partitioned_tables = sqlx::query_scalar::<_, String>(
+        "SELECT relation.relname \
+         FROM pg_partitioned_table AS partitioned \
+         JOIN pg_class AS relation ON relation.oid = partitioned.partrelid \
+         JOIN pg_namespace AS namespace ON namespace.oid = relation.relnamespace \
+         WHERE namespace.nspname = 'telemetry' \
+               AND relation.relname IN ('hot_observations', 'rollups') \
+         ORDER BY relation.relname",
+    )
+    .fetch_all(&mut connection)
+    .await?
+    .into_iter()
+    .collect::<BTreeSet<_>>();
+    assert_eq!(
+        partitioned_tables,
+        BTreeSet::from(["hot_observations".to_owned(), "rollups".to_owned()])
+    );
+
+    let index_definitions = sqlx::query_scalar::<_, String>(
+        "SELECT indexdef FROM pg_indexes \
+         WHERE schemaname = 'telemetry' \
+           AND indexname IN ( \
+             'hot_observations_system_time_partitioned_idx', \
+             'hot_observations_measured_brin_idx', \
+             'rollups_query_partitioned_idx', \
+             'rollups_bucket_brin_idx' \
+           )",
+    )
+    .fetch_all(&mut connection)
+    .await?;
+    assert_eq!(index_definitions.len(), 4);
+    assert!(
+        index_definitions
+            .iter()
+            .any(|definition| definition.contains("USING btree")
+                && definition.contains("hot_observations"))
+    );
+    assert!(
+        index_definitions
+            .iter()
+            .any(|definition| definition.contains("USING brin")
+                && definition.contains("hot_observations"))
+    );
+    assert!(
+        index_definitions
+            .iter()
+            .any(|definition| definition.contains("USING btree") && definition.contains("rollups"))
+    );
+    assert!(
+        index_definitions
+            .iter()
+            .any(|definition| definition.contains("USING brin") && definition.contains("rollups"))
+    );
+
+    let horizons = sqlx::query(
+        "SELECT parent_table::TEXT AS parent_table, created_partitions, covered_until \
+         FROM telemetry.ensure_partition_horizon(now() + INTERVAL '18 months', now() + INTERVAL '18 months')",
+    )
+    .fetch_all(&mut connection)
+    .await?;
+    assert_eq!(horizons.len(), 2);
+    assert!(
+        horizons
+            .iter()
+            .all(|row| row.get::<i64, _>("covered_until") > 0)
+    );
+
+    connection.close().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn postgres_chart_query_plan_fixtures_prune_partitions_and_use_indexes()
+-> Result<(), Box<dyn Error>> {
+    const JANUARY_2035: i64 = 2_051_222_400_000;
+    const FEBRUARY_2035: i64 = 2_053_900_800_000;
+    const MARCH_2035: i64 = 2_056_320_000_000;
+
+    let Some((url, mut connection)) = postgres().await? else {
+        return Ok(());
+    };
+    apply_migrations(&DatabaseTarget::Postgres { url }).await?;
+    for (parent, prefix) in [
+        ("telemetry.hot_observations", "hot_observations"),
+        ("telemetry.rollups", "rollups"),
+    ] {
+        sqlx::query(
+            "SELECT telemetry.ensure_monthly_partitions( \
+                 $1::REGCLASS, $2, '2035-01-01T00:00:00Z'::TIMESTAMPTZ, \
+                 '2035-03-01T00:00:00Z'::TIMESTAMPTZ)",
+        )
+        .bind(parent)
+        .bind(prefix)
+        .execute(&mut connection)
+        .await?;
+    }
+    sqlx::query("SET enable_seqscan = off")
+        .execute(&mut connection)
+        .await?;
+
+    let account_id = Uuid::now_v7();
+    let system_id = Uuid::now_v7();
+    let hot_fixture = include_str!("../../fixtures/postgres/query-plans/hot-chart.sql");
+    let hot_plan = explain_fixture(hot_fixture, &mut connection, |query| {
+        query
+            .bind(account_id)
+            .bind(system_id)
+            .bind(JANUARY_2035)
+            .bind(FEBRUARY_2035)
+    })
+    .await?;
+    assert!(hot_plan.contains("hot_observations_y2035m01"));
+    assert!(!hot_plan.contains("hot_observations_y2035m02"));
+    assert!(hot_plan.contains("Index"));
+
+    let rollup_fixture = include_str!("../../fixtures/postgres/query-plans/rollup-chart.sql");
+    let rollup_plan = explain_fixture(rollup_fixture, &mut connection, |query| {
+        query
+            .bind(account_id)
+            .bind(system_id)
+            .bind("hour")
+            .bind(FEBRUARY_2035)
+            .bind(MARCH_2035)
+    })
+    .await?;
+    assert!(rollup_plan.contains("rollups_y2035m02"));
+    assert!(!rollup_plan.contains("rollups_y2035m01"));
+    assert!(rollup_plan.contains("Index"));
+
+    connection.close().await?;
+    Ok(())
+}
+
+async fn explain_fixture<'q, F>(
+    fixture: &str,
+    connection: &mut PgConnection,
+    bind: F,
+) -> Result<String, sqlx::Error>
+where
+    F: FnOnce(
+        sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
+    ) -> sqlx::query::Query<'q, sqlx::Postgres, sqlx::postgres::PgArguments>,
+{
+    let statement = format!(
+        "EXPLAIN (FORMAT JSON, COSTS OFF) {}",
+        fixture.trim_end_matches([';', '\n'])
+    );
+    // The statement is composed only from repository-owned fixture SQL and a fixed EXPLAIN prefix.
+    let row = bind(sqlx::query(sqlx::AssertSqlSafe(statement)))
+        .fetch_one(connection)
+        .await?;
+    let plan: serde_json::Value = row.get(0);
+    Ok(plan.to_string())
+}
+
 async fn postgres() -> Result<Option<(String, PgConnection)>, sqlx::Error> {
     let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
         return Ok(None);
