@@ -20,6 +20,7 @@ mod migrations;
 mod operational_repository;
 #[cfg(feature = "sqlite")]
 mod provisioning;
+mod rbac_repository;
 #[cfg(feature = "sqlite")]
 mod sqlite_projection;
 #[cfg(feature = "sqlite")]
@@ -58,6 +59,10 @@ pub use provisioning::{
     AccountDatabaseLifecycle, AccountProvisioningResult, ReconciliationReport,
     SqliteAccountProvisioner, SqliteProvisioningError,
 };
+#[cfg(feature = "postgres")]
+pub use rbac_repository::PostgresRbacRepository;
+#[cfg(feature = "sqlite")]
+pub use rbac_repository::SqliteRbacRepository;
 #[cfg(feature = "sqlite")]
 pub use sqlite_projection::{
     ProjectionActivityState, ProjectionError, ProjectionInvalidationReason,

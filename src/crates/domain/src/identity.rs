@@ -241,9 +241,12 @@ pub enum BuiltInRole {
     InstanceAdministrator,
     AccountOwner,
     AccountAdministrator,
+    Manager,
+    Contributor,
     Operator,
     Analyst,
     Viewer,
+    Auditor,
     Uploader,
 }
 

@@ -87,6 +87,10 @@ path = "../../../tests/rust/storage/user_lifecycle_repositories.rs"
 name = "local-password"
 path = "../../../tests/rust/storage/local_password.rs"
 
+[[test]]
+name = "rbac-repositories"
+path = "../../../tests/rust/storage/rbac_repositories.rs"
+
 [lib]
 path = "src/lib.rs"
 

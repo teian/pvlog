@@ -41,7 +41,7 @@
 
 - [x] 4.1 Implement local user administration, invitation, optional self-registration, activation/email policy, disable/unlock/delete, and enumeration-resistant lifecycle endpoints.
 - [x] 4.2 Implement Argon2id password verification/rehash, password change, single-use hashed recovery tokens, configurable password policy hooks, and brute-force/rate-limit controls.
-- [ ] 4.3 Implement built-in and constrained custom RBAC role CRUD, permission assignment/delegation checks, effective-permission calculation, and privilege-escalation tests.
+- [x] 4.3 Implement built-in and constrained custom RBAC role CRUD, permission assignment/delegation checks, effective-permission calculation, and privilege-escalation tests.
 - [ ] 4.4 Implement multiple provider-neutral OIDC connectors with discovery, authorization callback, issuer/audience/signature/time validation, state, nonce, PKCE, secret references, and connector health tests.
 - [ ] 4.5 Implement generic OAuth2 Authorization Code connectors with configured endpoints, state/PKCE, normalized user-info subject/name/email/avatar mappings, encrypted server-side token handling, and fake-provider tests.
 - [ ] 4.6 Add versioned administrator-facing Google, GitHub, Facebook, and X preset definitions, setup validation, current-provider UI/configuration-catalog conformance tests under `tests/ui/`, and display metadata without vendor-named backend DTOs/services/settings/tests.

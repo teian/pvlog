@@ -213,7 +213,9 @@ fn role_can_apply_at(role: &Role, scope: RoleScope) -> bool {
     }
 }
 
-fn built_in_permissions(role: BuiltInRole) -> BTreeSet<Permission> {
+/// Returns the explicit stable permission set for a built-in role template.
+#[must_use]
+pub fn built_in_permissions(role: BuiltInRole) -> BTreeSet<Permission> {
     use Permission::{
         AccountManage, AccountRead, AuditRead, CredentialManage, InstanceManage, InstanceRead,
         IntegrationManage, MembershipManage, RoleManage, SystemManage, SystemRead, TelemetryRead,
@@ -249,6 +251,17 @@ fn built_in_permissions(role: BuiltInRole) -> BTreeSet<Permission> {
             IntegrationManage,
             AuditRead,
         ],
+        BuiltInRole::Manager => &[
+            AccountRead,
+            MembershipManage,
+            RoleManage,
+            SystemRead,
+            SystemManage,
+            TelemetryRead,
+            TelemetryWrite,
+            CredentialManage,
+            IntegrationManage,
+        ],
         BuiltInRole::Operator => &[
             AccountRead,
             SystemRead,
@@ -257,8 +270,11 @@ fn built_in_permissions(role: BuiltInRole) -> BTreeSet<Permission> {
             TelemetryWrite,
             IntegrationManage,
         ],
+        BuiltInRole::Contributor | BuiltInRole::Uploader => {
+            &[AccountRead, SystemRead, TelemetryRead, TelemetryWrite]
+        }
         BuiltInRole::Analyst | BuiltInRole::Viewer => &[AccountRead, SystemRead, TelemetryRead],
-        BuiltInRole::Uploader => &[SystemRead, TelemetryWrite],
+        BuiltInRole::Auditor => &[AccountRead, SystemRead, TelemetryRead, AuditRead],
     };
     values.iter().copied().collect()
 }

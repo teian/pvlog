@@ -4,6 +4,7 @@
 
 mod local_password;
 mod ports;
+mod rbac_management;
 mod user_lifecycle;
 
 pub use local_password::{
@@ -17,6 +18,10 @@ pub use ports::{
     AuthorizationRequest, Clock, CredentialService, EntityRepository, IdentityClaims,
     IdentityService, InsolationPoint, InsolationProvider, JobQueue, PortError, SupplyPoint,
     SupplyProvider, Transaction, UnitOfWork, WebhookRequest, WebhookResponse, WebhookSender,
+};
+pub use rbac_management::{
+    AssignRole, CreateCustomRole, RbacManagementError, RbacRepository, RbacRoleRecord,
+    RoleManagementService, UpdateCustomRole, built_in_account_roles,
 };
 pub use user_lifecycle::{
     AdminUserActor, CreateLocalUser, InvitationRecord, InvitationResult, InviteLocalUser,

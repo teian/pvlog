@@ -36,7 +36,7 @@ pub use operations::{
     TeamMembership, TeamMembershipState, TeamVisibility, WebhookDelivery, WebhookDeliveryState,
     WebhookEventType, WebhookSubscription, WebhookSubscriptionState,
 };
-pub use rbac::{AccessDecision, AccessDenial, AccessRequest, RbacEvaluator};
+pub use rbac::{AccessDecision, AccessDenial, AccessRequest, RbacEvaluator, built_in_permissions};
 pub use shared::{CurrencyCode, Money, Visibility};
 pub use systems::{
     CalculationSettings, CapacityPeriod, ChannelDataType, ChannelDefinition, ChannelDisplay,
