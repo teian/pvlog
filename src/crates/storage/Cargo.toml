@@ -69,6 +69,10 @@ path = "../../../tests/rust/storage/management_repositories.rs"
 name = "account-configuration-repositories"
 path = "../../../tests/rust/storage/account_configuration_repositories.rs"
 
+[[test]]
+name = "telemetry-repositories"
+path = "../../../tests/rust/storage/telemetry_repositories.rs"
+
 [lib]
 path = "src/lib.rs"
 

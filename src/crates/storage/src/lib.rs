@@ -22,6 +22,7 @@ mod provisioning;
 mod sqlite_projection;
 #[cfg(feature = "sqlite")]
 mod sqlite_router;
+mod telemetry_repository;
 
 #[cfg(feature = "postgres")]
 pub use account_repository::PostgresAccountConfigurationRepository;
@@ -56,6 +57,14 @@ pub use sqlite_projection::{
 pub use sqlite_router::{
     RoutedSqliteAccount, SerializedSqliteWriter, SqliteAccountPoolConfig, SqliteAccountPoolRouter,
     SqliteCheckpointMode, SqliteCheckpointReport, SqliteRoutingError,
+};
+#[cfg(feature = "postgres")]
+pub use telemetry_repository::PostgresTelemetryRepository;
+#[cfg(feature = "sqlite")]
+pub use telemetry_repository::SqliteTelemetryRepository;
+pub use telemetry_repository::{
+    CorrectionRecord, IdempotencyOutcome, IdempotencyRecord, ObservationInsertOutcome,
+    StoredObservation, TelemetryRepository, TelemetryRepositoryError,
 };
 
 /// Database topology selected for the current process.
