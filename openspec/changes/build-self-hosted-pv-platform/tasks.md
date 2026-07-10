@@ -39,7 +39,7 @@
 
 ## 4. Authentication, Authorization, and Audit
 
-- [ ] 4.1 Implement local user administration, invitation, optional self-registration, activation/email policy, disable/unlock/delete, and enumeration-resistant lifecycle endpoints.
+- [x] 4.1 Implement local user administration, invitation, optional self-registration, activation/email policy, disable/unlock/delete, and enumeration-resistant lifecycle endpoints.
 - [ ] 4.2 Implement Argon2id password verification/rehash, password change, single-use hashed recovery tokens, configurable password policy hooks, and brute-force/rate-limit controls.
 - [ ] 4.3 Implement built-in and constrained custom RBAC role CRUD, permission assignment/delegation checks, effective-permission calculation, and privilege-escalation tests.
 - [ ] 4.4 Implement multiple provider-neutral OIDC connectors with discovery, authorization callback, issuer/audience/signature/time validation, state, nonce, PKCE, secret references, and connector health tests.

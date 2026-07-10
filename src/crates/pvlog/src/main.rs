@@ -2,10 +2,14 @@
 
 #![forbid(unsafe_code)]
 
-use std::io;
+use std::{io, sync::Arc};
 
 use clap::{Parser, Subcommand};
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
+use pvlog::{LifecycleCredentialService, SystemClock};
+use pvlog_application::{
+    LocalUserPolicy, UserLifecycleRepository, UserLifecycleService, UserLifecycleUseCases,
+};
 use pvlog_storage::{
     DatabaseMigrationStatus, DatabaseTarget, MigrationError, MigrationPlanItem, ProbeError,
     apply_migrations, migration_plan, migration_status, probe_database,
@@ -166,10 +170,62 @@ fn database_target(config: &RuntimeConfig) -> DatabaseTarget {
 
 async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(), StartupError> {
     probe_database(target).await?;
+    let user_lifecycle = compose_user_lifecycle(config, target)?;
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
-    axum::serve(listener, pvlog_api::router(env!("CARGO_PKG_VERSION"))).await?;
+    let router = pvlog_api::router(env!("CARGO_PKG_VERSION"))
+        .merge(pvlog_api::user_lifecycle_router(user_lifecycle));
+    axum::serve(listener, router).await?;
     Ok(())
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn compose_user_lifecycle(
+    config: &RuntimeConfig,
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn UserLifecycleUseCases>, StartupError> {
+    let repository: Arc<dyn UserLifecycleRepository> = match target {
+        DatabaseTarget::Sqlite {
+            management_path, ..
+        } => {
+            #[cfg(feature = "sqlite")]
+            {
+                Arc::new(pvlog_storage::SqliteUserLifecycleRepository::new(
+                    management_path.clone(),
+                ))
+            }
+            #[cfg(not(feature = "sqlite"))]
+            {
+                let _ = management_path;
+                return Err(StartupError::AdapterDisabled("sqlite"));
+            }
+        }
+        DatabaseTarget::Postgres { url } => {
+            #[cfg(feature = "postgres")]
+            {
+                Arc::new(pvlog_storage::PostgresUserLifecycleRepository::new(
+                    url.clone(),
+                ))
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                let _ = url;
+                return Err(StartupError::AdapterDisabled("postgres"));
+            }
+        }
+    };
+    Ok(Arc::new(UserLifecycleService::new(
+        repository,
+        Arc::new(LifecycleCredentialService::new(
+            &config.security.session_secret,
+        )),
+        Arc::new(SystemClock),
+        LocalUserPolicy {
+            allow_self_registration: config.auth.local.allow_self_registration,
+            require_verified_email: config.auth.local.require_verified_email,
+            invitation_lifetime_seconds: 86_400,
+        },
+    )))
 }
 
 #[derive(Debug, Error)]
@@ -184,6 +240,9 @@ enum StartupError {
     Json(#[from] serde_json::Error),
     #[error("continuous worker execution is not implemented yet; pass --once")]
     ContinuousWorkerUnavailable,
+    #[allow(dead_code)]
+    #[error("the {0} database adapter is not enabled in this build")]
+    AdapterDisabled(&'static str),
     #[error("HTTP server failed: {0}")]
     Io(#[from] io::Error),
 }

@@ -31,6 +31,8 @@ zstd.workspace = true
 prost-build.workspace = true
 
 [dev-dependencies]
+pvlog-application-fakes = { path = "../../../tests/support/rust/application-fakes" }
+secrecy.workspace = true
 tempfile.workspace = true
 
 [[test]]
@@ -76,6 +78,10 @@ path = "../../../tests/rust/storage/telemetry_repositories.rs"
 [[test]]
 name = "operational-repositories"
 path = "../../../tests/rust/storage/operational_repositories.rs"
+
+[[test]]
+name = "user-lifecycle-repositories"
+path = "../../../tests/rust/storage/user_lifecycle_repositories.rs"
 
 [lib]
 path = "src/lib.rs"

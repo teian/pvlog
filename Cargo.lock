@@ -1776,7 +1776,9 @@ dependencies = [
 name = "pvlog"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
+ "blake3",
  "clap",
  "figment",
  "opentelemetry",
@@ -1793,6 +1795,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+ "time",
  "tokio",
  "tracing",
  "tracing-opentelemetry",
@@ -1804,10 +1807,12 @@ dependencies = [
 name = "pvlog-api"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "axum",
  "garde",
  "pvlog-application",
  "pvlog-domain",
+ "secrecy",
  "serde",
  "serde_json",
  "time",
@@ -1899,7 +1904,9 @@ dependencies = [
  "prost",
  "prost-build",
  "pvlog-application",
+ "pvlog-application-fakes",
  "pvlog-domain",
+ "secrecy",
  "serde",
  "serde_json",
  "sqlx",

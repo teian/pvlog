@@ -25,6 +25,7 @@ mod sqlite_projection;
 #[cfg(feature = "sqlite")]
 mod sqlite_router;
 mod telemetry_repository;
+mod user_lifecycle_repository;
 
 #[cfg(feature = "postgres")]
 pub use account_repository::PostgresAccountConfigurationRepository;
@@ -77,6 +78,10 @@ pub use telemetry_repository::{
     CorrectionRecord, IdempotencyOutcome, IdempotencyRecord, ObservationInsertOutcome,
     StoredObservation, TelemetryRepository, TelemetryRepositoryError,
 };
+#[cfg(feature = "postgres")]
+pub use user_lifecycle_repository::PostgresUserLifecycleRepository;
+#[cfg(feature = "sqlite")]
+pub use user_lifecycle_repository::SqliteUserLifecycleRepository;
 
 /// Database topology selected for the current process.
 pub enum DatabaseTarget {

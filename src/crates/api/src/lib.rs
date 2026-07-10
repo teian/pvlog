@@ -6,6 +6,10 @@ use axum::{Json, Router, routing::get};
 use serde::Serialize;
 use utoipa::ToSchema;
 
+mod user_lifecycle;
+
+pub use user_lifecycle::user_lifecycle_router;
+
 /// Creates the versioned HTTP application.
 pub fn router(version: &'static str) -> Router {
     Router::new().route(

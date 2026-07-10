@@ -11,6 +11,7 @@ axum.workspace = true
 garde.workspace = true
 pvlog-application = { path = "../application" }
 pvlog-domain = { path = "../domain" }
+secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
@@ -23,8 +24,15 @@ utoipa.workspace = true
 utoipa-axum.workspace = true
 uuid.workspace = true
 
+[dev-dependencies]
+async-trait.workspace = true
+
 [lib]
 path = "src/lib.rs"
+
+[[test]]
+name = "user-lifecycle-endpoints"
+path = "../../../tests/rust/api/user_lifecycle_endpoints.rs"
 
 [lints]
 workspace = true
