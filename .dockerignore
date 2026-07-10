@@ -1,0 +1,74 @@
+# Version-control and local tooling metadata
+.git
+.gitignore
+.gitattributes
+.github
+.idea
+.vscode
+.claude
+.codex
+
+# Local configuration and secrets
+.env
+.env.*
+pvlog.toml
+pvlog.local.toml
+**/*.pem
+**/*.key
+
+# Rust and frontend dependency/build output
+target
+**/target
+node_modules
+**/node_modules
+.pnpm-store
+dist
+dist-ssr
+build
+out
+.cache
+.parcel-cache
+.vite
+.turbo
+*.tsbuildinfo
+
+# Test and coverage artifacts (test sources remain in the build context)
+coverage
+.nyc_output
+test-results
+playwright-report
+blob-report
+tests/e2e/results
+.playwright-mcp
+*.lcov
+lcov.info
+*.profraw
+*.profdata
+
+# Local databases and mutable runtime data
+data
+var
+tmp
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3-shm
+*.sqlite3-wal
+*.db
+*.db-shm
+*.db-wal
+*.dump
+
+# Logs, editor leftovers, and operating-system files
+logs
+*.log
+*.pid
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Design and proposal material is not needed to build runtime images
+openspec

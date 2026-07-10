@@ -1,0 +1,100 @@
+# Rust build and analysis output
+/target/
+**/target/
+**/*.rs.bk
+*.pdb
+*.profraw
+*.profdata
+Cargo.lock.bak
+
+# Node, pnpm, and frontend build output
+node_modules/
+.pnpm-store/
+.pnp/
+.pnp.*
+.yarn/cache/
+.yarn/install-state.gz
+dist/
+dist-ssr/
+build/
+out/
+.cache/
+.parcel-cache/
+.vite/
+.turbo/
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+
+# Tests, coverage, and browser automation
+coverage/
+*.lcov
+lcov.info
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+tests/e2e/results/
+.playwright-mcp/
+
+# Logs and transient process files
+logs/
+*.log
+*.pid
+*.pid.lock
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Local configuration, environment, and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+/pvlog.toml
+/pvlog.local.toml
+deploy/compose/.env
+deploy/compose/.env.local
+deploy/compose/.env.override
+*.pem
+*.key
+
+# Local databases, imports, and runtime state
+/data/
+/var/
+/tmp/
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite3-shm
+*.sqlite3-wal
+*.db
+*.db-shm
+*.db-wal
+*.dump
+
+# Editors and operating systems
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
+# Agent-local settings
+.claude/settings.json
+.claude/settings.local.json
+.codex/settings.json
+.codex/settings.local.json
+
+# Miscellaneous temporary files
+*.tmp
+*.bak
+*.orig
+*.rej
