@@ -13,7 +13,7 @@
 
 ## 2. Domain Model and Application Boundaries
 
-- [x] 2.1 Define strongly typed identifiers, UTC timestamps, IANA timezones, integer unit types, money, visibility, quality flags, and validation errors with boundary tests.
+- [x] 2.1 Define strongly typed UUIDv7 identifiers with strict parse/deserialize validation, UTC timestamps, IANA timezones, integer unit types, money, visibility, quality flags, and validation errors with boundary tests.
 - [x] 2.2 Model local users, password/recovery state, external connector identities, sessions, hierarchical RBAC roles/permissions/assignments, accounts, memberships, API credentials, scopes, quotas, storage routing state, and audit events without Axum, SQLx, or provider-specific dependencies.
 - [x] 2.3 Model PV systems, effective-dated capacity/equipment, tariffs, calculation modes, privacy, lifecycle state, and extended channel definitions.
 - [x] 2.4 Model canonical observations, cumulative/net/battery semantics, sources, idempotency identities, corrections, segment metadata, rollups, and coverage.

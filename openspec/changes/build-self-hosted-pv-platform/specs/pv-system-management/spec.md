@@ -5,7 +5,7 @@ The system SHALL let authorized users create, read, update, archive, restore, an
 
 #### Scenario: System is created with safe defaults
 - **WHEN** an authorized user creates a system with the required name, timezone, and capacity
-- **THEN** the system creates a private active system inside the selected authorized account with generated identifiers and validated default calculation settings
+- **THEN** the system creates a private active system inside the selected authorized account with generated UUIDv7 identifiers and validated default calculation settings
 
 #### Scenario: Invalid timezone is rejected
 - **WHEN** a system update supplies a timezone that is not in the supported IANA database

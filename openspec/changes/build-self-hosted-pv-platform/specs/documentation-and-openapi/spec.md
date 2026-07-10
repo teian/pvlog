@@ -3,6 +3,8 @@
 ### Requirement: Complete OpenAPI 3.1 contract
 The repository SHALL contain `openapi/pvlog-v1.yaml` as a valid OpenAPI 3.1 document describing every modern REST operation, parameter, request body, response, schema, security requirement, scope, error, callback/webhook, example, operation identifier, tag, and deprecation state.
 
+Every PVLog-generated identifier in the modern contract SHALL reference a shared UUIDv7 schema that documents its canonical lowercase representation and validates the UUID version and variant bits. Native external, import, idempotency, and PVOutput compatibility identifiers SHALL use distinct schemas so clients cannot confuse them with internal resource identifiers.
+
 #### Scenario: OpenAPI validation runs in CI
 - **WHEN** a change modifies a modern route, DTO, security rule, or response
 - **THEN** CI validates the OpenAPI document and fails if the implemented and committed operation/schema surfaces drift
@@ -48,4 +50,3 @@ The documentation site SHALL be keyboard accessible, responsive, readable in lig
 #### Scenario: Stale internal link is introduced
 - **WHEN** a documentation change references a missing local page or anchor
 - **THEN** CI fails with the broken source and target
-

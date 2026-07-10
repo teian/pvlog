@@ -1,14 +1,24 @@
 use std::{fmt, str::FromStr};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
+use thiserror::Error;
 use uuid::Uuid;
+
+/// Validation failure for a PVLog-generated identifier.
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+pub enum IdentifierError {
+    /// The textual representation is not a UUID.
+    #[error("identifier is not a valid UUID")]
+    InvalidUuid,
+    /// The UUID does not use the required time-sortable version.
+    #[error("identifier must use UUID version 7")]
+    NotVersion7,
+}
 
 macro_rules! identifier {
     ($name:ident, $description:literal) => {
         #[doc = $description]
-        #[derive(
-            Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize,
-        )]
+        #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
         #[serde(transparent)]
         pub struct $name(Uuid);
 
@@ -19,10 +29,17 @@ macro_rules! identifier {
                 Self(Uuid::now_v7())
             }
 
-            /// Wraps an already validated UUID.
-            #[must_use]
-            pub const fn from_uuid(value: Uuid) -> Self {
-                Self(value)
+            /// Validates and wraps an existing `UUIDv7` value.
+            ///
+            /// # Errors
+            ///
+            /// Returns an error when `value` is not UUID version 7.
+            pub fn from_uuid(value: Uuid) -> Result<Self, IdentifierError> {
+                if value.get_version_num() == 7 {
+                    Ok(Self(value))
+                } else {
+                    Err(IdentifierError::NotVersion7)
+                }
             }
 
             /// Returns the underlying UUID.
@@ -45,10 +62,21 @@ macro_rules! identifier {
         }
 
         impl FromStr for $name {
-            type Err = uuid::Error;
+            type Err = IdentifierError;
 
             fn from_str(value: &str) -> Result<Self, Self::Err> {
-                Uuid::parse_str(value).map(Self)
+                let uuid = Uuid::parse_str(value).map_err(|_| IdentifierError::InvalidUuid)?;
+                Self::from_uuid(uuid)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                let uuid = Uuid::deserialize(deserializer)?;
+                Self::from_uuid(uuid).map_err(de::Error::custom)
             }
         }
     };

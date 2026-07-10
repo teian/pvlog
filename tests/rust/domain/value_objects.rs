@@ -5,6 +5,7 @@ use pvlog_domain::{
     Visibility, WattHours, Watts,
 };
 use time::{OffsetDateTime, UtcOffset, macros::datetime};
+use uuid::Uuid;
 
 #[test]
 fn identifiers_are_strongly_typed_uuid_v7_values() {
@@ -13,6 +14,8 @@ fn identifiers_are_strongly_typed_uuid_v7_values() {
     assert_eq!(account_id.as_uuid().get_version_num(), 7);
     assert_eq!(AccountId::from_str(&account_id.to_string()), Ok(account_id));
     assert!(AccountId::from_str("not-an-id").is_err());
+    assert!(AccountId::from_uuid(Uuid::new_v4()).is_err());
+    assert!(serde_json::from_str::<AccountId>(&format!("\"{}\"", Uuid::new_v4())).is_err());
 }
 
 #[test]
