@@ -40,6 +40,10 @@ path = "../../../tests/rust/storage/migrations.rs"
 name = "sqlite-account-provisioning"
 path = "../../../tests/rust/storage/sqlite_account_provisioning.rs"
 
+[[test]]
+name = "sqlite-account-schema"
+path = "../../../tests/rust/storage/sqlite_account_schema.rs"
+
 [lib]
 path = "src/lib.rs"
 
