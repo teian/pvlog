@@ -15,9 +15,9 @@ use axum::{
 };
 use oauth2::{PkceCodeChallenge, PkceCodeVerifier};
 use pvlog_application::{
-    Clock, EncryptedProviderToken, OAuth2ClaimMappings, OAuth2ConnectorSettings,
-    OAuth2ProtocolClient, OAuth2ProtocolError, PortError, ProviderTokenKind, SecretResolver,
-    TokenCipher, XChaCha20Poly1305TokenCipher,
+    Clock, EncryptedProviderToken, OAuth2ClaimMappings, OAuth2ClientAuthMethod,
+    OAuth2ConnectorSettings, OAuth2ProtocolClient, OAuth2ProtocolError, PortError,
+    ProviderTokenKind, SecretResolver, TokenCipher, XChaCha20Poly1305TokenCipher,
 };
 use pvlog_domain::UtcTimestamp;
 use secrecy::{ExposeSecret as _, SecretString};
@@ -159,6 +159,44 @@ async fn oauth2_flow_rejects_missing_required_subject() -> Result<(), Box<dyn Er
     Ok(())
 }
 
+#[tokio::test]
+async fn oauth2_flow_normalizes_numeric_subjects_and_nullable_optional_claims()
+-> Result<(), Box<dyn Error>> {
+    let provider = FakeProvider::start().await?;
+    provider.set_user_info(json!({
+        "profile": {
+            "id": 12_345_678,
+            "name": null,
+            "email": null,
+            "email_verified": null,
+            "avatar": null
+        }
+    }))?;
+    let client = test_client(
+        &provider,
+        Arc::new(TestClock::new(UtcTimestamp::from_epoch_millis(NOW)?)),
+        Arc::new(RecordingCipher::default()),
+    )
+    .await?;
+    let authorization = client.begin_authorization()?;
+    let challenge = authorization
+        .redirect_url
+        .query_pairs()
+        .find_map(|(key, value)| (key == "code_challenge").then(|| value.into_owned()))
+        .ok_or("PKCE challenge missing")?;
+    provider.expect_challenge(&challenge)?;
+
+    let result = client
+        .complete_authorization(&authorization.state_handle, SecretString::from("code"))
+        .await?;
+    assert_eq!(result.identity.subject, "12345678");
+    assert_eq!(result.identity.display_name, None);
+    assert_eq!(result.identity.email, None);
+    assert_eq!(result.identity.email_verified, None);
+    assert_eq!(result.identity.avatar_url, None);
+    Ok(())
+}
+
 async fn test_client(
     provider: &FakeProvider,
     clock: Arc<TestClock>,
@@ -175,6 +213,7 @@ async fn test_client(
                 .map_err(|_| OAuth2ProtocolError::InvalidConfiguration)?,
             client_id: "pvlog-oauth2-test".to_owned(),
             client_secret_ref: "secret://oauth2/test".to_owned(),
+            client_auth_method: OAuth2ClientAuthMethod::RequestBody,
             redirect_uri: Url::parse("https://pvlog.example/api/v1/auth/connectors/callback")
                 .map_err(|_| OAuth2ProtocolError::InvalidConfiguration)?,
             scopes: vec!["profile".to_owned(), "email".to_owned()],
@@ -324,6 +363,8 @@ async fn token_response(
     let parameters: std::collections::HashMap<_, _> =
         url::form_urlencoded::parse(&body).into_owned().collect();
     let valid = parameters.get("grant_type").map(String::as_str) == Some("authorization_code")
+        && parameters.get("client_id").map(String::as_str) == Some("pvlog-oauth2-test")
+        && parameters.get("client_secret").map(String::as_str) == Some(CLIENT_SECRET)
         && parameters.get("code").is_some_and(|code| !code.is_empty())
         && parameters.get("code_verifier").is_some_and(|verifier| {
             let challenge = PkceCodeChallenge::from_code_verifier_sha256(&PkceCodeVerifier::new(

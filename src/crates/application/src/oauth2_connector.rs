@@ -12,7 +12,7 @@ use chacha20poly1305::{
     aead::{Aead as _, KeyInit as _, OsRng, Payload, rand_core::RngCore as _},
 };
 use oauth2::{
-    AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
+    AuthType, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
     PkceCodeVerifier, RedirectUrl, Scope, TokenResponse as _, TokenUrl, basic::BasicClient,
     reqwest,
 };
@@ -44,10 +44,18 @@ pub struct OAuth2ConnectorSettings {
     pub user_info_endpoint: Url,
     pub client_id: String,
     pub client_secret_ref: String,
+    pub client_auth_method: OAuth2ClientAuthMethod,
     pub redirect_uri: Url,
     pub scopes: Vec<String>,
     pub claim_mappings: OAuth2ClaimMappings,
     pub flow_lifetime_seconds: u32,
+}
+
+/// Standard client authentication methods supported by a configured token endpoint.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OAuth2ClientAuthMethod {
+    BasicAuth,
+    RequestBody,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -417,6 +425,10 @@ fn build_client(
 > {
     Ok(BasicClient::new(ClientId::new(settings.client_id.clone()))
         .set_client_secret(ClientSecret::new(client_secret.expose_secret().to_owned()))
+        .set_auth_type(match settings.client_auth_method {
+            OAuth2ClientAuthMethod::BasicAuth => AuthType::BasicAuth,
+            OAuth2ClientAuthMethod::RequestBody => AuthType::RequestBody,
+        })
         .set_auth_uri(
             AuthUrl::new(settings.authorization_endpoint.to_string())
                 .map_err(|_| OAuth2ProtocolError::InvalidConfiguration)?,
@@ -436,10 +448,8 @@ fn normalize_claims(
     mappings: &OAuth2ClaimMappings,
 ) -> Result<IdentityClaims, OAuth2ProtocolError> {
     let subject = mapped_value(document, &mappings.subject)
-        .and_then(Value::as_str)
-        .filter(|subject| !subject.trim().is_empty())
-        .ok_or(OAuth2ProtocolError::UserInfoClaims)?
-        .to_owned();
+        .and_then(mapped_subject)
+        .ok_or(OAuth2ProtocolError::UserInfoClaims)?;
     Ok(IdentityClaims {
         subject,
         display_name: mapped_optional_string(document, mappings.display_name.as_deref())?,
@@ -449,6 +459,14 @@ fn normalize_claims(
             .map(|value| Url::parse(&value).map_err(|_| OAuth2ProtocolError::UserInfoClaims))
             .transpose()?,
     })
+}
+
+fn mapped_subject(value: &Value) -> Option<String> {
+    match value {
+        Value::String(subject) if !subject.trim().is_empty() => Some(subject.clone()),
+        Value::Number(subject) => Some(subject.to_string()),
+        _ => None,
+    }
 }
 
 fn mapped_value<'a>(document: &'a Value, path: &str) -> Option<&'a Value> {
@@ -463,14 +481,19 @@ fn mapped_optional_string(
     path.map(|path| {
         mapped_value(document, path)
             .map(|value| {
+                if value.is_null() {
+                    return Ok(None);
+                }
                 value
                     .as_str()
                     .map(ToOwned::to_owned)
+                    .map(Some)
                     .ok_or(OAuth2ProtocolError::UserInfoClaims)
             })
             .transpose()
     })
     .transpose()
+    .map(Option::flatten)
     .map(Option::flatten)
 }
 
@@ -480,10 +503,19 @@ fn mapped_optional_bool(
 ) -> Result<Option<bool>, OAuth2ProtocolError> {
     path.map(|path| {
         mapped_value(document, path)
-            .map(|value| value.as_bool().ok_or(OAuth2ProtocolError::UserInfoClaims))
+            .map(|value| {
+                if value.is_null() {
+                    return Ok(None);
+                }
+                value
+                    .as_bool()
+                    .map(Some)
+                    .ok_or(OAuth2ProtocolError::UserInfoClaims)
+            })
             .transpose()
     })
     .transpose()
+    .map(Option::flatten)
     .map(Option::flatten)
 }
 

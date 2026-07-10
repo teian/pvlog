@@ -5,6 +5,22 @@
   "docs": {
     "apiReferenceLabel": "PVLog API reference"
   },
+  "features": {
+    "authConnectorPresets": {
+      "facebook": {
+        "description": "Use a Facebook Login app with the generic OAuth2 connector."
+      },
+      "github": {
+        "description": "Use a GitHub OAuth app with the generic OAuth2 connector."
+      },
+      "google": {
+        "description": "Use Google OpenID Connect discovery with standard identity scopes."
+      },
+      "x": {
+        "description": "Use an X confidential client with OAuth2 Authorization Code and PKCE."
+      }
+    }
+  },
   "home": {
     "description": "Self-hosted photovoltaic monitoring.",
     "title": "PVLog"

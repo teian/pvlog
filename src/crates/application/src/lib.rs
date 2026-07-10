@@ -18,8 +18,8 @@ pub use local_password::{
 };
 pub use oauth2_connector::{
     EncryptedProviderToken, OAuth2AuthorizationRequest, OAuth2ClaimMappings,
-    OAuth2ConnectorSettings, OAuth2ProtocolClient, OAuth2ProtocolError, OAuth2UserInfo,
-    ProtectedOAuth2Tokens, ProviderTokenKind, TokenCipher, TokenCipherConfigError,
+    OAuth2ClientAuthMethod, OAuth2ConnectorSettings, OAuth2ProtocolClient, OAuth2ProtocolError,
+    OAuth2UserInfo, ProtectedOAuth2Tokens, ProviderTokenKind, TokenCipher, TokenCipherConfigError,
     XChaCha20Poly1305TokenCipher,
 };
 pub use oidc::{
