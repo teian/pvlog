@@ -44,6 +44,10 @@ path = "../../../tests/rust/storage/sqlite_account_provisioning.rs"
 name = "sqlite-account-schema"
 path = "../../../tests/rust/storage/sqlite_account_schema.rs"
 
+[[test]]
+name = "telemetry-schema"
+path = "../../../tests/rust/storage/telemetry_schema.rs"
+
 [lib]
 path = "src/lib.rs"
 
