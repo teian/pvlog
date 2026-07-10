@@ -14,10 +14,17 @@ use sqlx::{
 use thiserror::Error;
 
 mod migrations;
+#[cfg(feature = "sqlite")]
+mod provisioning;
 
 pub use migrations::{
     DatabaseMigrationStatus, MigrationError, MigrationKind, MigrationPlanItem, MigrationState,
     apply_migrations, ensure_schema_compatible, migration_plan, migration_status,
+};
+#[cfg(feature = "sqlite")]
+pub use provisioning::{
+    AccountDatabaseLifecycle, AccountProvisioningResult, ReconciliationReport,
+    SqliteAccountProvisioner, SqliteProvisioningError,
 };
 
 /// Database topology selected for the current process.

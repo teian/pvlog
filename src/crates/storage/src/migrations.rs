@@ -440,6 +440,20 @@ async fn apply_sqlite_database(
 }
 
 #[cfg(feature = "sqlite")]
+pub(crate) async fn apply_sqlite_account_database(path: &Path) -> Result<(), MigrationError> {
+    apply_sqlite_database(path, &sqlite_account_label(path), &SQLITE_ACCOUNT_MIGRATOR).await
+}
+
+#[cfg(feature = "sqlite")]
+pub(crate) fn sqlite_account_schema_version() -> i64 {
+    SQLITE_ACCOUNT_MIGRATOR
+        .iter()
+        .map(|migration| migration.version)
+        .max()
+        .unwrap_or(0)
+}
+
+#[cfg(feature = "sqlite")]
 async fn acquire_sqlite_lease(
     connection: &mut SqliteConnection,
     label: &str,
@@ -491,7 +505,10 @@ async fn release_sqlite_lease(
 }
 
 #[cfg(feature = "sqlite")]
-async fn open_sqlite(path: &Path, create: bool) -> Result<SqliteConnection, MigrationError> {
+pub(crate) async fn open_sqlite(
+    path: &Path,
+    create: bool,
+) -> Result<SqliteConnection, MigrationError> {
     let options = SqliteConnectOptions::new()
         .filename(path)
         .create_if_missing(create)
