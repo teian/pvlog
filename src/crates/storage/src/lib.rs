@@ -16,6 +16,8 @@ use thiserror::Error;
 mod migrations;
 #[cfg(feature = "sqlite")]
 mod provisioning;
+#[cfg(feature = "sqlite")]
+mod sqlite_router;
 
 pub use migrations::{
     DatabaseMigrationStatus, MigrationError, MigrationKind, MigrationPlanItem, MigrationState,
@@ -25,6 +27,11 @@ pub use migrations::{
 pub use provisioning::{
     AccountDatabaseLifecycle, AccountProvisioningResult, ReconciliationReport,
     SqliteAccountProvisioner, SqliteProvisioningError,
+};
+#[cfg(feature = "sqlite")]
+pub use sqlite_router::{
+    RoutedSqliteAccount, SerializedSqliteWriter, SqliteAccountPoolConfig, SqliteAccountPoolRouter,
+    SqliteCheckpointMode, SqliteCheckpointReport, SqliteRoutingError,
 };
 
 /// Database topology selected for the current process.
