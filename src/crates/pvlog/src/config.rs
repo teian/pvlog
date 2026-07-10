@@ -372,10 +372,12 @@ pub struct AuthConnectorConfig {
     pub enabled: bool,
     /// OAuth client identifier.
     pub client_id: String,
-    /// OAuth client secret or resolved secret value.
-    pub client_secret: SecretString,
+    /// Reference resolved server-side to the OAuth client secret.
+    pub client_secret_ref: String,
     /// OIDC discovery URL when discovery is used.
     pub discovery_url: Option<Url>,
+    /// Exact OIDC issuer identifier used for discovery and ID-token validation.
+    pub issuer: Option<Url>,
     /// OAuth authorization endpoint when discovery is not used.
     pub authorization_endpoint: Option<Url>,
     /// OAuth token endpoint when discovery is not used.
@@ -401,16 +403,16 @@ impl AuthConnectorConfig {
         if self.client_id.trim().is_empty() {
             issues.push(format!("{prefix}.client_id must not be empty"));
         }
-        if self.client_secret.expose_secret().is_empty() {
-            issues.push(format!("{prefix}.client_secret must not be empty"));
+        if self.client_secret_ref.trim().is_empty() {
+            issues.push(format!("{prefix}.client_secret_ref must not be empty"));
         }
         if self.claims.subject.trim().is_empty() {
             issues.push(format!("{prefix}.claims.subject must not be empty"));
         }
 
         match self.protocol {
-            AuthProtocol::Oidc if self.discovery_url.is_none() => {
-                issues.push(format!("{prefix}.discovery_url is required for OIDC"));
+            AuthProtocol::Oidc if self.issuer.is_none() => {
+                issues.push(format!("{prefix}.issuer is required for OIDC"));
             }
             AuthProtocol::Oauth2
                 if self.authorization_endpoint.is_none()

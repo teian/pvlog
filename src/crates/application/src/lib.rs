@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod local_password;
+mod oidc;
 mod ports;
 mod rbac_management;
 mod user_lifecycle;
@@ -14,10 +15,14 @@ pub use local_password::{
     PasswordPolicyError, PasswordPolicyHook, PasswordRecoveryNotifier, PasswordRecoveryRecord,
     PasswordServiceError, SetInitialPassword,
 };
+pub use oidc::{
+    OidcAuthorizationRequest, OidcConnectorSettings, OidcProtocolClient, OidcProtocolError,
+};
 pub use ports::{
     AuthorizationRequest, Clock, CredentialService, EntityRepository, IdentityClaims,
-    IdentityService, InsolationPoint, InsolationProvider, JobQueue, PortError, SupplyPoint,
-    SupplyProvider, Transaction, UnitOfWork, WebhookRequest, WebhookResponse, WebhookSender,
+    IdentityService, InsolationPoint, InsolationProvider, JobQueue, PortError, SecretResolver,
+    SupplyPoint, SupplyProvider, Transaction, UnitOfWork, WebhookRequest, WebhookResponse,
+    WebhookSender,
 };
 pub use rbac_management::{
     AssignRole, CreateCustomRole, RbacManagementError, RbacRepository, RbacRoleRecord,

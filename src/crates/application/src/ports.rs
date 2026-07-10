@@ -44,6 +44,12 @@ pub trait CredentialService: Send + Sync {
     }
 }
 
+/// Resolves an administrator-configured secret reference at a narrow protocol boundary.
+#[async_trait]
+pub trait SecretResolver: Send + Sync {
+    async fn resolve(&self, secret_reference: &str) -> Result<SecretString, PortError>;
+}
+
 /// Browser redirect information returned by an external identity connector.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthorizationRequest {
