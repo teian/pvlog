@@ -2,9 +2,17 @@
 
 #![forbid(unsafe_code)]
 
+mod local_password;
 mod ports;
 mod user_lifecycle;
 
+pub use local_password::{
+    Argon2CredentialConfig, Argon2CredentialService, AuthenticatePassword, AuthenticationOutcome,
+    ChangePassword, CommonPasswordHook, DiscardingRecoveryNotifier, LocalCredentialRecord,
+    LocalCredentialRepository, LocalPasswordPolicy, LocalPasswordService, LocalPasswordUseCases,
+    PasswordPolicyError, PasswordPolicyHook, PasswordRecoveryNotifier, PasswordRecoveryRecord,
+    PasswordServiceError, SetInitialPassword,
+};
 pub use ports::{
     AuthorizationRequest, Clock, CredentialService, EntityRepository, IdentityClaims,
     IdentityService, InsolationPoint, InsolationProvider, JobQueue, PortError, SupplyPoint,

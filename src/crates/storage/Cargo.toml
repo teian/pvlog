@@ -83,6 +83,10 @@ path = "../../../tests/rust/storage/operational_repositories.rs"
 name = "user-lifecycle-repositories"
 path = "../../../tests/rust/storage/user_lifecycle_repositories.rs"
 
+[[test]]
+name = "local-password"
+path = "../../../tests/rust/storage/local_password.rs"
+
 [lib]
 path = "src/lib.rs"
 

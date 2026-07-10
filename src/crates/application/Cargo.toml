@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 argon2.workspace = true
 async-trait.workspace = true
+blake3.workspace = true
 pvlog-domain = { path = "../domain" }
 secrecy.workspace = true
 serde.workspace = true

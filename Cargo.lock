@@ -1776,9 +1776,7 @@ dependencies = [
 name = "pvlog"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "axum",
- "blake3",
  "clap",
  "figment",
  "opentelemetry",
@@ -1832,6 +1830,7 @@ version = "0.1.0"
 dependencies = [
  "argon2",
  "async-trait",
+ "blake3",
  "pvlog-domain",
  "secrecy",
  "serde",

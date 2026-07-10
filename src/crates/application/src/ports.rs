@@ -34,6 +34,14 @@ pub trait CredentialService: Send + Sync {
     ) -> Result<bool, PortError>;
     async fn digest_bearer(&self, credential: &SecretString)
     -> Result<CredentialDigest, PortError>;
+    /// Reports whether a valid encoded verifier uses parameters older than current policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the encoded verifier cannot be parsed safely.
+    fn password_needs_rehash(&self, _encoded: &PasswordHash) -> Result<bool, PortError> {
+        Ok(false)
+    }
 }
 
 /// Browser redirect information returned by an external identity connector.

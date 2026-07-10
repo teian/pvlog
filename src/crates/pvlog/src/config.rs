@@ -84,6 +84,24 @@ impl RuntimeConfig {
             issues
                 .push("at least one interactive authentication method must be enabled".to_owned());
         }
+        if self.auth.local.password_minimum_length < 8
+            || self.auth.local.password_minimum_length > self.auth.local.password_maximum_length
+        {
+            issues.push(
+                "auth.local password length bounds must satisfy 8 <= minimum <= maximum".to_owned(),
+            );
+        }
+        if self.auth.local.maximum_failed_attempts == 0 || self.auth.local.lockout_seconds == 0 {
+            issues.push(
+                "auth.local brute-force controls must use non-zero attempts and lockout".to_owned(),
+            );
+        }
+        if self.auth.local.argon2_memory_kib < 8_192
+            || self.auth.local.argon2_time_cost == 0
+            || self.auth.local.argon2_parallelism == 0
+        {
+            issues.push("auth.local Argon2id parameters are below safe minimums".to_owned());
+        }
 
         match self.database.backend {
             DatabaseBackend::Sqlite => {
@@ -304,6 +322,22 @@ pub struct LocalAuthConfig {
     pub allow_self_registration: bool,
     /// Requires email verification before activation.
     pub require_verified_email: bool,
+    /// Minimum Unicode scalar count accepted for new passwords.
+    pub password_minimum_length: u16,
+    /// Maximum Unicode scalar count accepted for new passwords.
+    pub password_maximum_length: u16,
+    /// Consecutive failed attempts before the credential is locked.
+    pub maximum_failed_attempts: u16,
+    /// Duration of a credential lock after the threshold is reached.
+    pub lockout_seconds: u32,
+    /// Lifetime of a single-use password recovery token.
+    pub recovery_lifetime_seconds: u32,
+    /// Argon2id memory cost in KiB.
+    pub argon2_memory_kib: u32,
+    /// Argon2id iteration count.
+    pub argon2_time_cost: u32,
+    /// Argon2id parallel lane count.
+    pub argon2_parallelism: u32,
 }
 
 impl Default for LocalAuthConfig {
@@ -312,6 +346,14 @@ impl Default for LocalAuthConfig {
             enabled: true,
             allow_self_registration: false,
             require_verified_email: true,
+            password_minimum_length: 12,
+            password_maximum_length: 128,
+            maximum_failed_attempts: 5,
+            lockout_seconds: 900,
+            recovery_lifetime_seconds: 1_800,
+            argon2_memory_kib: 19_456,
+            argon2_time_cost: 2,
+            argon2_parallelism: 1,
         }
     }
 }

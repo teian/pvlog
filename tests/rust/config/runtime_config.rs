@@ -120,3 +120,35 @@ fn generic_oidc_connector_is_validated_without_vendor_fields() {
     assert_eq!(config.auth.connectors.len(), 1);
     assert_eq!(config.auth.connectors[0].id, "company-login");
 }
+
+#[test]
+fn local_password_security_parameters_are_validated() {
+    let config: RuntimeConfig = Figment::from(Serialized::defaults(json!({
+        "security": {
+            "session_secret": "session-secret-that-is-at-least-32-bytes",
+            "credential_encryption_key": "encryption-key-that-is-at-least-32-bytes"
+        },
+        "auth": {
+            "local": {
+                "password_minimum_length": 7,
+                "password_maximum_length": 6,
+                "maximum_failed_attempts": 0,
+                "lockout_seconds": 0,
+                "argon2_memory_kib": 4096,
+                "argon2_time_cost": 0,
+                "argon2_parallelism": 0
+            }
+        }
+    })))
+    .extract()
+    .unwrap_or_else(|error| panic!("configuration shape must decode: {error}"));
+
+    let issues = match config.validate() {
+        Err(ConfigError::Validation(issues)) => issues,
+        Ok(()) => panic!("expected password policy validation errors"),
+        Err(error) => panic!("expected validation error, received: {error}"),
+    };
+    assert!(issues.iter().any(|issue| issue.contains("length bounds")));
+    assert!(issues.iter().any(|issue| issue.contains("brute-force")));
+    assert!(issues.iter().any(|issue| issue.contains("Argon2id")));
+}

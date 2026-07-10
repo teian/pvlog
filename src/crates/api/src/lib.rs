@@ -6,8 +6,10 @@ use axum::{Json, Router, routing::get};
 use serde::Serialize;
 use utoipa::ToSchema;
 
+mod local_password;
 mod user_lifecycle;
 
+pub use local_password::local_password_router;
 pub use user_lifecycle::user_lifecycle_router;
 
 /// Creates the versioned HTTP application.

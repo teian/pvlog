@@ -16,9 +16,9 @@ mod validation;
 pub use identifiers::{
     AccountId, AlertEventId, AlertRuleId, ApiCredentialId, AuditEventId, ChannelId, ConnectorId,
     CorrectionId, EquipmentId, ExportId, ExternalIdentityId, FavouriteId, IdentifierError,
-    ImportId, JobId, MembershipId, ObservationId, ProviderId, RequestId, RoleAssignmentId, RoleId,
-    SegmentId, SessionId, SystemId, TariffId, TeamId, TeamMembershipId, UserId, UserInvitationId,
-    WebhookDeliveryId, WebhookSubscriptionId,
+    ImportId, JobId, MembershipId, ObservationId, PasswordRecoveryId, ProviderId, RequestId,
+    RoleAssignmentId, RoleId, SegmentId, SessionId, SystemId, TariffId, TeamId, TeamMembershipId,
+    UserId, UserInvitationId, WebhookDeliveryId, WebhookSubscriptionId,
 };
 pub use identity::{
     Account, AccountStatus, ApiCredential, ApiScope, AuditEvent, AuditOutcome, BuiltInRole,

@@ -84,6 +84,10 @@ macro_rules! identifier {
 
 identifier!(UserId, "Stable local user identifier.");
 identifier!(UserInvitationId, "Stable local user invitation identifier.");
+identifier!(
+    PasswordRecoveryId,
+    "Stable single-use password recovery request identifier."
+);
 identifier!(AccountId, "Stable tenant account identifier.");
 identifier!(
     ConnectorId,

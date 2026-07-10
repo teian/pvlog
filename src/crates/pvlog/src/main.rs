@@ -5,10 +5,13 @@
 use std::{io, sync::Arc};
 
 use clap::{Parser, Subcommand};
+use pvlog::SystemClock;
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
-use pvlog::{LifecycleCredentialService, SystemClock};
 use pvlog_application::{
-    LocalUserPolicy, UserLifecycleRepository, UserLifecycleService, UserLifecycleUseCases,
+    Argon2CredentialConfig, Argon2CredentialService, CommonPasswordHook,
+    DiscardingRecoveryNotifier, LocalCredentialRepository, LocalPasswordPolicy,
+    LocalPasswordService, LocalPasswordUseCases, LocalUserPolicy, UserLifecycleRepository,
+    UserLifecycleService, UserLifecycleUseCases,
 };
 use pvlog_storage::{
     DatabaseMigrationStatus, DatabaseTarget, MigrationError, MigrationPlanItem, ProbeError,
@@ -171,10 +174,12 @@ fn database_target(config: &RuntimeConfig) -> DatabaseTarget {
 async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(), StartupError> {
     probe_database(target).await?;
     let user_lifecycle = compose_user_lifecycle(config, target)?;
+    let local_password = compose_local_password(config, target)?;
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
     let router = pvlog_api::router(env!("CARGO_PKG_VERSION"))
-        .merge(pvlog_api::user_lifecycle_router(user_lifecycle));
+        .merge(pvlog_api::user_lifecycle_router(user_lifecycle))
+        .merge(pvlog_api::local_password_router(local_password));
     axum::serve(listener, router).await?;
     Ok(())
 }
@@ -216,9 +221,7 @@ fn compose_user_lifecycle(
     };
     Ok(Arc::new(UserLifecycleService::new(
         repository,
-        Arc::new(LifecycleCredentialService::new(
-            &config.security.session_secret,
-        )),
+        Arc::new(argon2_credentials(config)),
         Arc::new(SystemClock),
         LocalUserPolicy {
             allow_self_registration: config.auth.local.allow_self_registration,
@@ -226,6 +229,68 @@ fn compose_user_lifecycle(
             invitation_lifetime_seconds: 86_400,
         },
     )))
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn compose_local_password(
+    config: &RuntimeConfig,
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn LocalPasswordUseCases>, StartupError> {
+    let repository: Arc<dyn LocalCredentialRepository> = match target {
+        DatabaseTarget::Sqlite {
+            management_path, ..
+        } => {
+            #[cfg(feature = "sqlite")]
+            {
+                Arc::new(pvlog_storage::SqliteUserLifecycleRepository::new(
+                    management_path.clone(),
+                ))
+            }
+            #[cfg(not(feature = "sqlite"))]
+            {
+                let _ = management_path;
+                return Err(StartupError::AdapterDisabled("sqlite"));
+            }
+        }
+        DatabaseTarget::Postgres { url } => {
+            #[cfg(feature = "postgres")]
+            {
+                Arc::new(pvlog_storage::PostgresUserLifecycleRepository::new(
+                    url.clone(),
+                ))
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                let _ = url;
+                return Err(StartupError::AdapterDisabled("postgres"));
+            }
+        }
+    };
+    Ok(Arc::new(LocalPasswordService::new(
+        repository,
+        Arc::new(argon2_credentials(config)),
+        Arc::new(SystemClock),
+        Arc::new(CommonPasswordHook::default()),
+        Arc::new(DiscardingRecoveryNotifier),
+        LocalPasswordPolicy {
+            minimum_length: config.auth.local.password_minimum_length,
+            maximum_length: config.auth.local.password_maximum_length,
+            maximum_failed_attempts: config.auth.local.maximum_failed_attempts,
+            lockout_seconds: config.auth.local.lockout_seconds,
+            recovery_lifetime_seconds: config.auth.local.recovery_lifetime_seconds,
+        },
+    )))
+}
+
+fn argon2_credentials(config: &RuntimeConfig) -> Argon2CredentialService {
+    Argon2CredentialService::new(
+        Argon2CredentialConfig {
+            memory_kib: config.auth.local.argon2_memory_kib,
+            time_cost: config.auth.local.argon2_time_cost,
+            parallelism: config.auth.local.argon2_parallelism,
+        },
+        &config.security.session_secret,
+    )
 }
 
 #[derive(Debug, Error)]
