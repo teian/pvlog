@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+mod alert_rules;
 mod analytics_api;
 mod api_token;
 mod authorization_boundary;
@@ -35,6 +36,10 @@ mod system_lifecycle;
 mod teams;
 mod user_lifecycle;
 
+pub use alert_rules::{
+    AlertEvaluation, AlertMetrics, AlertRuleRepository, AlertRuleService, AlertRuleServiceError,
+    CreateAlertRule, UpdateAlertRule, evaluate_alert,
+};
 pub use analytics_api::{
     AnalysisExportFormat, AnalysisExportRequest, AnalysisExportResult, ModernAnalyticsError,
     ModernAnalyticsUseCases,

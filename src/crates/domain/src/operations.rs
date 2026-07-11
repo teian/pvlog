@@ -98,6 +98,9 @@ pub struct AlertRule {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AlertKind {
+    Idle {
+        after_seconds: u32,
+    },
     MissingGeneration {
         after_seconds: u32,
     },
@@ -109,6 +112,12 @@ pub enum AlertKind {
     },
     NetPowerAbove {
         threshold: Watts,
+    },
+    StandbyCostAbove {
+        threshold_milli_cents: i64,
+    },
+    PerformanceBelow {
+        threshold: BasisPoints,
     },
     BatteryStateBelow {
         threshold: BasisPoints,

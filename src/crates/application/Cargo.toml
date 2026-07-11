@@ -12,6 +12,7 @@ async-trait.workspace = true
 blake3.workspace = true
 chacha20poly1305.workspace = true
 chrono-tz.workspace = true
+chrono.workspace = true
 openidconnect.workspace = true
 oauth2.workspace = true
 pvlog-domain = { path = "../domain" }
@@ -49,6 +50,10 @@ path = "../../../tests/rust/application/provider_data_contracts.rs"
 [[test]]
 name = "provider-data-adapters"
 path = "../../../tests/rust/application/provider_data_adapters.rs"
+
+[[test]]
+name = "alert-rules"
+path = "../../../tests/rust/application/alert_rules.rs"
 
 [[test]]
 name = "identity-linking"
