@@ -173,6 +173,17 @@ pub trait ManagementRepository: Send + Sync {
         digest: &[u8; 32],
         now: i64,
     ) -> Result<Option<SessionRecord>, ManagementRepositoryError>;
+    async fn revoke_session(
+        &self,
+        session_id: SessionId,
+        now: i64,
+    ) -> Result<(), ManagementRepositoryError>;
+    async fn revoke_oldest_sessions_above_limit(
+        &self,
+        user_id: UserId,
+        keep: u32,
+        now: i64,
+    ) -> Result<(), ManagementRepositoryError>;
     async fn save_api_credential(
         &self,
         record: &ApiCredentialRecord,
@@ -470,6 +481,42 @@ impl ManagementRepository for SqliteManagementRepository {
         .await?;
         connection.close().await?;
         row.map(|row| sqlite_session(&row)).transpose()
+    }
+
+    async fn revoke_session(
+        &self,
+        session_id: SessionId,
+        now: i64,
+    ) -> Result<(), ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        sqlx::query("UPDATE sessions SET revoked_at=COALESCE(revoked_at, ?) WHERE id=?")
+            .bind(now)
+            .bind(uuid_blob(session_id.as_uuid()))
+            .execute(&mut connection)
+            .await?;
+        connection.close().await?;
+        Ok(())
+    }
+
+    async fn revoke_oldest_sessions_above_limit(
+        &self,
+        user_id: UserId,
+        keep: u32,
+        now: i64,
+    ) -> Result<(), ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        sqlx::query(
+            "UPDATE sessions SET revoked_at=? WHERE id IN ( \
+             SELECT id FROM sessions WHERE user_id=? AND revoked_at IS NULL \
+             ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?)",
+        )
+        .bind(now)
+        .bind(uuid_blob(user_id.as_uuid()))
+        .bind(i64::from(keep))
+        .execute(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(())
     }
 
     async fn save_api_credential(
@@ -854,6 +901,44 @@ impl ManagementRepository for PostgresManagementRepository {
         row.map(|row| postgres_session(&row)).transpose()
     }
 
+    async fn revoke_session(
+        &self,
+        session_id: SessionId,
+        now: i64,
+    ) -> Result<(), ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        sqlx::query(
+            "UPDATE management.sessions SET revoked_at=COALESCE(revoked_at,$1) WHERE id=$2",
+        )
+        .bind(now)
+        .bind(session_id.as_uuid())
+        .execute(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(())
+    }
+
+    async fn revoke_oldest_sessions_above_limit(
+        &self,
+        user_id: UserId,
+        keep: u32,
+        now: i64,
+    ) -> Result<(), ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        sqlx::query(
+            "UPDATE management.sessions SET revoked_at=$1 WHERE id IN ( \
+             SELECT id FROM management.sessions WHERE user_id=$2 AND revoked_at IS NULL \
+             ORDER BY created_at DESC, id DESC OFFSET $3)",
+        )
+        .bind(now)
+        .bind(user_id.as_uuid())
+        .bind(i64::from(keep))
+        .execute(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(())
+    }
+
     async fn save_api_credential(
         &self,
         record: &ApiCredentialRecord,
@@ -1027,6 +1112,17 @@ impl ManagementRepository for SqliteManagementRepository {
     ) -> Result<Option<SessionRecord>, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
     }
+    async fn revoke_session(&self, _: SessionId, _: i64) -> Result<(), ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
+    }
+    async fn revoke_oldest_sessions_above_limit(
+        &self,
+        _: UserId,
+        _: u32,
+        _: i64,
+    ) -> Result<(), ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
+    }
     async fn save_api_credential(
         &self,
         _: &ApiCredentialRecord,
@@ -1139,6 +1235,17 @@ impl ManagementRepository for PostgresManagementRepository {
         _: &[u8; 32],
         _: i64,
     ) -> Result<Option<SessionRecord>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("postgres"))
+    }
+    async fn revoke_session(&self, _: SessionId, _: i64) -> Result<(), ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("postgres"))
+    }
+    async fn revoke_oldest_sessions_above_limit(
+        &self,
+        _: UserId,
+        _: u32,
+        _: i64,
+    ) -> Result<(), ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("postgres"))
     }
     async fn save_api_credential(

@@ -15,6 +15,7 @@ use sqlx::{
 use thiserror::Error;
 
 mod account_repository;
+mod browser_session_repository;
 mod compaction;
 mod integrity_planner;
 mod job_dispatch;

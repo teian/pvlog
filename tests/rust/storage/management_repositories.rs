@@ -1,10 +1,13 @@
 //! Shared management repository authorization and isolation contracts.
 
-use std::{collections::BTreeSet, error::Error};
+use std::{collections::BTreeSet, error::Error, sync::Arc};
 
+use pvlog_application::{
+    BrowserSessionPolicy, BrowserSessionService, BrowserSessionUseCases, Clock,
+};
 use pvlog_domain::{
     AccountId, ApiCredentialId, AuditEventId, MembershipId, Permission, PrincipalId, SessionId,
-    SystemId, UserId,
+    SystemId, UserId, UtcTimestamp,
 };
 use pvlog_storage::{
     AccountRecord, ApiCredentialRecord, AuditRecord, AuthorizationGrant, DatabaseTarget,
@@ -53,6 +56,60 @@ async fn postgres_management_repository_contract_when_configured() -> Result<(),
     .await?;
     connection.close().await?;
     verify_contract(&repository, fixture, RoutingBackend::Postgres).await
+}
+
+#[tokio::test]
+async fn sqlite_browser_sessions_are_revocable_and_limited() -> Result<(), Box<dyn Error>> {
+    let directory = TempDir::new()?;
+    let management_path = directory.path().join("management.sqlite3");
+    let accounts_dir = directory.path().join("accounts");
+    apply_migrations(&DatabaseTarget::Sqlite {
+        management_path: management_path.clone(),
+        accounts_dir,
+    })
+    .await?;
+    let repository = Arc::new(SqliteManagementRepository::new(management_path));
+    let user_id = UserId::new();
+    repository
+        .save_user(&UserRecord {
+            id: user_id,
+            email: "session@example.test".to_owned(),
+            display_name: "Session".to_owned(),
+            status: "active".to_owned(),
+            created_at: 1,
+            updated_at: 1,
+        })
+        .await?;
+    let service = BrowserSessionService::new(
+        repository,
+        Arc::new(SessionClock),
+        [5; 32],
+        BrowserSessionPolicy {
+            idle_lifetime_seconds: 300,
+            absolute_lifetime_seconds: 3_600,
+            max_concurrent_sessions: 1,
+            secure_cookies: true,
+        },
+    );
+    let first = service.issue(user_id).await?;
+    let second = service.issue(user_id).await?;
+    assert!(
+        service
+            .authenticate(&first.session_cookie.value, None, false)
+            .await
+            .is_err()
+    );
+    service
+        .authenticate(&second.session_cookie.value, None, false)
+        .await?;
+    service.logout(&second.session_cookie.value).await?;
+    assert!(
+        service
+            .authenticate(&second.session_cookie.value, None, false)
+            .await
+            .is_err()
+    );
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -394,4 +451,11 @@ fn test_digest(seed: Uuid, discriminator: u8) -> [u8; 32] {
     digest[16..].copy_from_slice(seed.as_bytes());
     digest[31] ^= discriminator;
     digest
+}
+
+struct SessionClock;
+impl Clock for SessionClock {
+    fn now(&self) -> UtcTimestamp {
+        UtcTimestamp::new(time::OffsetDateTime::UNIX_EPOCH + time::Duration::milliseconds(1_000))
+    }
 }
