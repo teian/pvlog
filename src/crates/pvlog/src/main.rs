@@ -6,13 +6,14 @@ use std::{io, sync::Arc};
 
 use clap::{Parser, Subcommand};
 use pvlog::SystemClock;
-use pvlog::authentication::ManagementRequestAuthenticator;
+use pvlog::authentication::{ManagementRequestAuthenticator, ManagementRequestAuthorizer};
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
 use pvlog_application::{
     Argon2CredentialConfig, Argon2CredentialService, CommonPasswordHook,
     DiscardingRecoveryNotifier, LocalCredentialRepository, LocalPasswordPolicy,
-    LocalPasswordService, LocalPasswordUseCases, LocalUserPolicy, UserLifecycleRepository,
-    UserLifecycleService, UserLifecycleUseCases,
+    LocalPasswordService, LocalPasswordUseCases, LocalUserPolicy, SystemLifecycleRepository,
+    SystemLifecycleService, SystemLifecycleUseCases, UserLifecycleRepository, UserLifecycleService,
+    UserLifecycleUseCases,
 };
 use pvlog_storage::{
     DatabaseMigrationStatus, DatabaseTarget, MigrationError, MigrationPlanItem, ProbeError,
@@ -177,12 +178,18 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     let user_lifecycle = compose_user_lifecycle(config, target)?;
     let local_password = compose_local_password(config, target)?;
     let request_authenticator = compose_request_authenticator(config, target)?;
+    let request_authorizer = compose_request_authorizer(target)?;
+    let system_lifecycle = compose_system_lifecycle(target)?;
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
     let router = pvlog_api::with_request_authentication(
         pvlog_api::router(env!("CARGO_PKG_VERSION"))
             .merge(pvlog_api::user_lifecycle_router(user_lifecycle))
-            .merge(pvlog_api::local_password_router(local_password)),
+            .merge(pvlog_api::local_password_router(local_password))
+            .merge(pvlog_api::systems_router(
+                system_lifecycle,
+                request_authorizer,
+            )),
         request_authenticator,
     );
     axum::serve(listener, router).await?;
@@ -229,6 +236,101 @@ fn compose_request_authenticator(
         Arc::new(SystemClock),
         &config.security.session_secret,
     )))
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn compose_request_authorizer(
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn pvlog_api::ModernRequestAuthorizer>, StartupError> {
+    Ok(Arc::new(ManagementRequestAuthorizer::new(
+        compose_management_repository(target)?,
+        Arc::new(SystemClock),
+    )))
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn compose_system_lifecycle(
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn SystemLifecycleUseCases>, StartupError> {
+    let management = compose_management_repository(target)?;
+    let repository: Arc<dyn SystemLifecycleRepository> = match target {
+        DatabaseTarget::Sqlite {
+            management_path,
+            accounts_dir,
+        } => {
+            #[cfg(feature = "sqlite")]
+            {
+                let router = pvlog_storage::SqliteAccountPoolRouter::new(
+                    management_path.clone(),
+                    accounts_dir.clone(),
+                    pvlog_storage::SqliteAccountPoolConfig::default(),
+                )
+                .map_err(|_| StartupError::SystemLifecycleRouting)?;
+                Arc::new(pvlog_storage::SqliteSystemLifecycleRepository::new(
+                    router, management,
+                ))
+            }
+            #[cfg(not(feature = "sqlite"))]
+            {
+                let _ = (management_path, accounts_dir);
+                return Err(StartupError::AdapterDisabled("sqlite"));
+            }
+        }
+        DatabaseTarget::Postgres { url } => {
+            #[cfg(feature = "postgres")]
+            {
+                Arc::new(pvlog_storage::PostgresSystemLifecycleRepository::new(
+                    url.clone(),
+                    management,
+                ))
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                let _ = url;
+                return Err(StartupError::AdapterDisabled("postgres"));
+            }
+        }
+    };
+    Ok(Arc::new(SystemLifecycleService::new(
+        repository,
+        Arc::new(SystemClock),
+    )))
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn compose_management_repository(
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn pvlog_storage::ManagementRepository>, StartupError> {
+    match target {
+        DatabaseTarget::Sqlite {
+            management_path, ..
+        } => {
+            #[cfg(feature = "sqlite")]
+            {
+                Ok(Arc::new(pvlog_storage::SqliteManagementRepository::new(
+                    management_path.clone(),
+                )))
+            }
+            #[cfg(not(feature = "sqlite"))]
+            {
+                let _ = management_path;
+                Err(StartupError::AdapterDisabled("sqlite"))
+            }
+        }
+        DatabaseTarget::Postgres { url } => {
+            #[cfg(feature = "postgres")]
+            {
+                Ok(Arc::new(pvlog_storage::PostgresManagementRepository::new(
+                    url.clone(),
+                )))
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                let _ = url;
+                Err(StartupError::AdapterDisabled("postgres"))
+            }
+        }
+    }
 }
 
 #[allow(clippy::unnecessary_wraps)]
@@ -352,6 +454,8 @@ enum StartupError {
     Json(#[from] serde_json::Error),
     #[error("continuous worker execution is not implemented yet; pass --once")]
     ContinuousWorkerUnavailable,
+    #[error("failed to initialize account lifecycle routing")]
+    SystemLifecycleRouting,
     #[allow(dead_code)]
     #[error("the {0} database adapter is not enabled in this build")]
     AdapterDisabled(&'static str),
