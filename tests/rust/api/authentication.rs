@@ -51,6 +51,17 @@ async fn bearer_and_session_credentials_are_extracted_and_invalid_credentials_fa
         .oneshot(
             Request::builder()
                 .uri("/protected")
+                .header("cookie", "pvlog_session=valid-session")
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/protected")
                 .header("authorization", "Bearer invalid")
                 .body(Body::empty())?,
         )

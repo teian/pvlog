@@ -70,6 +70,10 @@ name = "readiness-endpoints"
 path = "../../../tests/rust/api/readiness_endpoints.rs"
 
 [[test]]
+name = "dashboard-endpoints"
+path = "../../../tests/rust/api/dashboard_endpoints.rs"
+
+[[test]]
 name = "system-endpoints"
 path = "../../../tests/rust/api/system_endpoints.rs"
 
@@ -84,14 +88,6 @@ path = "../../../tests/rust/api/telemetry_endpoints.rs"
 [[test]]
 name = "analytics-endpoints"
 path = "../../../tests/rust/api/analytics_endpoints.rs"
-
-[[test]]
-name = "community-endpoints"
-path = "../../../tests/rust/api/community_endpoints.rs"
-
-[[test]]
-name = "team-endpoints"
-path = "../../../tests/rust/api/team_endpoints.rs"
 
 [[test]]
 name = "notification-endpoints"

@@ -61,6 +61,21 @@ async fn sessions_enforce_cookie_csrf_rotation_expiry_limit_and_logout()
             .is_err()
     );
     assert_eq!(repository.last_limit()?, Some(2));
+
+    let development_service = BrowserSessionService::new(
+        Arc::new(FakeRepository::default()),
+        Arc::new(FixedClock),
+        [8; 32],
+        BrowserSessionPolicy {
+            idle_lifetime_seconds: 300,
+            absolute_lifetime_seconds: 3_600,
+            max_concurrent_sessions: 2,
+            secure_cookies: false,
+        },
+    );
+    let development_session = development_service.issue(UserId::new()).await?;
+    assert_eq!(development_session.session_cookie.name, "pvlog_session");
+    assert!(!development_session.session_cookie.secure);
     Ok(())
 }
 

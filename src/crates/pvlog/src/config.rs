@@ -30,7 +30,9 @@ pub struct RuntimeConfig {
 }
 
 impl RuntimeConfig {
-    /// Loads `pvlog.toml` when present and applies `PVLOG_*` environment overrides.
+    /// Loads an optional `.env`, then `pvlog.toml`, and finally applies `PVLOG_*`
+    /// environment overrides. Values already present in the process environment
+    /// are never replaced by `.env`.
     ///
     /// Nested environment keys use a double underscore, for example
     /// `PVLOG_HTTP__PUBLIC_BASE_URL`.
@@ -39,6 +41,11 @@ impl RuntimeConfig {
     ///
     /// Returns an error when configuration cannot be decoded or fails validation.
     pub fn load() -> Result<Self, ConfigError> {
+        match dotenvy::from_path(".env") {
+            Ok(()) => {}
+            Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(ConfigError::Dotenv(error)),
+        }
         let figment = Figment::new()
             .merge(Toml::file("pvlog.toml"))
             .merge(Env::prefixed("PVLOG_").split("__"));
@@ -204,11 +211,11 @@ pub struct HttpConfig {
 
 impl Default for HttpConfig {
     fn default() -> Self {
-        let Ok(public_base_url) = Url::parse("http://localhost:8080") else {
+        let Ok(public_base_url) = Url::parse("http://localhost:18087") else {
             unreachable!("the static development URL must be valid");
         };
         Self {
-            bind: SocketAddr::from(([127, 0, 0, 1], 8080)),
+            bind: SocketAddr::from(([127, 0, 0, 1], 18_087)),
             public_base_url,
             secure_cookies: false,
         }
@@ -466,6 +473,9 @@ pub struct TelemetryConfig {
 /// Runtime configuration failure.
 #[derive(Debug, Error)]
 pub enum ConfigError {
+    /// Invalid or unreadable optional `.env` file.
+    #[error("failed to load .env configuration: {0}")]
+    Dotenv(#[source] dotenvy::Error),
     /// Configuration source or decoding failure.
     #[error("failed to load configuration: {0}")]
     Load(Box<figment::Error>),

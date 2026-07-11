@@ -20,11 +20,11 @@ use pvlog::operator_bundle::{
 };
 use pvlog_application::{
     Argon2CredentialConfig, Argon2CredentialService, BrowserSessionPolicy,
-    BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, CommonPasswordHook,
-    DiscardingRecoveryNotifier, ExternalIdentityLinkingRepository, ExternalIdentityLinkingService,
-    ExternalIdentityLinkingUseCases, ExternalLoginPolicy, LocalCredentialRepository,
-    LocalPasswordPolicy, LocalPasswordService, LocalPasswordUseCases, LocalUserPolicy,
-    SystemLifecycleRepository, SystemLifecycleService, SystemLifecycleUseCases,
+    BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, Clock,
+    CommonPasswordHook, DiscardingRecoveryNotifier, ExternalIdentityLinkingRepository,
+    ExternalIdentityLinkingService, ExternalIdentityLinkingUseCases, ExternalLoginPolicy,
+    LocalCredentialRepository, LocalPasswordPolicy, LocalPasswordService, LocalPasswordUseCases,
+    LocalUserPolicy, SystemLifecycleRepository, SystemLifecycleService, SystemLifecycleUseCases,
     UserLifecycleRepository, UserLifecycleService, UserLifecycleUseCases,
 };
 use pvlog_storage::{
@@ -35,6 +35,34 @@ use secrecy::ExposeSecret as _;
 use serde::Serialize;
 use thiserror::Error;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
+
+struct EmptyDashboardApi;
+
+#[async_trait::async_trait]
+impl pvlog_api::DashboardApiUseCases for EmptyDashboardApi {
+    async fn dashboard(
+        &self,
+    ) -> Result<pvlog_api::DashboardResponse, pvlog_api::DashboardApiError> {
+        let now = i64::try_from(SystemClock.now().epoch_millis())
+            .map_err(|_| pvlog_api::DashboardApiError::Unavailable)?;
+        Ok(pvlog_api::DashboardResponse {
+            observed_at_epoch_millis: 0,
+            age_seconds: u64::try_from(now / 1_000).unwrap_or(u64::MAX),
+            freshness_threshold_seconds: 60,
+            generation_watts: 0.0,
+            consumption_watts: None,
+            grid_watts: None,
+            battery_basis_points: None,
+            coverage_basis_points: 0,
+            recent_alerts: Vec::new(),
+            ingestion: pvlog_api::DashboardIngestionResponse {
+                accepted_today: 0,
+                rejected_today: 0,
+                lag_seconds: 0,
+            },
+        })
+    }
+}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -161,7 +189,7 @@ async fn main() -> Result<(), StartupError> {
 fn init_observability(
     config: &RuntimeConfig,
 ) -> Result<Option<ObservabilityProviders>, StartupError> {
-    let filter = EnvFilter::from_default_env();
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
     let format = tracing_subscriber::fmt::layer()
         .json()
         .with_current_span(true)
@@ -373,7 +401,7 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     let readiness = Arc::new(ManagementReadiness::new(target.clone()));
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
-    let router = pvlog_api::with_request_authentication(
+    let api_router = pvlog_api::with_request_authentication(
         pvlog_api::router(env!("CARGO_PKG_VERSION"))
             .merge(pvlog_api::readiness_router(readiness))
             .merge(pvlog_api::user_lifecycle_router(
@@ -406,9 +434,19 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
             .merge(pvlog_api::inverters_router(
                 inverter_api,
                 request_authorizer.clone(),
-            )),
+            ))
+            .merge(pvlog_api::dashboard_router(Arc::new(EmptyDashboardApi))),
         request_authenticator,
     );
+    let router = api_router.merge(pvlog::embedded_ui::router(
+        env!("CARGO_PKG_VERSION"),
+        config.telemetry.enabled,
+        config
+            .telemetry
+            .otlp_endpoint
+            .as_ref()
+            .map(ToString::to_string),
+    ));
     axum::serve(listener, router).await?;
     Ok(())
 }

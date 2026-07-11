@@ -13,7 +13,8 @@ use axum::{
 use pvlog_domain::{AccountId, ApiCredentialId, ApiScope, SystemId, UserId};
 use secrecy::SecretString;
 
-const SESSION_COOKIE: &str = "__Host-pvlog_session";
+const SECURE_SESSION_COOKIE: &str = "__Host-pvlog_session";
+const DEVELOPMENT_SESSION_COOKIE: &str = "pvlog_session";
 const CSRF_HEADER: &str = "x-csrf-token";
 
 /// Principal authenticated from an HTTP credential.
@@ -126,13 +127,15 @@ fn bearer_token(
 /// Extracts the browser session cookie without exposing its value in logs or responses.
 #[must_use]
 pub fn session_cookie_token(headers: &axum::http::HeaderMap) -> Option<SecretString> {
-    headers
-        .get(header::COOKIE)?
-        .to_str()
-        .ok()?
-        .split(';')
-        .map(str::trim)
-        .find_map(|part| part.strip_prefix(&format!("{SESSION_COOKIE}=")))
+    let cookie = headers.get(header::COOKIE)?.to_str().ok()?;
+    [SECURE_SESSION_COOKIE, DEVELOPMENT_SESSION_COOKIE]
+        .into_iter()
+        .find_map(|name| {
+            cookie
+                .split(';')
+                .map(str::trim)
+                .find_map(|part| part.strip_prefix(&format!("{name}=")))
+        })
         .filter(|value| !value.is_empty())
         .map(|value| SecretString::from(value.to_owned()))
 }

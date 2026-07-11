@@ -4,6 +4,7 @@
 
 pub mod authentication;
 pub mod config;
+pub mod embedded_ui;
 pub mod inverters;
 pub mod operator_bundle;
 

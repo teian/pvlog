@@ -154,7 +154,11 @@ impl BrowserSessionService {
         Ok(BrowserSession {
             user_id,
             session_cookie: SessionCookie {
-                name: "__Host-pvlog_session",
+                name: if self.policy.secure_cookies {
+                    "__Host-pvlog_session"
+                } else {
+                    "pvlog_session"
+                },
                 value: session_token,
                 http_only: true,
                 secure: self.policy.secure_cookies,

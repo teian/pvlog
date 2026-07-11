@@ -63,6 +63,43 @@ fn postgres_server_and_worker_boot_when_test_database_is_available() -> Result<(
     Ok(())
 }
 
+#[test]
+fn dotenv_and_toml_configuration_are_loaded_together() -> Result<(), Box<dyn Error>> {
+    let directory = TempDir::new()?;
+    let management_path = directory.path().join("from-dotenv.sqlite3");
+    let accounts_dir = directory.path().join("from-toml-accounts");
+    std::fs::create_dir_all(&accounts_dir)?;
+    std::fs::write(
+        directory.path().join(".env"),
+        format!(
+            "PVLOG_ENVIRONMENT=test\n\
+             PVLOG_SECURITY__SESSION_SECRET={SESSION_SECRET}\n\
+             PVLOG_SECURITY__CREDENTIAL_ENCRYPTION_KEY={ENCRYPTION_KEY}\n\
+             PVLOG_DATABASE__SQLITE__MANAGEMENT_PATH={}\n",
+            management_path.display()
+        ),
+    )?;
+    std::fs::write(
+        directory.path().join("pvlog.toml"),
+        format!(
+            "[database]\nbackend = \"sqlite\"\n\
+             [database.sqlite]\naccounts_dir = \"{}\"\n",
+            toml_path(&accounts_dir)
+        ),
+    )?;
+
+    let status = Command::new(env!("CARGO_BIN_EXE_pvlog"))
+        .current_dir(directory.path())
+        .env_clear()
+        .args(["migrate", "apply"])
+        .stdout(Stdio::null())
+        .status()?;
+
+    assert!(status.success());
+    assert!(management_path.is_file());
+    Ok(())
+}
+
 fn run_migrations(settings: &[(&str, &str)]) -> Result<(), Box<dyn Error>> {
     for action in ["plan", "apply", "status"] {
         let status = configured_command(settings)
@@ -143,4 +180,8 @@ fn available_address() -> Result<SocketAddr, Box<dyn Error>> {
 fn path_text(path: &Path) -> Result<&str, Box<dyn Error>> {
     path.to_str()
         .ok_or_else(|| format!("test path is not valid UTF-8: {}", path.display()).into())
+}
+
+fn toml_path(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "\\\\")
 }

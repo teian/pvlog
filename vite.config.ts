@@ -100,6 +100,15 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(REPOSITORY_ROOT, "src/ui"),
       },
     },
+    server: {
+      proxy: {
+        "/api/v1": {
+          target:
+            environment.VITE_DEV_API_TARGET ?? "http://127.0.0.1:18087",
+          changeOrigin: true,
+        },
+      },
+    },
     build: {
       outDir: path.resolve(REPOSITORY_ROOT, "dist/ui"),
       emptyOutDir: true,

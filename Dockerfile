@@ -1,11 +1,27 @@
 # syntax=docker/dockerfile:1.7
 
+FROM node:24-bookworm-slim AS ui-build
+WORKDIR /build
+
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts ./
+COPY openapi ./openapi
+COPY src/ui ./src/ui
+
+RUN pnpm build
+
 FROM rust:1.95.0-bookworm AS build
 WORKDIR /build
 
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY src ./src
 COPY tests ./tests
+COPY embedded-ui ./embedded-ui
+COPY --from=ui-build /build/dist/ui/ ./embedded-ui/
 
 RUN cargo build --release --locked --package pvlog
 

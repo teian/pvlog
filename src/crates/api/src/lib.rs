@@ -5,7 +5,12 @@
 use std::time::Duration;
 
 use axum::http::{HeaderName, HeaderValue, Method, header};
-use axum::{Json, Router, middleware, middleware::Next, response::Response, routing::get};
+use axum::{
+    Json, Router, middleware,
+    middleware::Next,
+    response::Response,
+    routing::{any, get},
+};
 use opentelemetry::KeyValue;
 use serde::Serialize;
 use tower::limit::ConcurrencyLimitLayer;
@@ -25,8 +30,8 @@ mod analytics;
 mod audit;
 mod authentication;
 mod authorization;
-mod community;
 mod connectors;
+mod dashboard;
 mod identities;
 mod inverters;
 mod local_password;
@@ -37,7 +42,6 @@ mod rbac;
 mod readiness;
 mod sessions;
 mod systems;
-mod teams;
 mod telemetry;
 mod user_lifecycle;
 
@@ -51,9 +55,12 @@ pub use authorization::{
     AuthorizedRequest, ModernRequestAuthorizer, RequestAuthorizationError, actor_user_id,
     principal_identity,
 };
-pub use community::community_router;
 pub use connectors::{
     ConnectorAdminError, ConnectorAdminResponse, ConnectorAdminUseCases, connectors_router,
+};
+pub use dashboard::{
+    DashboardAlertResponse, DashboardApiError, DashboardApiUseCases, DashboardIngestionResponse,
+    DashboardResponse, dashboard_router,
 };
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,
@@ -76,7 +83,6 @@ pub use sessions::{
     sessions_router,
 };
 pub use systems::systems_router;
-pub use teams::teams_router;
 pub use telemetry::telemetry_router;
 pub use user_lifecycle::user_lifecycle_router;
 
@@ -102,7 +108,8 @@ pub fn router(version: &'static str) -> Router {
                 })
             }),
         )
-        .fallback(problem::not_found)
+        .route("/api/v1", any(problem::not_found))
+        .route("/api/v1/{*path}", any(problem::not_found))
         .layer(middleware::from_fn(problem::negotiate))
         .layer(SetResponseHeaderLayer::if_not_present(
             header::CONTENT_SECURITY_POLICY,
