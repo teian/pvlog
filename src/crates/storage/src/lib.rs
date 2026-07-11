@@ -45,7 +45,8 @@ pub use account_repository::PostgresAccountConfigurationRepository;
 pub use account_repository::SqliteAccountConfigurationRepository;
 pub use account_repository::{
     AccountAuditRecord, AccountConfigurationRepository, AccountRepositoryError,
-    ChannelDefinitionRecord, EquipmentRecord, SystemConfigurationRecord, TariffRecord,
+    ChannelDefinitionRecord, EquipmentRecord, InverterRecord, PvStringRecord,
+    SystemConfigurationRecord, TariffRecord,
 };
 pub use compaction::{
     CompactionError, CompactionKey, CompactionPhase, CompactionRepository, CompactionService,

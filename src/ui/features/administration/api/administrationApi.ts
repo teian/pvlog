@@ -1,16 +1,20 @@
 import {
   auditEventSchema,
   connectorAdminSchema,
+  inverterSchema,
   invitationSchema,
   linkedIdentitySchema,
   roleSchema,
   roleAssignmentSchema,
+  managedResourceSchema,
   type AuditEvent,
   type LinkedIdentity,
   type Role,
   type RoleAssignment,
   type Invitation,
   type ConnectorAdmin,
+  type Inverter,
+  type ManagedResource,
 } from "@/features/administration/types/administration.types";
 import { sessionJsonRequest } from "@/shared/api/sessionRequest";
 import { z } from "zod";
@@ -93,4 +97,48 @@ export async function fetchConnectors(): Promise<ConnectorAdmin[]> {
   return z
     .array(connectorAdminSchema)
     .parse(await getJson("/api/v1/admin/auth-connectors"));
+}
+
+/** Loads one system's complete inverter/string hierarchy. @param accountId - Owning account. @param systemId - System aggregate root. @returns Validated inverter aggregates. */
+export async function fetchInverters(
+  accountId: string,
+  systemId: string,
+): Promise<Inverter[]> {
+  return z
+    .array(inverterSchema)
+    .parse(
+      await getJson(
+        `/api/v1/accounts/${accountId}/systems/${systemId}/inverters`,
+      ),
+    );
+}
+
+/** Loads generic administration resources. @param path - Authorized modern resource path. @returns Validated resources. */
+export async function fetchManagedResources(
+  path: string,
+): Promise<ManagedResource[]> {
+  return z.array(managedResourceSchema).parse(await getJson(path));
+}
+
+/** Loads operational administration surface availability without retaining sensitive payloads. @param accountId - Active account. @returns Availability counts for each operational category. */
+export async function fetchOperationalSummary(
+  accountId: string,
+): Promise<Record<string, number | null>> {
+  const paths = {
+    alerts: `/api/v1/accounts/${accountId}/alerts`,
+    alertEvents: `/api/v1/accounts/${accountId}/alert-events`,
+    webhooks: `/api/v1/accounts/${accountId}/webhooks`,
+    readiness: "/api/v1/health/ready",
+  };
+  const entries = await Promise.all(
+    Object.entries(paths).map(async ([kind, path]) => {
+      try {
+        const value = await getJson(path);
+        return [kind, Array.isArray(value) ? value.length : 1] as const;
+      } catch {
+        return [kind, null] as const;
+      }
+    }),
+  );
+  return Object.fromEntries(entries);
 }

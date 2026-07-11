@@ -1,9 +1,12 @@
 import {
   addFavourite,
   compareSystems,
+  createTeam,
   fetchCommunitySystems,
   fetchFavourites,
   fetchLadder,
+  fetchRegionalSupply,
+  joinTeam,
   removeFavourite,
 } from "@/features/community/api/communityApi";
 import type { CommunitySearchFilters } from "@/features/community/types/community.types";
@@ -58,4 +61,27 @@ export function useFavouriteMutation() {
 /** Compares a selected set of visible systems. @returns The comparison mutation state. */
 export function useSystemComparison() {
   return useMutation({ mutationFn: compareSystems });
+}
+
+/** Creates teams and joins systems through the modern team lifecycle. @returns Team creation and membership mutations. */
+export function useTeamManagement() {
+  return {
+    create: useMutation({
+      mutationFn: ({ accountId, name }: { accountId: string; name: string }) =>
+        createTeam(accountId, name),
+    }),
+    join: useMutation({
+      mutationFn: ({ teamId, systemId }: { teamId: string; systemId: string }) =>
+        joinTeam(teamId, systemId),
+    }),
+  };
+}
+
+/** Loads regional supply provider freshness and provenance. @returns The provider query state. */
+export function useRegionalSupply() {
+  return useQuery({
+    queryKey: ["community", "regional-supply"],
+    queryFn: fetchRegionalSupply,
+    retry: false,
+  });
 }

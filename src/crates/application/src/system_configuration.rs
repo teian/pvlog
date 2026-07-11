@@ -3,8 +3,8 @@
 use crate::PortError;
 use async_trait::async_trait;
 use pvlog_domain::{
-    CalculationSettings, CapacityPeriod, ChannelDefinition, Equipment, SystemId, SystemPrivacy,
-    Tariff, UserId,
+    CalculationSettings, CapacityPeriod, ChannelDefinition, Equipment, Inverter, SystemId,
+    SystemPrivacy, Tariff, UserId,
 };
 use std::sync::Arc;
 use thiserror::Error;
@@ -22,6 +22,7 @@ pub trait SystemConfigurationRepository: Send + Sync {
         period: CapacityPeriod,
     ) -> Result<(), PortError>;
     async fn save_equipment(&self, equipment: Equipment) -> Result<(), PortError>;
+    async fn save_inverter(&self, inverter: Inverter) -> Result<(), PortError>;
     async fn save_tariff(&self, tariff: Tariff) -> Result<(), PortError>;
     async fn save_channel(&self, channel: ChannelDefinition) -> Result<(), PortError>;
     async fn save_settings(
@@ -87,6 +88,37 @@ impl SystemConfigurationService {
             .await
             .map_err(SystemConfigurationError::Repository)?;
         self.audit(actor, system_id, "system.equipment.updated")
+            .await
+    }
+    /// Adds or replaces one inverter and its complete PV-string subtree.
+    /// # Errors
+    /// Returns an error for an empty or cross-parent aggregate, invalid physical values, or a
+    /// persistence failure.
+    pub async fn save_inverter(
+        &self,
+        actor: UserId,
+        system_id: SystemId,
+        inverter: Inverter,
+    ) -> Result<(), SystemConfigurationError> {
+        if inverter.system_id != system_id
+            || inverter.name.trim().is_empty()
+            || inverter.strings.is_empty()
+            || inverter.strings.iter().any(|string| {
+                string.inverter_id != inverter.id
+                    || string.name.trim().is_empty()
+                    || string.panel_count == 0
+                    || string.rated_power.value() <= 0
+                    || string.orientation_degrees.is_some_and(|value| value > 359)
+                    || string.tilt_degrees.is_some_and(|value| value > 90)
+            })
+        {
+            return Err(SystemConfigurationError::InvalidConfiguration);
+        }
+        self.repository
+            .save_inverter(inverter)
+            .await
+            .map_err(SystemConfigurationError::Repository)?;
+        self.audit(actor, system_id, "system.inverter.updated")
             .await
     }
     /// Adds an effective-dated tariff.

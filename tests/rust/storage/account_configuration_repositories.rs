@@ -2,11 +2,13 @@
 
 use std::error::Error;
 
-use pvlog_domain::{AccountId, AuditEventId, ChannelId, EquipmentId, SystemId, TariffId};
+use pvlog_domain::{
+    AccountId, AuditEventId, ChannelId, EquipmentId, InverterId, StringId, SystemId, TariffId,
+};
 use pvlog_storage::{
     AccountAuditRecord, AccountConfigurationRepository, AccountRepositoryError,
-    ChannelDefinitionRecord, DatabaseTarget, EquipmentRecord,
-    PostgresAccountConfigurationRepository, SqliteAccountConfigurationRepository,
+    ChannelDefinitionRecord, DatabaseTarget, EquipmentRecord, InverterRecord,
+    PostgresAccountConfigurationRepository, PvStringRecord, SqliteAccountConfigurationRepository,
     SqliteAccountPoolConfig, SqliteAccountPoolRouter, SqliteAccountProvisioner,
     SystemConfigurationRecord, TariffRecord, apply_migrations,
 };
@@ -73,6 +75,25 @@ async fn verify_contract(
     repository.save_system(&system).await?;
     assert_eq!(repository.system(system_id).await?, Some(system));
     assert!(other_account.system(system_id).await?.is_none());
+
+    let inverter = inverter(system_id, 0, None);
+    repository.save_inverter_aggregate(&inverter).await?;
+    assert_eq!(
+        repository.effective_inverters(system_id, 0).await?,
+        vec![inverter.clone()]
+    );
+    assert!(
+        other_account
+            .effective_inverters(system_id, 0)
+            .await?
+            .is_empty()
+    );
+    let mut invalid_inverter = inverter;
+    invalid_inverter.strings[0].inverter_id = InverterId::new();
+    assert!(matches!(
+        repository.save_inverter_aggregate(&invalid_inverter).await,
+        Err(AccountRepositoryError::InvalidRecord("PV string"))
+    ));
 
     let first_equipment = equipment(system_id, "Original", 0, Some(10));
     let second_equipment = equipment(system_id, "Replacement", 10, None);
@@ -163,7 +184,7 @@ fn equipment(
     EquipmentRecord {
         id: EquipmentId::new(),
         system_id,
-        equipment_kind: "array".to_owned(),
+        equipment_kind: "battery".to_owned(),
         name: name.to_owned(),
         capacity_watts: Some(8_000),
         effective_from,
@@ -171,6 +192,38 @@ fn equipment(
         configuration: serde_json::json!({}),
         created_at: 1,
         updated_at: 1,
+    }
+}
+
+fn inverter(system_id: SystemId, effective_from: i64, effective_to: Option<i64>) -> InverterRecord {
+    let inverter_id = InverterId::new();
+    InverterRecord {
+        id: inverter_id,
+        system_id,
+        name: "Roof inverter".to_owned(),
+        manufacturer: Some("Example".to_owned()),
+        model: Some("INV-8K".to_owned()),
+        serial_reference: None,
+        rated_power_watts: Some(8_000),
+        effective_from,
+        effective_to,
+        created_at: 1,
+        updated_at: 1,
+        strings: vec![PvStringRecord {
+            id: StringId::new(),
+            inverter_id,
+            name: "South roof".to_owned(),
+            panel_count: 20,
+            panel_manufacturer: Some("Example".to_owned()),
+            panel_model: Some("P400".to_owned()),
+            rated_power_watts: 8_000,
+            orientation_degrees: Some(180),
+            tilt_degrees: Some(35),
+            effective_from,
+            effective_to,
+            created_at: 1,
+            updated_at: 1,
+        }],
     }
 }
 

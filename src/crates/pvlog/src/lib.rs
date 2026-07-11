@@ -4,6 +4,8 @@
 
 pub mod authentication;
 pub mod config;
+pub mod inverters;
+pub mod operator_bundle;
 
 use pvlog_application::Clock;
 use pvlog_domain::UtcTimestamp;

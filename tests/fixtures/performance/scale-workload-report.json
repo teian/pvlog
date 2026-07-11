@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-07-11T00:00:00Z",
+  "hardware": "CI reference: 4 vCPU, 16 GiB RAM, NVMe class storage",
+  "postgresqlSettings": {
+    "version": "17",
+    "sharedBuffers": "4GB",
+    "effectiveCacheSize": "12GB",
+    "maxConnections": 100
+  },
+  "bytesPerSystemDay": 18432,
+  "compressionRatio": 7.8,
+  "queueLagSeconds": 0.8,
+  "workloads": [
+    {
+      "name": "burst-ingestion",
+      "concurrency": 16,
+      "observationsPerSecond": 286,
+      "latenciesMillis": [
+        31, 34, 35, 36, 38, 40, 41, 43, 45, 48, 51, 53, 57, 61, 66, 72, 81, 93,
+        111, 148
+      ]
+    },
+    {
+      "name": "concurrent-chart-statistics",
+      "concurrency": 24,
+      "observationsPerSecond": 0,
+      "latenciesMillis": [
+        84, 91, 96, 102, 109, 116, 121, 129, 137, 148, 159, 171, 186, 204, 229,
+        258, 297, 351, 422, 618
+      ]
+    }
+  ]
+}

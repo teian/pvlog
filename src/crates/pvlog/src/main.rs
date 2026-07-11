@@ -2,9 +2,11 @@
 
 #![forbid(unsafe_code)]
 
-use std::{io, sync::Arc, time::Duration};
+use std::{io, path::PathBuf, sync::Arc, time::Duration};
 
 use clap::{Parser, Subcommand};
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry_otlp::WithExportConfig as _;
 use pvlog::SystemClock;
 use pvlog::authentication::{
     ManagementAuditApi, ManagementConnectorApi, ManagementIdentityApi, ManagementRbacApi,
@@ -12,6 +14,10 @@ use pvlog::authentication::{
     ManagementSessionBootstrap, session_digest_key,
 };
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
+use pvlog::inverters::ManagementInverterApi;
+use pvlog::operator_bundle::{
+    export_account_bundle, export_bundle, export_postgres_bundle, import_bundle, verify_bundle,
+};
 use pvlog_application::{
     Argon2CredentialConfig, Argon2CredentialService, BrowserSessionPolicy,
     BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, CommonPasswordHook,
@@ -28,7 +34,7 @@ use pvlog_storage::{
 use secrecy::ExposeSecret as _;
 use serde::Serialize;
 use thiserror::Error;
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -68,6 +74,24 @@ enum Command {
         #[command(subcommand)]
         action: MigrationCommand,
     },
+    /// Export a versioned, checksummed operator bundle.
+    Export {
+        output: PathBuf,
+        /// Restrict the bundle to one opaque account database filename.
+        #[arg(long)]
+        account_database: Option<String>,
+        /// Package a consistent archive produced by the `PostgreSQL` backup hook.
+        #[arg(long)]
+        postgres_archive: Option<PathBuf>,
+    },
+    /// Validate and restore an operator bundle into an empty destination.
+    Import {
+        bundle: PathBuf,
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Verify an operator bundle without restoring it.
+    Verify { bundle: PathBuf },
 }
 
 #[derive(Debug, Subcommand)]
@@ -82,14 +106,12 @@ enum MigrationCommand {
 
 #[tokio::main]
 async fn main() -> Result<(), StartupError> {
-    let _subscriber = tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .try_init();
     let cli = Cli::parse();
     let config = RuntimeConfig::load()?;
+    let telemetry = init_observability(&config)?;
     let target = database_target(&config);
 
-    match cli.command {
+    let result = match cli.command {
         Command::Server => run_server(&config, &target).await,
         Command::Worker {
             once: true,
@@ -104,7 +126,93 @@ async fn main() -> Result<(), StartupError> {
         } => run_worker(&target, interval_seconds).await,
         Command::Doctor { json } => run_doctor(&target, json).await,
         Command::Migrate { json, action } => run_migration_command(&target, action, json).await,
+        Command::Export {
+            output,
+            account_database,
+            postgres_archive,
+        } => {
+            let manifest = if let Some(archive) = postgres_archive {
+                export_postgres_bundle(&target, &output, &archive)?
+            } else if let Some(account_database) = account_database {
+                export_account_bundle(&target, &output, &account_database).await?
+            } else {
+                export_bundle(&target, &output).await?
+            };
+            print_json(&manifest)
+        }
+        Command::Import { bundle, dry_run } => {
+            print_json(&import_bundle(&target, &bundle, dry_run)?)
+        }
+        Command::Verify { bundle } => print_json(&verify_bundle(&bundle)?),
+    };
+    if let Some(providers) = telemetry {
+        providers
+            .traces
+            .shutdown()
+            .map_err(|error| StartupError::Telemetry(error.to_string()))?;
+        providers
+            .metrics
+            .shutdown()
+            .map_err(|error| StartupError::Telemetry(error.to_string()))?;
     }
+    result
+}
+
+fn init_observability(
+    config: &RuntimeConfig,
+) -> Result<Option<ObservabilityProviders>, StartupError> {
+    let filter = EnvFilter::from_default_env();
+    let format = tracing_subscriber::fmt::layer()
+        .json()
+        .with_current_span(true)
+        .with_span_list(true);
+    if config.telemetry.enabled {
+        let endpoint = config
+            .telemetry
+            .otlp_endpoint
+            .as_ref()
+            .ok_or_else(|| StartupError::Telemetry("OTLP endpoint is required".to_owned()))?;
+        let exporter = opentelemetry_otlp::SpanExporter::builder()
+            .with_http()
+            .with_endpoint(endpoint.as_str())
+            .build()
+            .map_err(|error| StartupError::Telemetry(error.to_string()))?;
+        let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+            .with_batch_exporter(exporter)
+            .build();
+        let tracer = provider.tracer("pvlog-server");
+        let metric_exporter = opentelemetry_otlp::MetricExporter::builder()
+            .with_http()
+            .with_endpoint(endpoint.as_str())
+            .build()
+            .map_err(|error| StartupError::Telemetry(error.to_string()))?;
+        let metrics = opentelemetry_sdk::metrics::SdkMeterProvider::builder()
+            .with_periodic_exporter(metric_exporter)
+            .build();
+        opentelemetry::global::set_meter_provider(metrics.clone());
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(format)
+            .with(tracing_opentelemetry::layer().with_tracer(tracer))
+            .try_init()
+            .map_err(|error| StartupError::Telemetry(error.to_string()))?;
+        Ok(Some(ObservabilityProviders {
+            traces: provider,
+            metrics,
+        }))
+    } else {
+        tracing_subscriber::registry()
+            .with(filter)
+            .with(format)
+            .try_init()
+            .map_err(|error| StartupError::Telemetry(error.to_string()))?;
+        Ok(None)
+    }
+}
+
+struct ObservabilityProviders {
+    traces: opentelemetry_sdk::trace::SdkTracerProvider,
+    metrics: opentelemetry_sdk::metrics::SdkMeterProvider,
 }
 
 async fn run_worker(target: &DatabaseTarget, interval_seconds: u64) -> Result<(), StartupError> {
@@ -261,6 +369,7 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     let rbac_api = compose_rbac_api(target)?;
     let identity_api = compose_identity_api(target)?;
     let connector_api = Arc::new(ManagementConnectorApi::new(&config.auth.connectors));
+    let inverter_api = Arc::new(ManagementInverterApi::new(target.clone()));
     let readiness = Arc::new(ManagementReadiness::new(target.clone()));
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
@@ -292,6 +401,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
             .merge(pvlog_api::identities_router(identity_api))
             .merge(pvlog_api::connectors_router(
                 connector_api,
+                request_authorizer.clone(),
+            ))
+            .merge(pvlog_api::inverters_router(
+                inverter_api,
                 request_authorizer.clone(),
             )),
         request_authenticator,
@@ -685,6 +798,10 @@ enum StartupError {
     Storage(#[from] ProbeError),
     #[error(transparent)]
     Migration(#[from] MigrationError),
+    #[error(transparent)]
+    Bundle(#[from] pvlog::operator_bundle::BundleError),
+    #[error("telemetry initialization failed: {0}")]
+    Telemetry(String),
     #[error("failed to serialize command output: {0}")]
     Json(#[from] serde_json::Error),
     #[error("database schema is not compatible with this release")]

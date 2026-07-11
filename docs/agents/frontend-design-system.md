@@ -30,41 +30,41 @@ The current frontend theme is implemented in `src/index.css` as a neutral OKLCH 
 
 The implemented palette is a semantic OKLCH scale rather than a named brand palette.
 
-| Token Group | Purpose | Light Theme | Dark Theme |
-| --- | --- | --- | --- |
-| `background` / `foreground` | App surface and default text | Subtle warm off-white surface with dark warm-neutral text | Near-black surface with near-white text |
-| `card` / `card-foreground` | Card surfaces and text | Almost-white raised surface | Raised dark surface |
-| `popover` / `popover-foreground` | Floating surfaces and text | Almost-white raised surface | Raised dark surface |
-| `primary` / `primary-foreground` | Primary actions and emphasis | Dark warm-neutral with warm off-white text | Near-white with near-black text |
-| `secondary` / `secondary-foreground` | Secondary surfaces and controls | Very light warm-neutral surface with dark text | Dark neutral with light text |
-| `muted` / `muted-foreground` | Subtle backgrounds and secondary text | Soft warm-neutral surface with higher-contrast secondary text | Dark neutral with mid-gray text |
-| `accent` / `accent-foreground` | Hover, selected, and low-emphasis interactive states | Soft cream hover state with dark text | Dark neutral with light text |
-| `destructive` | Error and destructive actions | Saturated red OKLCH token | Lighter red OKLCH token |
-| `border` / `input` / `ring` | Borders, form chrome, and focus rings | Soft warm-neutral borders and focus rings | Transparent light overlays and mid neutral ring |
-| `chart-1` through `chart-5` | Chart series colours | Neutral ramp | Same neutral ramp |
-| `sidebar-*` | Sidebar surfaces, text, emphasis, borders, and rings | Light neutral sidebar | Dark neutral sidebar with blue-violet sidebar primary |
-| `master-data-*` | Nested master-data navigation emphasis | Pale warm active item and orange count badge | Dark warm active item and orange count badge |
+| Token Group                          | Purpose                                              | Light Theme                                                   | Dark Theme                                            |
+| ------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------- |
+| `background` / `foreground`          | App surface and default text                         | Subtle warm off-white surface with dark warm-neutral text     | Near-black surface with near-white text               |
+| `card` / `card-foreground`           | Card surfaces and text                               | Almost-white raised surface                                   | Raised dark surface                                   |
+| `popover` / `popover-foreground`     | Floating surfaces and text                           | Almost-white raised surface                                   | Raised dark surface                                   |
+| `primary` / `primary-foreground`     | Primary actions and emphasis                         | Dark warm-neutral with warm off-white text                    | Near-white with near-black text                       |
+| `secondary` / `secondary-foreground` | Secondary surfaces and controls                      | Very light warm-neutral surface with dark text                | Dark neutral with light text                          |
+| `muted` / `muted-foreground`         | Subtle backgrounds and secondary text                | Soft warm-neutral surface with higher-contrast secondary text | Dark neutral with mid-gray text                       |
+| `accent` / `accent-foreground`       | Hover, selected, and low-emphasis interactive states | Soft cream hover state with dark text                         | Dark neutral with light text                          |
+| `destructive`                        | Error and destructive actions                        | Saturated red OKLCH token                                     | Lighter red OKLCH token                               |
+| `border` / `input` / `ring`          | Borders, form chrome, and focus rings                | Soft warm-neutral borders and focus rings                     | Transparent light overlays and mid neutral ring       |
+| `chart-1` through `chart-5`          | Chart series colours                                 | Neutral ramp                                                  | Same neutral ramp                                     |
+| `sidebar-*`                          | Sidebar surfaces, text, emphasis, borders, and rings | Light neutral sidebar                                         | Dark neutral sidebar with blue-violet sidebar primary |
+| `master-data-*`                      | Nested master-data navigation emphasis               | Pale warm active item and orange count badge                  | Dark warm active item and orange count badge          |
 
 ## Semantic Mapping
 
-| CSS Variable | Light Theme | Dark Theme | Tailwind Utility |
-| --- | --- | --- | --- |
-| `--background` | `oklch(0.988 0.006 86)` | `oklch(0.145 0 0)` | `bg-background` |
-| `--foreground` | `oklch(0.155 0.01 72)` | `oklch(0.985 0 0)` | `text-foreground` |
-| `--primary` | `oklch(0.22 0.014 72)` | `oklch(0.922 0 0)` | `bg-primary`, `text-primary` |
-| `--primary-foreground` | `oklch(0.99 0.004 86)` | `oklch(0.205 0 0)` | `text-primary-foreground` |
-| `--secondary` | `oklch(0.966 0.007 84)` | `oklch(0.269 0 0)` | `bg-secondary` |
-| `--muted` | `oklch(0.959 0.008 84)` | `oklch(0.269 0 0)` | `bg-muted` |
-| `--muted-foreground` | `oklch(0.45 0.014 72)` | `oklch(0.708 0 0)` | `text-muted-foreground` |
-| `--accent` | `oklch(0.955 0.01 84)` | `oklch(0.269 0 0)` | `bg-accent` |
-| `--destructive` | `oklch(0.577 0.245 27.325)` | `oklch(0.704 0.191 22.216)` | `bg-destructive`, `text-destructive` |
-| `--border` | `oklch(0.882 0.008 82)` | `oklch(1 0 0 / 10%)` | `border-border` |
-| `--input` | `oklch(0.86 0.01 82)` | `oklch(1 0 0 / 15%)` | `border-input` |
-| `--ring` | `oklch(0.58 0.018 72)` | `oklch(0.556 0 0)` | `ring-ring` |
-| `--sidebar` | `oklch(0.982 0.006 86)` | `oklch(0.205 0 0)` | `bg-sidebar` |
-| `--sidebar-primary` | `oklch(0.22 0.014 72)` | `oklch(0.488 0.243 264.376)` | `bg-sidebar-primary` |
-| `--master-data-active` | `oklch(0.91 0.055 78)` | `oklch(0.28 0.08 62)` | `bg-master-data-active` |
-| `--master-data-badge` | `oklch(0.68 0.19 45)` | `oklch(0.68 0.19 45)` | `bg-master-data-badge` |
+| CSS Variable           | Light Theme                 | Dark Theme                   | Tailwind Utility                     |
+| ---------------------- | --------------------------- | ---------------------------- | ------------------------------------ |
+| `--background`         | `oklch(0.988 0.006 86)`     | `oklch(0.145 0 0)`           | `bg-background`                      |
+| `--foreground`         | `oklch(0.155 0.01 72)`      | `oklch(0.985 0 0)`           | `text-foreground`                    |
+| `--primary`            | `oklch(0.22 0.014 72)`      | `oklch(0.922 0 0)`           | `bg-primary`, `text-primary`         |
+| `--primary-foreground` | `oklch(0.99 0.004 86)`      | `oklch(0.205 0 0)`           | `text-primary-foreground`            |
+| `--secondary`          | `oklch(0.966 0.007 84)`     | `oklch(0.269 0 0)`           | `bg-secondary`                       |
+| `--muted`              | `oklch(0.959 0.008 84)`     | `oklch(0.269 0 0)`           | `bg-muted`                           |
+| `--muted-foreground`   | `oklch(0.45 0.014 72)`      | `oklch(0.708 0 0)`           | `text-muted-foreground`              |
+| `--accent`             | `oklch(0.955 0.01 84)`      | `oklch(0.269 0 0)`           | `bg-accent`                          |
+| `--destructive`        | `oklch(0.577 0.245 27.325)` | `oklch(0.704 0.191 22.216)`  | `bg-destructive`, `text-destructive` |
+| `--border`             | `oklch(0.882 0.008 82)`     | `oklch(1 0 0 / 10%)`         | `border-border`                      |
+| `--input`              | `oklch(0.86 0.01 82)`       | `oklch(1 0 0 / 15%)`         | `border-input`                       |
+| `--ring`               | `oklch(0.58 0.018 72)`      | `oklch(0.556 0 0)`           | `ring-ring`                          |
+| `--sidebar`            | `oklch(0.982 0.006 86)`     | `oklch(0.205 0 0)`           | `bg-sidebar`                         |
+| `--sidebar-primary`    | `oklch(0.22 0.014 72)`      | `oklch(0.488 0.243 264.376)` | `bg-sidebar-primary`                 |
+| `--master-data-active` | `oklch(0.91 0.055 78)`      | `oklch(0.28 0.08 62)`        | `bg-master-data-active`              |
+| `--master-data-badge`  | `oklch(0.68 0.19 45)`       | `oklch(0.68 0.19 45)`        | `bg-master-data-badge`               |
 
 ## Dark Theme Strategy
 

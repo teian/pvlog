@@ -4,6 +4,9 @@ import {
   fetchAuditEvents,
   fetchConnectors,
   fetchLinkedIdentities,
+  fetchInverters,
+  fetchManagedResources,
+  fetchOperationalSummary,
   fetchRoles,
   inviteUser,
 } from "@/features/administration/api/administrationApi";
@@ -79,5 +82,63 @@ export function useAssignRole(accountId: string | null | undefined) {
       queryClient.invalidateQueries({
         queryKey: ["administration", "roles", accountId],
       }),
+  });
+}
+
+/** Loads system aggregate and auxiliary resource administration data. @param accountId - Active account. @param systemId - Active system. @returns Parallel resource queries. */
+export function useSystemResources(
+  accountId: string | null | undefined,
+  systemId: string | null | undefined,
+) {
+  const enabled = Boolean(accountId && systemId);
+  const root = `/api/v1/accounts/${accountId ?? ""}`;
+  const systemRoot = `${root}/systems/${systemId ?? ""}`;
+  return {
+    inverters: useQuery({
+      queryKey: ["administration", "inverters", accountId, systemId],
+      queryFn: () => fetchInverters(accountId ?? "", systemId ?? ""),
+      enabled,
+      retry: false,
+    }),
+    equipment: useQuery({
+      queryKey: ["administration", "equipment", accountId, systemId],
+      queryFn: () => fetchManagedResources(`${systemRoot}/equipment`),
+      enabled,
+      retry: false,
+    }),
+    tariffs: useQuery({
+      queryKey: ["administration", "tariffs", accountId, systemId],
+      queryFn: () => fetchManagedResources(`${systemRoot}/tariffs`),
+      enabled,
+      retry: false,
+    }),
+    channels: useQuery({
+      queryKey: ["administration", "channels", accountId, systemId],
+      queryFn: () => fetchManagedResources(`${systemRoot}/channels`),
+      enabled,
+      retry: false,
+    }),
+    memberships: useQuery({
+      queryKey: ["administration", "memberships", accountId],
+      queryFn: () => fetchManagedResources(`${root}/memberships`),
+      enabled: Boolean(accountId),
+      retry: false,
+    }),
+    credentials: useQuery({
+      queryKey: ["administration", "credentials", accountId],
+      queryFn: () => fetchManagedResources(`${root}/credentials`),
+      enabled: Boolean(accountId),
+      retry: false,
+    }),
+  };
+}
+
+/** Loads safe operational administration counts. @param accountId - Active account. @returns Operational summary query. */
+export function useOperationalSummary(accountId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["administration", "operations", accountId],
+    queryFn: () => fetchOperationalSummary(accountId ?? ""),
+    enabled: Boolean(accountId),
+    retry: false,
   });
 }

@@ -4,6 +4,8 @@ import {
   IdentityPanel,
   InvitationPanel,
   RolesPanel,
+  SystemResourcesPanel,
+  OperationsPanel,
 } from "@/features/administration";
 import { useSession } from "@/features/auth";
 import { AppShell } from "@/widgets";
@@ -28,7 +30,12 @@ export function AdministrationPage() {
       <InvitationPanel />
       <ConnectorPanel />
       <RolesPanel accountId={accountId} />
+      <SystemResourcesPanel
+        accountId={accountId}
+        systemId={session.data?.systemIds[0]}
+      />
       <AuditPanel accountId={accountId} />
+      <OperationsPanel accountId={accountId} />
     </AppShell>
   );
 }

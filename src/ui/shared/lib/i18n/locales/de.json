@@ -3,7 +3,10 @@
     "failure": "PVLog konnte seine Laufzeitkonfiguration nicht laden."
   },
   "docs": {
-    "apiReferenceLabel": "PVLog-API-Referenz"
+    "apiReferenceLabel": "PVLog-API-Referenz",
+    "apiVersionNavigation": "Steuerung der API-Dokumentation",
+    "apiVersion": "API-Version",
+    "downloadOpenApi": "OpenAPI herunterladen"
   },
   "features": {
     "authConnectorPresets": {
@@ -272,6 +275,19 @@
       "empty": "Derzeit werden keine geeigneten öffentlichen Anlagen gelistet.",
       "entry": "#{{rank}} · {{name}}",
       "metrics": "{{generation}} Wh/kW · {{coverage}} % Abdeckung"
+    },
+    "teams": {
+      "title": "Teams und regionale Versorgung",
+      "description": "Erstelle ein Team für das aktive Konto, füge seine erste Anlage hinzu und prüfe konfigurierte regionale Datenanbieter.",
+      "name": "Teamname",
+      "createAndJoin": "Team erstellen und Anlage hinzufügen"
+    },
+    "providers": {
+      "title": "Regionale Versorgungsanbieter",
+      "unavailable": "Derzeit sind keine regionalen Anbieterdaten verfügbar.",
+      "metadata": "{{source}} · {{license}} · {{state}}",
+      "fresh": "aktuell",
+      "stale": "veraltet"
     }
   },
   "administration": {
@@ -332,6 +348,37 @@
       "description": "Aktuelle Kontoaktionen, die deine Rolle einsehen darf.",
       "empty": "Für dieses Konto sind keine Audit-Ereignisse verfügbar.",
       "event": "{{target}} · {{outcome}} · {{date}}"
+    },
+    "operations": {
+      "title": "Betrieb",
+      "description": "Verfuegbarkeit der Betriebsfunktionen fuer Konto und Instanz.",
+      "alerts": "Alarmregeln",
+      "alertEvents": "Alarmereignisse",
+      "webhooks": "Webhooks",
+      "importsExports": "Importe und Exporte",
+      "workers": "Worker und Dead Letters",
+      "storage": "Speicherintegritaet",
+      "backups": "Sicherungen",
+      "readiness": "Bereitschaft",
+      "unavailable": "Nicht verfuegbar",
+      "available_one": "{{count}} verfuegbar",
+      "available_other": "{{count}} verfuegbar"
+    },
+    "resources": {
+      "title": "Anlagenressourcen",
+      "description": "Prüfe das aktive Anlagenaggregat und kontobezogene Ressourcen.",
+      "noSystem": "Wähle eine Anlage aus, um ihre Konfiguration zu prüfen.",
+      "inverters": "Wechselrichter",
+      "equipment": "Zusatzgeräte",
+      "tariffs": "Tarife",
+      "channels": "Kanäle",
+      "memberships": "Mitglieder",
+      "credentials": "Zugänge",
+      "stringCount_one": "{{count}} PV-String",
+      "stringCount_other": "{{count}} PV-Strings",
+      "strings": "PV-Strings",
+      "panels_one": "{{count}} Modul",
+      "panels_other": "{{count}} Module"
     },
     "permissions": {
       "instance_read": "Instanz lesen",

@@ -1,9 +1,13 @@
 import {
   communitySystemSchema,
   comparisonEntrySchema,
+  regionalSupplySchema,
+  teamSchema,
   type ComparisonEntry,
   type CommunitySearchFilters,
   type CommunitySystem,
+  type RegionalSupply,
+  type Team,
 } from "@/features/community/types/community.types";
 import { sessionJsonRequest } from "@/shared/api/sessionRequest";
 import { z } from "zod";
@@ -73,4 +77,38 @@ export async function compareSystems(
         }),
       }),
     );
+}
+
+/** Creates a community team owned by the active account. @param accountId - Owning account. @param name - Team display name. @returns The validated team. */
+export async function createTeam(
+  accountId: string,
+  name: string,
+): Promise<Team> {
+  return teamSchema.parse(
+    await sessionJsonRequest("/api/v1/teams", {
+      method: "POST",
+      body: JSON.stringify({ accountId, name, access: "private" }),
+    }),
+  );
+}
+
+/** Joins one system to a known team. @param teamId - Team to join. @param systemId - System becoming a member. @returns Completion after server acceptance. */
+export async function joinTeam(
+  teamId: string,
+  systemId: string,
+): Promise<void> {
+  await sessionJsonRequest(`/api/v1/teams/${teamId}/memberships`, {
+    method: "POST",
+    body: JSON.stringify({
+      systemId,
+      effectiveFromEpochMillis: Date.now(),
+    }),
+  });
+}
+
+/** Loads configured regional supply provenance and freshness. @returns Validated provider states. */
+export async function fetchRegionalSupply(): Promise<RegionalSupply[]> {
+  return z
+    .array(regionalSupplySchema)
+    .parse(await getJson("/api/v1/providers/regional-supply"));
 }

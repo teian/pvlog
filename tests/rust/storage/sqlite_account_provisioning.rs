@@ -45,7 +45,7 @@ async fn provisioning_binds_verifies_and_atomically_activates_an_opaque_database
     let registry = setup.registry(account_id).await?;
     assert_eq!(registry.0, "active");
     assert_eq!(registry.1, "ready");
-    assert_eq!(registry.2, 5);
+    assert_eq!(registry.2, 6);
     assert_eq!(setup.account_status(account_id).await?, "active");
 
     let repeated = setup.provisioner.provision(account_id).await?;

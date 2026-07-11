@@ -5,6 +5,10 @@ PVLog is a self-hosted platform for collecting, analyzing, and operating photovo
 ## Guides
 
 - [Local authentication and RBAC quickstart](docs/guides/local-authentication-rbac.md)
+- [Documentation index](docs/README.md)
+- [Developer quickstarts](docs/guides/developer-quickstarts.md)
+- [Operator and recovery guide](docs/guides/operator-recovery.md)
+- [Uploader integration and functional coverage](docs/guides/uploader-integration.md)
 
 ## Operator checks
 

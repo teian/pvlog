@@ -3,7 +3,10 @@
     "failure": "PVLog could not load its runtime configuration."
   },
   "docs": {
-    "apiReferenceLabel": "PVLog API reference"
+    "apiReferenceLabel": "PVLog API reference",
+    "apiVersionNavigation": "API documentation controls",
+    "apiVersion": "API version",
+    "downloadOpenApi": "Download OpenAPI"
   },
   "features": {
     "authConnectorPresets": {
@@ -272,6 +275,19 @@
       "empty": "No eligible public systems are currently ranked.",
       "entry": "#{{rank}} · {{name}}",
       "metrics": "{{generation}} Wh/kW · {{coverage}}% coverage"
+    },
+    "teams": {
+      "title": "Teams and regional supply",
+      "description": "Create a team for the active account, join its first system, and inspect configured regional data providers.",
+      "name": "Team name",
+      "createAndJoin": "Create team and join system"
+    },
+    "providers": {
+      "title": "Regional supply providers",
+      "unavailable": "No regional provider data is currently available.",
+      "metadata": "{{source}} · {{license}} · {{state}}",
+      "fresh": "fresh",
+      "stale": "stale"
     }
   },
   "administration": {
@@ -332,6 +348,37 @@
       "description": "Recent account actions visible to your role.",
       "empty": "No audit events are available for this account.",
       "event": "{{target}} · {{outcome}} · {{date}}"
+    },
+    "operations": {
+      "title": "Operations",
+      "description": "Availability of account and instance operational controls.",
+      "alerts": "Alert rules",
+      "alertEvents": "Alert events",
+      "webhooks": "Webhooks",
+      "importsExports": "Imports and exports",
+      "workers": "Workers and dead letters",
+      "storage": "Storage integrity",
+      "backups": "Backups",
+      "readiness": "Readiness",
+      "unavailable": "Unavailable",
+      "available_one": "{{count}} available",
+      "available_other": "{{count}} available"
+    },
+    "resources": {
+      "title": "System resources",
+      "description": "Review the active system aggregate and account-scoped resources.",
+      "noSystem": "Select a system to review its configuration.",
+      "inverters": "Inverters",
+      "equipment": "Auxiliary equipment",
+      "tariffs": "Tariffs",
+      "channels": "Channels",
+      "memberships": "Members",
+      "credentials": "Credentials",
+      "stringCount_one": "{{count}} PV string",
+      "stringCount_other": "{{count}} PV strings",
+      "strings": "PV strings",
+      "panels_one": "{{count}} panel",
+      "panels_other": "{{count}} panels"
     },
     "permissions": {
       "instance_read": "Read instance",

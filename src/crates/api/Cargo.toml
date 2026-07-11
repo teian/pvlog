@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 async-trait.workspace = true
 axum.workspace = true
+opentelemetry.workspace = true
 garde.workspace = true
 pvlog-application = { path = "../application" }
 pvlog-domain = { path = "../domain" }

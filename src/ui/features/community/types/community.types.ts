@@ -26,6 +26,28 @@ export const comparisonEntrySchema = z.object({
   projectionAgeMillis: z.number().int().nonnegative(),
 });
 
+/** Team created through the modern community API. */
+export const teamSchema = z.object({
+  id: z.uuid(),
+  accountId: z.uuid(),
+  name: z.string(),
+  description: z.string().nullable(),
+  access: z.enum(["private", "unlisted", "public"]),
+  ownerUserId: z.uuid(),
+  version: z.number().int().positive(),
+});
+
+/** Regional supply data with explicit provider freshness and provenance. */
+export const regionalSupplySchema = z.object({
+  regionKey: z.string(),
+  timezone: z.string(),
+  resolutionSeconds: z.number().int().positive(),
+  source: z.string(),
+  license: z.string(),
+  lastSuccessfulAt: z.number(),
+  stale: z.boolean(),
+});
+
 /** Search filters understood by the privacy-safe community catalog. */
 export interface CommunitySearchFilters {
   /** Optional display-name term. */
@@ -36,3 +58,5 @@ export interface CommunitySearchFilters {
 
 export type CommunitySystem = z.infer<typeof communitySystemSchema>;
 export type ComparisonEntry = z.infer<typeof comparisonEntrySchema>;
+export type Team = z.infer<typeof teamSchema>;
+export type RegionalSupply = z.infer<typeof regionalSupplySchema>;

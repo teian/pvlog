@@ -62,9 +62,51 @@ export const roleAssignmentSchema = z.object({
   expiresAt: z.number().nullable(),
 });
 
+/** One PV string nested beneath an inverter aggregate. */
+export const pvStringSchema = z.object({
+  id: z.uuid(),
+  inverterId: z.uuid(),
+  name: z.string(),
+  panelCount: z.number().int().positive(),
+  panelManufacturer: z.string().nullable(),
+  panelModel: z.string().nullable(),
+  ratedPowerWatts: z.number().positive(),
+  orientationDegrees: z.number().int().min(0).max(359).nullable(),
+  tiltDegrees: z.number().int().min(0).max(90).nullable(),
+  effectiveFrom: z.number(),
+  effectiveTo: z.number().nullable(),
+});
+
+/** Versioned inverter aggregate returned by the modern API. */
+export const inverterSchema = z.object({
+  id: z.uuid(),
+  systemId: z.uuid(),
+  name: z.string(),
+  manufacturer: z.string().nullable(),
+  model: z.string().nullable(),
+  serialReference: z.string().nullable(),
+  ratedPowerWatts: z.number().nullable(),
+  effectiveFrom: z.number(),
+  effectiveTo: z.number().nullable(),
+  version: z.number().int().positive(),
+  strings: z.array(pvStringSchema),
+});
+
+/** Generic account/system resource exposed by the existing management endpoints. */
+export const managedResourceSchema = z.object({
+  id: z.uuid(),
+  accountId: z.uuid(),
+  systemId: z.uuid().nullable(),
+  kind: z.string(),
+  version: z.number().int().positive(),
+  attributes: z.record(z.string(), z.unknown()),
+});
+
 export type LinkedIdentity = z.infer<typeof linkedIdentitySchema>;
 export type Role = z.infer<typeof roleSchema>;
 export type AuditEvent = z.infer<typeof auditEventSchema>;
 export type Invitation = z.infer<typeof invitationSchema>;
 export type ConnectorAdmin = z.infer<typeof connectorAdminSchema>;
 export type RoleAssignment = z.infer<typeof roleAssignmentSchema>;
+export type Inverter = z.infer<typeof inverterSchema>;
+export type ManagedResource = z.infer<typeof managedResourceSchema>;

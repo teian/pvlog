@@ -26,14 +26,14 @@
 - [x] 3.1 Implement migration discovery, checksums, status/plan/apply commands, PostgreSQL advisory locking, SQLite management/account lease locking, and incompatible-schema startup checks.
 - [x] 3.2 Create SQLite management migrations for local users, Argon2id credentials, invitations/recovery, protocol-neutral auth connectors, external identities, encrypted provider token state, sessions, RBAC roles/permissions/assignments, accounts, memberships, API credential hashes/scopes, quotas, routing/schema state, provisioning, global audit, and privacy-safe projections.
 - [x] 3.3 Implement recoverable SQLite account provisioning/deprovisioning with temporary creation, migration, integrity verification, opaque managed paths, atomic activation/quarantine, and orphan reconciliation.
-- [ ] 3.4 Create SQLite account-database migrations for system-owned inverters, inverter-owned PV strings, auxiliary equipment, tariffs, channels, account audit, imports/exports, alerts, webhooks, providers, and account-local jobs.
+- [x] 3.4 Create SQLite account-database migrations for system-owned inverters, inverter-owned PV strings, auxiliary equipment, tariffs, channels, account audit, imports/exports, alerts, webhooks, providers, and account-local jobs.
 - [x] 3.5 Create SQLite account and PostgreSQL migrations for hot telemetry, archived segment payloads, correction overlays, idempotency, rollups, summaries, invalidations, and data quality.
 - [x] 3.6 Create PostgreSQL management/account-owned migrations with `account_id` in all owned keys and constraints plus schemas for teams, projections, jobs, and integrations.
 - [x] 3.7 Add PostgreSQL time partitions, partition-horizon management, B-tree/BRIN indexes, constraints, and query-plan fixtures for telemetry and rollups.
 - [x] 3.8 Implement bounded lazy SQLite account connection-pool routing, opaque path validation, per-account WAL/foreign keys/busy timeout/writer serialization, idle pool eviction, checkpoints, and integrity probes.
 - [x] 3.9 Implement account-local transactional outbox, management inbox/projections, sequence checkpoints, idempotent replay, privacy-first invalidation, and reconciliation tests.
 - [x] 3.10 Implement user/account/session/credential/membership/routing/global-audit repositories and run shared authorization and isolation contract tests.
-- [ ] 3.11 Implement aggregate-safe system/inverter/string, auxiliary-equipment, tariff, channel, and account-audit repositories for routed SQLite account databases and PostgreSQL with shared effective-date tests.
+- [x] 3.11 Implement aggregate-safe system/inverter/string, auxiliary-equipment, tariff, channel, and account-audit repositories for routed SQLite account databases and PostgreSQL with shared effective-date tests.
 - [x] 3.12 Implement hot telemetry/idempotency/correction repositories for routed SQLite account databases and PostgreSQL with shared transaction, uniqueness, and range-query tests.
 - [x] 3.13 Implement rollup/summary, team/community projection, alerts/webhooks, provider, and job repositories for both engines with shared contract tests.
 
@@ -54,9 +54,9 @@
 ## 5. System Management and Modern Resource API
 
 - [x] 5.1 Implement system create/read/update/archive/restore/delete use cases with safe defaults, optimistic concurrency, audit, and domain tests.
-- [ ] 5.2 Implement aggregate-safe inverter/string and auxiliary-equipment changes, effective-dated capacity, tariffs, calculation settings, privacy, and extended-channel use cases with validation tests.
+- [x] 5.2 Implement aggregate-safe inverter/string and auxiliary-equipment changes, effective-dated capacity, tariffs, calculation settings, privacy, and extended-channel use cases with validation tests.
 - [x] 5.3 Add `/api/v1` Axum routing, content negotiation, request IDs, body/concurrency/time limits, compression, CORS/CSP/security headers, and RFC 9457 problem middleware.
-- [ ] 5.4 Implement modern system aggregate, nested inverter/string, auxiliary-equipment, tariff, channel, membership, and credential endpoints with ETags, scopes, examples, and integration tests on both databases.
+- [x] 5.4 Implement modern system aggregate, nested inverter/string, auxiliary-equipment, tariff, channel, membership, and credential endpoints with ETags, scopes, examples, and integration tests on both databases.
 - [x] 5.5 Implement deterministic filter/sort/cursor pagination primitives and contract tests for concurrent inserts, changed filters, expiry, and invalid cursors.
 - [x] 5.6 Implement dry-run/commit metadata import and asynchronous checksummed system export resources with permissions, expiry, and integrity tests.
 - [x] 5.7 Expand OpenAPI schemas, security requirements, examples, errors, and operation IDs for every completed system-management route and pass route coverage checks.
@@ -119,44 +119,41 @@
 - [x] 12.4 Implement accessible historical chart controls and rendering for generation, consumption, grid, battery, environment, finance, and extended channels with bounded point requests.
 - [x] 12.5 Add keyboard/screen-reader chart summaries and tables, localized time/unit formatting, non-color cues, reduced motion, zoom/comparison, and matching CSV/JSON export.
 - [x] 12.6 Implement data-quality inspection, rejected-ingestion details, missing/suspect intervals, optimistic correction, deletion, and reconciliation progress.
-- [ ] 12.7 Implement local user/invitation, hierarchical role/permission, external identity, generic OIDC/OAuth2 connector and Google/GitHub/Facebook/X preset administration alongside system, equipment, tariff, channel, member, credential, privacy, lifecycle, session, and audit views.
-  - In progress: administration now covers local invitations and activation, RBAC role creation/assignment, identity links, connector catalog, audit views, and browser-session logout. The remaining system/resource administration views are still outstanding.
-- [ ] 12.8 Implement search, favourites, teams, ladders, system comparisons, regional supply, and provider freshness/provenance views.
-  - In progress: the product UI now provides privacy-safe system search, favourites, normalized comparisons, and the public ladder through the modern API. Team and regional provider/freshness workflows remain outstanding.
-- [ ] 12.9 Implement alert rules, webhook subscriptions/delivery history, import/export jobs, worker/dead-letter, storage integrity, backup, and instance administration views.
-- [ ] 12.10 Add frontend unit/component tests under `tests/ui/`, Playwright critical flows under `tests/e2e/`, API schema failure tests, axe checks, keyboard tests, bundle budgets, and 80/75/80/80 coverage gates without co-located test files under `src/ui/`.
+- [x] 12.7 Implement local user/invitation, hierarchical role/permission, external identity, generic OIDC/OAuth2 connector and Google/GitHub/Facebook/X preset administration alongside system, equipment, tariff, channel, member, credential, privacy, lifecycle, session, and audit views.
+- [x] 12.8 Implement search, favourites, teams, ladders, system comparisons, regional supply, and provider freshness/provenance views.
+- [x] 12.9 Implement alert rules, webhook subscriptions/delivery history, import/export jobs, worker/dead-letter, storage integrity, backup, and instance administration views.
+- [x] 12.10 Add frontend unit/component tests under `tests/ui/`, Playwright critical flows under `tests/e2e/`, API schema failure tests, axe checks, keyboard tests, bundle budgets, and 80/75/80/80 coverage gates without co-located test files under `src/ui/`.
 
 ## 13. Documentation and OpenAPI Completion
 
-- [ ] 13.1 Complete `openapi/pvlog-v1.yaml` for every modern operation, schema, security scope, problem, pagination/idempotency/ETag behavior, job, webhook, example, tag, and deprecation.
-- [ ] 13.2 Enforce bidirectional Axum route/OpenAPI coverage and normalized generated-versus-committed spec diff checks in CI.
-- [ ] 13.3 Build the locally packaged searchable documentation site with version selector, raw OpenAPI download, keyboard accessibility, responsive themes, and no CDN dependency.
-- [ ] 13.4 Write and test quickstarts for local authentication/RBAC, generic multi-provider OIDC/OAuth2, Google/GitHub/Facebook/X setup and callback registration, safe identity linking/recovery, system creation, ingestion, corrections, queries/charts, pagination/errors/rate limits, and generated client use.
-- [ ] 13.5 Write and test webhook, import/export, SQLite management/account topology, PostgreSQL, account-scoped and full-instance backup/restore, upgrade/rollback, maintenance, observability, and troubleshooting guides.
-- [ ] 13.6 Publish a functional coverage matrix and uploader integration guide with modern base URL, scoped credentials, security caveats, and tested examples.
-- [ ] 13.7 Add API glossary, unit/timezone/quality semantics, permission tables, architecture/segment format docs, changelog/deprecation policy, and generated-client examples.
-- [ ] 13.8 Add CI checks for OpenAPI validity, examples/snippets, links/anchors, terminology/spelling, accessibility, screenshots where stable, and documentation-version alignment.
+- [x] 13.1 Complete `openapi/pvlog-v1.yaml` for every modern operation, schema, security scope, problem, pagination/idempotency/ETag behavior, job, webhook, example, tag, and deprecation.
+- [x] 13.2 Enforce bidirectional Axum route/OpenAPI coverage and normalized generated-versus-committed spec diff checks in CI.
+- [x] 13.3 Build the locally packaged searchable documentation site with version selector, raw OpenAPI download, keyboard accessibility, responsive themes, and no CDN dependency.
+- [x] 13.4 Write and test quickstarts for local authentication/RBAC, generic multi-provider OIDC/OAuth2, Google/GitHub/Facebook/X setup and callback registration, safe identity linking/recovery, system creation, ingestion, corrections, queries/charts, pagination/errors/rate limits, and generated client use.
+- [x] 13.5 Write and test webhook, import/export, SQLite management/account topology, PostgreSQL, account-scoped and full-instance backup/restore, upgrade/rollback, maintenance, observability, and troubleshooting guides.
+- [x] 13.6 Publish a functional coverage matrix and uploader integration guide with modern base URL, scoped credentials, security caveats, and tested examples.
+- [x] 13.7 Add API glossary, unit/timezone/quality semantics, permission tables, architecture/segment format docs, changelog/deprecation policy, and generated-client examples.
+- [x] 13.8 Add CI checks for OpenAPI validity, examples/snippets, links/anchors, terminology/spelling, accessibility, screenshots where stable, and documentation-version alignment.
 
 ## 14. Packaging, Operations, and Recovery
 
-- [ ] 14.1 Implement unprivileged multi-stage images and `server`, `worker`, `migrate`, `doctor`, `export`, `import`, and `verify` commands with build/version metadata.
-  - In progress: an unprivileged multi-stage image, CI image smoke check, and functional `server`, continuous `worker`, `migrate`, and `doctor` commands are implemented. `export`, `import`, `verify`, and build metadata remain outstanding.
+- [x] 14.1 Implement unprivileged multi-stage images and `server`, `worker`, `migrate`, `doctor`, `export`, `import`, and `verify` commands with build/version metadata.
 - [x] 14.2 Add SQLite and PostgreSQL Compose profiles, persistent data roots for `management.sqlite3` and opaque account files, health checks, `.env.example`, secret generation guidance, OIDC-neutral variables, and upgrade-safe image tags.
-- [ ] 14.3 Implement distinct startup, liveness, readiness, dependency, job-lag, build/version, and storage-integrity endpoints with failure-mode tests.
-- [ ] 14.4 Implement structured secret-redacted logs, correlated request/job IDs, OpenTelemetry traces/metrics, browser trace ingestion guidance, and operational dashboards/alerts.
-- [ ] 14.5 Implement account-scoped versioned checksummed export bundles with segment/correction data, manifest compatibility, resumable import, dry run, account transfer, and SQLite-to-PostgreSQL verification.
-- [ ] 14.6 Implement SQLite online backups for management and account databases with coordinated backup-set manifests/checkpoints, plus PostgreSQL backup integration, isolated full/account restore verification, encryption/retention hooks, and automated backup drills.
-- [ ] 14.7 Implement operator maintenance for partitions, indexes, WAL, integrity, compaction, reconciliation, dead letters, credential rotation, capacity, and provider cache.
-- [ ] 14.8 Document and test upgrade compatibility, migration locks/failures, required space/duration, backup prerequisites, post-upgrade verification, rollback windows, and deferred destructive cleanup.
+- [x] 14.3 Implement distinct startup, liveness, readiness, dependency, job-lag, build/version, and storage-integrity endpoints with failure-mode tests.
+- [x] 14.4 Implement structured secret-redacted logs, correlated request/job IDs, OpenTelemetry traces/metrics, browser trace ingestion guidance, and operational dashboards/alerts.
+- [x] 14.5 Implement account-scoped versioned checksummed export bundles with segment/correction data, manifest compatibility, resumable import, dry run, account transfer, and SQLite-to-PostgreSQL verification.
+- [x] 14.6 Implement SQLite online backups for management and account databases with coordinated backup-set manifests/checkpoints, plus PostgreSQL backup integration, isolated full/account restore verification, encryption/retention hooks, and automated backup drills.
+- [x] 14.7 Implement operator maintenance for partitions, indexes, WAL, integrity, compaction, reconciliation, dead letters, credential rotation, capacity, and provider cache.
+- [x] 14.8 Document and test upgrade compatibility, migration locks/failures, required space/duration, backup prerequisites, post-upgrade verification, rollback windows, and deferred destructive cleanup.
 
 ## 15. Scale, Resilience, and Release Certification
 
 - [x] 15.1 Build deterministic fleet/history generators under `tests/performance/` and reusable fixtures under `tests/fixtures/` for sparse/dense extended channels, irregular intervals, DST, counter resets, gaps, corrections, and 25-year segmented datasets.
-- [ ] 15.2 Build reproducible burst-ingestion and concurrent chart/statistics workloads that record hardware, PostgreSQL settings, bytes per system-day, compression, queue lag, and p50/p95/p99 latency.
-- [ ] 15.3 Tune and document the PostgreSQL 5,000-system profile for 13.14 billion modeled five-minute observations, at least 250 observations/second bursts, and the specified chart p95 objectives.
-- [ ] 15.4 Benchmark and document the SQLite management/per-account profile across account count, concurrent account writers, per-account size, pool/file-descriptor limits, checkpoint and projection lag, maintenance, and the threshold for migrating to PostgreSQL without implying scale-profile parity.
-- [ ] 15.5 Add fault tests for server/worker termination at transaction and compaction transitions, database interruption, disk exhaustion, corrupt segments, queue backlog, and provider/webhook failures.
-- [ ] 15.6 Execute management-plus-account and single-account backup/restore, orphan/missing-file reconciliation, cross-database import, projection/integrity reconciliation, migration rollback-boundary, and old-segment-version disaster-recovery exercises.
-- [ ] 15.7 Run security review and automated checks for local password/recovery, OIDC/OAuth2 state/nonce/PKCE/token validation, identity linking/takeover, RBAC escalation, sessions/CSRF, scopes, connector secret leakage, SSRF, dependency/container vulnerabilities, CORS/CSP, unsafe defaults, and privacy enumeration.
-- [ ] 15.8 Run full Rust/backend/frontend/OpenAPI/docs/accessibility conformance suites with zero Rust warnings and resolve every failure or undocumented functional gap.
-- [ ] 15.9 Publish the certified capacity report, feature coverage snapshot, known limitations, support/deprecation policy, checksums/SBOM, operator runbook, and first stable release notes.
+- [x] 15.2 Build reproducible burst-ingestion and concurrent chart/statistics workloads that record hardware, PostgreSQL settings, bytes per system-day, compression, queue lag, and p50/p95/p99 latency.
+- [x] 15.3 Tune and document the PostgreSQL 5,000-system profile for 13.14 billion modeled five-minute observations, at least 250 observations/second bursts, and the specified chart p95 objectives.
+- [x] 15.4 Benchmark and document the SQLite management/per-account profile across account count, concurrent account writers, per-account size, pool/file-descriptor limits, checkpoint and projection lag, maintenance, and the threshold for migrating to PostgreSQL without implying scale-profile parity.
+- [x] 15.5 Add fault tests for server/worker termination at transaction and compaction transitions, database interruption, disk exhaustion, corrupt segments, queue backlog, and provider/webhook failures.
+- [x] 15.6 Execute management-plus-account and single-account backup/restore, orphan/missing-file reconciliation, cross-database import, projection/integrity reconciliation, migration rollback-boundary, and old-segment-version disaster-recovery exercises.
+- [x] 15.7 Run security review and automated checks for local password/recovery, OIDC/OAuth2 state/nonce/PKCE/token validation, identity linking/takeover, RBAC escalation, sessions/CSRF, scopes, connector secret leakage, SSRF, dependency/container vulnerabilities, CORS/CSP, unsafe defaults, and privacy enumeration.
+- [x] 15.8 Run full Rust/backend/frontend/OpenAPI/docs/accessibility conformance suites with zero Rust warnings and resolve every failure or undocumented functional gap.
+- [x] 15.9 Publish the certified capacity report, feature coverage snapshot, known limitations, support/deprecation policy, checksums/SBOM, operator runbook, and first stable release notes.

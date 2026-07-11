@@ -5,7 +5,8 @@
 use std::time::Duration;
 
 use axum::http::{HeaderName, HeaderValue, Method, header};
-use axum::{Json, Router, middleware, routing::get};
+use axum::{Json, Router, middleware, middleware::Next, response::Response, routing::get};
+use opentelemetry::KeyValue;
 use serde::Serialize;
 use tower::limit::ConcurrencyLimitLayer;
 use tower_http::{
@@ -13,8 +14,10 @@ use tower_http::{
     cors::CorsLayer,
     limit::RequestBodyLimitLayer,
     request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
+    sensitive_headers::SetSensitiveRequestHeadersLayer,
     set_header::SetResponseHeaderLayer,
     timeout::TimeoutLayer,
+    trace::TraceLayer,
 };
 use utoipa::ToSchema;
 
@@ -25,6 +28,7 @@ mod authorization;
 mod community;
 mod connectors;
 mod identities;
+mod inverters;
 mod local_password;
 mod managed_resources;
 mod notifications;
@@ -53,6 +57,10 @@ pub use connectors::{
 };
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,
+};
+pub use inverters::{
+    InverterApiError, InverterApiUseCases, InverterInput, InverterResponse, PvStringInput,
+    PvStringResponse, inverters_router,
 };
 pub use local_password::local_password_router;
 pub use managed_resources::managed_resources_router;
@@ -128,8 +136,55 @@ pub fn router(version: &'static str) -> Router {
             Duration::from_secs(30),
         ))
         .layer(CompressionLayer::new())
+        .layer(middleware::from_fn(record_http_metrics))
+        .layer(SetSensitiveRequestHeadersLayer::new([
+            header::AUTHORIZATION,
+            header::COOKIE,
+        ]))
+        .layer(TraceLayer::new_for_http().make_span_with(
+            |request: &axum::http::Request<axum::body::Body>| {
+                let request_id = request
+                    .headers()
+                    .get("x-request-id")
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or("missing");
+                tracing::info_span!(
+                    "http.request",
+                    method = %request.method(),
+                    uri = %request.uri(),
+                    request_id
+                )
+            },
+        ))
         .layer(PropagateRequestIdLayer::new(request_id.clone()))
         .layer(SetRequestIdLayer::new(request_id, MakeRequestUuid))
+}
+
+async fn record_http_metrics(
+    request: axum::http::Request<axum::body::Body>,
+    next: Next,
+) -> Response {
+    let method = request.method().to_string();
+    let started = std::time::Instant::now();
+    let response = next.run(request).await;
+    let meter = opentelemetry::global::meter("pvlog-http");
+    let attributes = [
+        KeyValue::new("http.request.method", method),
+        KeyValue::new(
+            "http.response.status_code",
+            i64::from(response.status().as_u16()),
+        ),
+    ];
+    meter
+        .u64_counter("http.server.request.count")
+        .build()
+        .add(1, &attributes);
+    meter
+        .f64_histogram("http.server.request.duration")
+        .with_unit("s")
+        .build()
+        .record(started.elapsed().as_secs_f64(), &attributes);
+    response
 }
 
 /// Successful process liveness response.

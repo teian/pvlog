@@ -21,5 +21,20 @@ export default defineConfig({
     restoreMocks: true,
     unstubEnvs: true,
     unstubGlobals: true,
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "json-summary"],
+      include: [
+        "src/ui/features/authConnectorPreset/**/*.ts",
+        "src/ui/features/charts/utils/*.ts",
+        "src/ui/shared/lib/rangePresets.ts",
+      ],
+      thresholds: {
+        statements: 80,
+        branches: 75,
+        functions: 80,
+        lines: 80,
+      },
+    },
   },
 });

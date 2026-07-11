@@ -127,6 +127,10 @@ path = "../../../tests/rust/storage/integrity_planner.rs"
 name = "rbac-repositories"
 path = "../../../tests/rust/storage/rbac_repositories.rs"
 
+[[test]]
+name = "fault-injection"
+path = "../../../tests/rust/storage/fault_injection.rs"
+
 [lib]
 path = "src/lib.rs"
 

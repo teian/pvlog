@@ -22,6 +22,8 @@ async fn account_schema_contains_only_account_owned_configuration_and_operations
     .collect::<BTreeSet<_>>();
     for required in [
         "systems",
+        "inverters",
+        "pv_strings",
         "equipment",
         "tariffs",
         "channel_definitions",
@@ -66,11 +68,30 @@ async fn system_equipment_tariff_and_channel_constraints_preserve_effective_hist
     let mut account = setup.account_connection().await?;
     let system_id = insert_system(&mut account).await?;
 
+    let inverter_id = id();
+    sqlx::query(
+        "INSERT INTO inverters \
+         (id, system_id, name, rated_power_watts, effective_from, created_at, updated_at) \
+         VALUES (?, ?, 'Roof inverter', 8000, 10, 1, 1)",
+    )
+    .bind(&inverter_id)
+    .bind(&system_id)
+    .execute(&mut account)
+    .await?;
+    sqlx::query(
+        "INSERT INTO pv_strings \
+         (id, inverter_id, name, panel_count, rated_power_watts, orientation_degrees, tilt_degrees, effective_from, created_at, updated_at) \
+         VALUES (?, ?, 'South roof', 20, 8000, 180, 35, 10, 1, 1)",
+    )
+    .bind(id())
+    .bind(&inverter_id)
+    .execute(&mut account)
+    .await?;
     assert!(
         sqlx::query(
             "INSERT INTO equipment \
-             (id, system_id, equipment_kind, name, effective_from, effective_to, created_at, updated_at) \
-             VALUES (?, ?, 'array', 'Roof', 20, 10, 1, 1)",
+             (id, system_id, equipment_kind, name, effective_from, created_at, updated_at) \
+             VALUES (?, ?, 'inverter', 'Bypass', 10, 1, 1)",
         )
         .bind(id())
         .bind(&system_id)
@@ -78,15 +99,6 @@ async fn system_equipment_tariff_and_channel_constraints_preserve_effective_hist
         .await
         .is_err()
     );
-    sqlx::query(
-        "INSERT INTO equipment \
-         (id, system_id, equipment_kind, name, capacity_watts, effective_from, created_at, updated_at) \
-         VALUES (?, ?, 'array', 'Roof', 8000, 10, 1, 1)",
-    )
-    .bind(id())
-    .bind(&system_id)
-    .execute(&mut account)
-    .await?;
     sqlx::query(
         "INSERT INTO tariffs \
          (id, system_id, name, direction, currency_code, minor_units_per_kwh, effective_from, created_at, updated_at) \

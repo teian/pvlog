@@ -28,6 +28,7 @@ pvlog-worker = { path = "../worker", default-features = false }
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+sqlx.workspace = true
 thiserror.workspace = true
 time.workspace = true
 tokio.workspace = true
@@ -50,6 +51,14 @@ path = "../../../tests/rust/smoke/runtime_smoke.rs"
 [[test]]
 name = "request-authorization"
 path = "../../../tests/rust/pvlog/request_authorization.rs"
+
+[[test]]
+name = "operator-bundle"
+path = "../../../tests/rust/pvlog/operator_bundle.rs"
+
+[[test]]
+name = "authentication-connector"
+path = "../../../tests/rust/pvlog/authentication_connector.rs"
 
 [lib]
 path = "src/lib.rs"

@@ -91,6 +91,273 @@ paths:
                 { schema: { $ref: "#/components/schemas/HealthStatus" } },
             }
         "406": { $ref: "#/components/responses/NotAcceptable" }
+  /api/v1/health/dependencies:
+    get:
+      operationId: getDependencyHealth
+      summary: Check required runtime dependencies
+      description: Probes the configured management and account database dependencies.
+      tags: [Operations]
+      security: []
+      responses:
+        "200":
+          description: Dependencies are reachable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperationalHealth" }
+        "406": { $ref: "#/components/responses/NotAcceptable" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+  /api/v1/health/job-lag:
+    get:
+      operationId: getJobLagHealth
+      summary: Check account job queue lag
+      description: Reports whether the durable job queue is within its lag objective.
+      tags: [Operations]
+      security: []
+      responses:
+        "200":
+          description: Job queue is within its configured lag objective
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperationalHealth" }
+        "406": { $ref: "#/components/responses/NotAcceptable" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+  /api/v1/health/storage-integrity:
+    get:
+      operationId: getStorageIntegrityHealth
+      summary: Check storage reachability and integrity state
+      description: Reports the latest non-mutating database storage probe result.
+      tags: [Operations]
+      security: []
+      responses:
+        "200":
+          description: Storage probe passed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OperationalHealth" }
+        "406": { $ref: "#/components/responses/NotAcceptable" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+  /api/v1/admin/users:
+    post:
+      operationId: createLocalUser
+      summary: Create a local user
+      description: Creates an administrator-managed local user without exposing credential material.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      responses:
+        "201": { description: User created, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/users/{id}:
+    parameters: [{ $ref: "#/components/parameters/UserId" }]
+    delete:
+      operationId: deleteLocalUser
+      summary: Delete a local user
+      description: Deletes an eligible local user while preserving takeover and last-administrator protections.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204": { description: User deleted }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/users/{id}/activate:
+    parameters: [{ $ref: "#/components/parameters/UserId" }]
+    post:
+      operationId: activateLocalUser
+      summary: Activate a local user
+      description: Activates an invited or administrator-created local user.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      responses:
+        "200": { description: User activated, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/users/{id}/disable:
+    parameters: [{ $ref: "#/components/parameters/UserId" }]
+    post:
+      operationId: disableLocalUser
+      summary: Disable a local user
+      description: Disables login and revokes active sessions for a local user.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204": { description: User disabled }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/users/{id}/unlock:
+    parameters: [{ $ref: "#/components/parameters/UserId" }]
+    post:
+      operationId: unlockLocalUser
+      summary: Unlock a local user
+      description: Clears an administrator-authorized brute-force lockout.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204": { description: User unlocked }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/users/{id}/password:
+    parameters: [{ $ref: "#/components/parameters/UserId" }]
+    post:
+      operationId: setInitialLocalPassword
+      summary: Set an initial local password
+      description: Sets the initial password under the configured password policy.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      responses:
+        "204": { description: Password set }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/register:
+    post:
+      operationId: registerLocalUser
+      summary: Register a local user
+      description: Registers a local user when instance self-registration policy permits it.
+      tags: [Authentication]
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      responses:
+        "202": { description: Registration accepted }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/password:
+    put:
+      operationId: changeLocalPassword
+      summary: Change the current local password
+      description: Changes a password after current-password verification and revokes other sessions.
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      responses:
+        "204": { description: Password changed }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/password-recovery:
+    post:
+      operationId: requestPasswordRecovery
+      summary: Request password recovery
+      description: Returns an enumeration-resistant acceptance response and emits a single-use token out of band.
+      tags: [Authentication]
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      responses:
+        "202": { description: Recovery request accepted }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/auth/password-recovery/complete:
+    post:
+      operationId: completePasswordRecovery
+      summary: Complete password recovery
+      description: Consumes a single-use recovery token and rotates the local password.
+      tags: [Authentication]
+      security: []
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      responses:
+        "204": { description: Recovery completed }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/community/systems:
+    get:
+      operationId: searchCommunitySystems
+      summary: Search visible community systems
+      description: Searches privacy-safe system projections using visibility and location filters.
+      tags: [Community]
+      security: [{ bearerAuth: [community:read] }]
+      responses:
+        "200": { description: Matching projections, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/FreeFormObject" } } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/users/me/favourites:
+    get:
+      operationId: listFavouriteSystems
+      summary: List favourite systems
+      description: Lists the signed-in user's privacy-filtered favourite projections.
+      tags: [Community]
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200": { description: Favourite systems, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/FreeFormObject" } } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/users/me/favourites/{system_id}:
+    parameters: [{ name: system_id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }]
+    post:
+      operationId: addFavouriteSystem
+      summary: Add a favourite system
+      description: Adds a currently visible system to the signed-in user's favourites.
+      tags: [Community]
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204": { description: Favourite added }
+        "400": { $ref: "#/components/responses/Problem" }
+    delete:
+      operationId: removeFavouriteSystem
+      summary: Remove a favourite system
+      description: Removes a system from the signed-in user's favourites.
+      tags: [Community]
+      security: [{ sessionCookie: [] }]
+      responses:
+        "204": { description: Favourite removed }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/teams:
+    post:
+      operationId: createTeam
+      summary: Create a team
+      description: Creates a private, unlisted, or public team owned by the caller.
+      tags: [Community]
+      security: [{ bearerAuth: [community:write] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      responses:
+        "201": { description: Team created, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/teams/{team_id}/ownership:
+    parameters: [{ $ref: "#/components/parameters/TeamId" }]
+    post:
+      operationId: transferTeamOwnership
+      summary: Transfer team ownership
+      description: Transfers ownership to an eligible team member.
+      tags: [Community]
+      security: [{ bearerAuth: [community:write] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      responses:
+        "204": { description: Ownership transferred }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/teams/{team_id}/memberships:
+    parameters: [{ $ref: "#/components/parameters/TeamId" }]
+    post:
+      operationId: joinTeam
+      summary: Join a system to a team
+      description: Adds an eligible system using effective-dated membership.
+      tags: [Community]
+      security: [{ bearerAuth: [community:write] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      responses:
+        "204": { description: System joined }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/teams/{team_id}/memberships/{system_id}:
+    parameters:
+      - { $ref: "#/components/parameters/TeamId" }
+      - { name: system_id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }
+    delete:
+      operationId: leaveTeam
+      summary: Remove a system from a team
+      description: Ends the system's effective team membership.
+      tags: [Community]
+      security: [{ bearerAuth: [community:write] }]
+      responses:
+        "204": { description: System removed }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/teams/{team_id}/aggregate:
+    parameters: [{ $ref: "#/components/parameters/TeamId" }]
+    get:
+      operationId: getTeamAggregate
+      summary: Get a team aggregate
+      description: Returns privacy-safe effective-capacity and energy aggregates for a period.
+      tags: [Community]
+      security: [{ bearerAuth: [community:read] }]
+      responses:
+        "200": { description: Team aggregate, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/teams/{team_id}/ladder:
+    parameters: [{ $ref: "#/components/parameters/TeamId" }]
+    get:
+      operationId: getTeamLadder
+      summary: Get a team ladder
+      description: Returns eligibility, coverage, normalization, and tie-aware rankings.
+      tags: [Community]
+      security: [{ bearerAuth: [community:read] }]
+      responses:
+        "200": { description: Team ladder, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+        "400": { $ref: "#/components/responses/Problem" }
   /api/v1/systems:
     post:
       operationId: createSystem
@@ -210,6 +477,49 @@ paths:
             "403": { $ref: "#/components/responses/ForbiddenProblem" },
           },
       }
+  /api/v1/accounts/{account_id}/systems/{system_id}/inverters:
+    parameters:
+      [
+        { $ref: "#/components/parameters/AccountId" },
+        { $ref: "#/components/parameters/NestedSystemId" },
+      ]
+    get:
+      operationId: listInverters
+      summary: List effective inverter aggregates
+      description: Lists inverters and their effective PV strings for one system.
+      tags: [Systems]
+      security: [{ bearerAuth: [systems:read] }]
+      responses:
+        "200":
+          description: Effective inverter aggregates.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Inverter" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+    post:
+      operationId: createInverter
+      summary: Create an inverter aggregate
+      description: Atomically creates one inverter and its complete PV-string subtree.
+      tags: [Systems]
+      security: [{ bearerAuth: [systems:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InverterInput" }
+      responses:
+        "201":
+          description: Inverter aggregate created.
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Inverter" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+
   /api/v1/accounts/{account_id}/systems/{system_id}/tariffs:
     parameters:
       [
@@ -1428,6 +1738,16 @@ components:
       in: cookie
       name: __Host-pvlog_session
   parameters:
+    UserId:
+      name: id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UuidV7" }
+    TeamId:
+      name: team_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UuidV7" }
     SystemId:
       {
         name: id,
@@ -1544,12 +1864,16 @@ components:
       }
   requestBodies:
     ManagedResource:
-      required: true
       content:
         application/json:
           schema: { type: object, additionalProperties: true }
           example: { name: Example resource }
   responses:
+    Problem:
+      description: Request rejected with a standards-based problem detail
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
     SystemResponse:
       description: Versioned system representation
       headers: { ETag: { schema: { type: string } } }
@@ -1700,6 +2024,70 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
   schemas:
+    FreeFormObject:
+      type: object
+      additionalProperties: true
+    OperationalHealth:
+      type: object
+      additionalProperties: false
+      required: [status, detail]
+      properties:
+        status: { type: string, enum: [ok] }
+        detail: { type: string }
+        value: { type: integer, format: int64, minimum: 0 }
+    PvStringInput:
+      type: object
+      additionalProperties: false
+      required: [name, panelCount, ratedPowerWatts, effectiveFrom]
+      properties:
+        name: { type: string, minLength: 1 }
+        panelCount: { type: integer, minimum: 1 }
+        panelManufacturer: { type: [string, "null"] }
+        panelModel: { type: [string, "null"] }
+        ratedPowerWatts: { type: integer, format: int64, minimum: 1 }
+        orientationDegrees: { type: [integer, "null"], minimum: 0, maximum: 359 }
+        tiltDegrees: { type: [integer, "null"], minimum: 0, maximum: 90 }
+        effectiveFrom: { type: integer, format: int64 }
+        effectiveTo: { type: [integer, "null"], format: int64 }
+    InverterInput:
+      type: object
+      additionalProperties: false
+      required: [name, effectiveFrom, strings]
+      properties:
+        name: { type: string, minLength: 1 }
+        manufacturer: { type: [string, "null"] }
+        model: { type: [string, "null"] }
+        serialReference: { type: [string, "null"] }
+        ratedPowerWatts: { type: [integer, "null"], format: int64, minimum: 1 }
+        effectiveFrom: { type: integer, format: int64 }
+        effectiveTo: { type: [integer, "null"], format: int64 }
+        strings:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/PvStringInput" }
+    PvString:
+      allOf:
+        - { $ref: "#/components/schemas/PvStringInput" }
+        - type: object
+          required: [id, inverterId]
+          properties:
+            id: { $ref: "#/components/schemas/UuidV7" }
+            inverterId: { $ref: "#/components/schemas/UuidV7" }
+    Inverter:
+      allOf:
+        - { $ref: "#/components/schemas/InverterInput" }
+        - type: object
+          required: [id, systemId, version, strings]
+          properties:
+            id: { $ref: "#/components/schemas/UuidV7" }
+            systemId: { $ref: "#/components/schemas/UuidV7" }
+            version: { type: integer, minimum: 1 }
+            strings:
+              type: array
+              minItems: 1
+              items: { $ref: "#/components/schemas/PvString" }
+
+
     CreateInvitation:
       type: object
       additionalProperties: false

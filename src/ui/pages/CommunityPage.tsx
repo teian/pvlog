@@ -2,6 +2,7 @@ import {
   CommunityComparisonPanel,
   CommunitySearchPanel,
   FavouritesPanel,
+  TeamProviderPanel,
 } from "@/features/community";
 import { useSession } from "@/features/auth";
 import { AppShell } from "@/widgets";
@@ -25,6 +26,10 @@ export function CommunityPage() {
       <CommunitySearchPanel />
       <FavouritesPanel />
       <CommunityComparisonPanel systemIds={session.data?.systemIds ?? []} />
+      <TeamProviderPanel
+        accountId={session.data?.accountId}
+        systemIds={session.data?.systemIds ?? []}
+      />
     </AppShell>
   );
 }

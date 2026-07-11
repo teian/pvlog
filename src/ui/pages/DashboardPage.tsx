@@ -101,7 +101,11 @@ export function DashboardPage() {
           <CardContent>
             <div
               aria-label={t("dashboard.coverageLabel")}
+              aria-valuemax={100}
+              aria-valuemin={0}
+              aria-valuenow={data.coverageBasisPoints / 100}
               className="h-3 overflow-hidden rounded-full bg-muted"
+              role="progressbar"
             >
               <div
                 className="h-full bg-primary"

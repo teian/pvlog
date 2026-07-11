@@ -35,10 +35,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Run frontend checks
-        run: pnpm lint && pnpm typecheck && pnpm test:ui && pnpm test:structure && pnpm build
+        run: pnpm lint && pnpm typecheck && pnpm test:ui:coverage && pnpm test:structure && pnpm build && pnpm test:bundle-budget
 
       - name: Validate OpenAPI contract
-        run: pnpm openapi:lint && pnpm openapi:routes && pnpm openapi:compare && pnpm test:local-authentication-guide
+        run: pnpm openapi:lint && pnpm openapi:routes && pnpm openapi:compare && pnpm test:local-authentication-guide && pnpm test:docs
+
+      - name: Validate deterministic performance reports
+        run: pnpm test:query-performance && pnpm test:scale-performance && pnpm test:release-artifacts
 
   browser-e2e:
     name: Browser end-to-end
