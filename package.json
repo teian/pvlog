@@ -63,6 +63,7 @@
     "react-hook-form": "7.81.0",
     "react-i18next": "17.0.9",
     "react-router": "8.2.0",
+    "recharts": "3.8.0",
     "tailwind-merge": "3.6.0",
     "zod": "4.4.3",
     "zustand": "5.0.14"

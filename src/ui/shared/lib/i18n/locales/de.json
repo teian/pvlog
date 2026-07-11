@@ -62,6 +62,62 @@
     "sendRecovery": "Wiederherstellungslink senden",
     "signIn": "Anmelden"
   },
+  "charts": {
+    "actualResolution": {
+      "daily": "Täglich",
+      "fifteen_minutes": "15-Minuten",
+      "hourly": "Stündlich",
+      "monthly": "Monatlich",
+      "raw": "Roh",
+      "yearly": "Jährlich"
+    },
+    "categoriesLabel": "Diagrammkategorien",
+    "category": {
+      "battery": "Batterie",
+      "consumption": "Verbrauch",
+      "environment": "Umgebung",
+      "extended": "Erweiterte Kanäle",
+      "generation": "Erzeugung",
+      "grid": "Netz"
+    },
+    "field": {
+      "battery_power": "Batterieleistung",
+      "battery_state_of_charge": "Batterieladezustand",
+      "consumption_energy": "Verbrauchsenergie",
+      "consumption_power": "Verbrauchsleistung",
+      "extended": "Erweiterter Kanal",
+      "generation_energy": "Erzeugungsenergie",
+      "generation_power": "Erzeugungsleistung",
+      "grid_power": "Netzleistung",
+      "temperature": "Temperatur"
+    },
+    "fieldLabel": "Reihe",
+    "loadErrorDescription": "Die Diagrammdaten konnten nicht geladen werden.",
+    "loadErrorTitle": "Diagramm nicht verfügbar",
+    "noCategories": "Wähle mindestens eine Kategorie, um ein Diagramm anzuzeigen.",
+    "noData": "Für diesen Zeitraum sind keine Daten verfügbar.",
+    "range": {
+      "all": "25 Jahre",
+      "day": "1 Tag",
+      "fiveYears": "5 Jahre",
+      "month": "30 Tage",
+      "week": "7 Tage",
+      "year": "1 Jahr"
+    },
+    "rangeLabel": "Zeitraum",
+    "resolution": {
+      "15m": "15 Minuten",
+      "auto": "Automatisch",
+      "day": "Tag",
+      "hour": "Stunde",
+      "month": "Monat",
+      "raw": "Roh",
+      "year": "Jahr"
+    },
+    "resolutionLabel": "Auflösung",
+    "resolutionSummary": "Auflösung: {{resolution}} · Abdeckung: {{coverage}} %",
+    "title": "Historische Diagramme"
+  },
   "dashboard": {
     "accepted": "{{count}} heute angenommen",
     "alertState": { "open": "Offen", "resolved": "Gelöst" },

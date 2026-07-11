@@ -8,6 +8,7 @@ import {
   LoginPage,
   OnboardingPage,
   RecoveryPage,
+  SystemChartsPage,
 } from "@/pages";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/components";
 import { lazy, Suspense } from "react";
@@ -47,6 +48,14 @@ export function AppRoutes() {
               </ProtectedRoute>
             }
             path="/onboarding"
+          />
+          <Route
+            element={
+              <ProtectedRoute permission="analytics:read">
+                <SystemChartsPage />
+              </ProtectedRoute>
+            }
+            path="/systems/:systemId"
           />
           <Route
             element={

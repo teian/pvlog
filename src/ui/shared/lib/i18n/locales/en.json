@@ -62,6 +62,62 @@
     "sendRecovery": "Send recovery link",
     "signIn": "Sign in"
   },
+  "charts": {
+    "actualResolution": {
+      "daily": "Daily",
+      "fifteen_minutes": "15-minute",
+      "hourly": "Hourly",
+      "monthly": "Monthly",
+      "raw": "Raw",
+      "yearly": "Yearly"
+    },
+    "categoriesLabel": "Chart categories",
+    "category": {
+      "battery": "Battery",
+      "consumption": "Consumption",
+      "environment": "Environment",
+      "extended": "Extended channels",
+      "generation": "Generation",
+      "grid": "Grid"
+    },
+    "field": {
+      "battery_power": "Battery power",
+      "battery_state_of_charge": "Battery state of charge",
+      "consumption_energy": "Consumption energy",
+      "consumption_power": "Consumption power",
+      "extended": "Extended channel",
+      "generation_energy": "Generation energy",
+      "generation_power": "Generation power",
+      "grid_power": "Grid power",
+      "temperature": "Temperature"
+    },
+    "fieldLabel": "Series",
+    "loadErrorDescription": "The chart data could not be loaded.",
+    "loadErrorTitle": "Chart unavailable",
+    "noCategories": "Select at least one category to display a chart.",
+    "noData": "No data is available for this range.",
+    "range": {
+      "all": "25 years",
+      "day": "1 day",
+      "fiveYears": "5 years",
+      "month": "30 days",
+      "week": "7 days",
+      "year": "1 year"
+    },
+    "rangeLabel": "Range",
+    "resolution": {
+      "15m": "15 minutes",
+      "auto": "Auto",
+      "day": "Day",
+      "hour": "Hour",
+      "month": "Month",
+      "raw": "Raw",
+      "year": "Year"
+    },
+    "resolutionLabel": "Resolution",
+    "resolutionSummary": "Resolution: {{resolution}} · Coverage: {{coverage}}%",
+    "title": "Historical charts"
+  },
   "dashboard": {
     "accepted": "{{count}} accepted today",
     "alertState": { "open": "Open", "resolved": "Resolved" },
