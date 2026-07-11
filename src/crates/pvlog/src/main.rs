@@ -21,10 +21,11 @@ use pvlog::operator_bundle::{
 use pvlog_application::{
     Argon2CredentialConfig, Argon2CredentialService, BrowserSessionPolicy,
     BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, Clock,
-    CommonPasswordHook, DiscardingRecoveryNotifier, ExternalIdentityLinkingRepository,
-    ExternalIdentityLinkingService, ExternalIdentityLinkingUseCases, ExternalLoginPolicy,
-    LocalCredentialRepository, LocalPasswordPolicy, LocalPasswordService, LocalPasswordUseCases,
-    LocalUserPolicy, SystemLifecycleRepository, SystemLifecycleService, SystemLifecycleUseCases,
+    CommonPasswordHook, DiscardingRecoveryNotifier, EquipmentCatalog,
+    ExternalIdentityLinkingRepository, ExternalIdentityLinkingService,
+    ExternalIdentityLinkingUseCases, ExternalLoginPolicy, LocalCredentialRepository,
+    LocalPasswordPolicy, LocalPasswordService, LocalPasswordUseCases, LocalUserPolicy,
+    SystemLifecycleRepository, SystemLifecycleService, SystemLifecycleUseCases,
     UserLifecycleRepository, UserLifecycleService, UserLifecycleUseCases,
 };
 use pvlog_storage::{
@@ -382,6 +383,7 @@ fn database_target(config: &RuntimeConfig) -> DatabaseTarget {
 
 async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(), StartupError> {
     probe_database(target).await?;
+    let _equipment_catalog = EquipmentCatalog::bundled()?;
     let user_lifecycle = compose_user_lifecycle(config, target)?;
     let local_password = compose_local_password(config, target)?;
     let request_authenticator = compose_request_authenticator(config, target)?;
@@ -838,6 +840,8 @@ enum StartupError {
     Migration(#[from] MigrationError),
     #[error(transparent)]
     Bundle(#[from] pvlog::operator_bundle::BundleError),
+    #[error(transparent)]
+    EquipmentCatalog(#[from] pvlog_application::EquipmentCatalogError),
     #[error("telemetry initialization failed: {0}")]
     Telemetry(String),
     #[error("failed to serialize command output: {0}")]
