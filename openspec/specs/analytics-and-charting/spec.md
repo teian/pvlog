@@ -1,5 +1,9 @@
-## ADDED Requirements
+# Analytics And Charting Specification
 
+## Purpose
+TBD - created by archiving change build-self-hosted-pv-platform. Update Purpose after archive.
+
+## Requirements
 ### Requirement: Resolution-aware series queries
 The system SHALL return time-series data at an explicit or automatically selected resolution that honors the requested time range, timezone, fields, aggregation functions, and maximum point budget. Responses SHALL identify actual resolution, units, coverage, gaps, and whether values are raw or aggregated.
 
@@ -24,13 +28,6 @@ The system SHALL identify expected-but-missing intervals, duplicate/conflicting 
 #### Scenario: Uploader stops reporting
 - **WHEN** no accepted observation arrives for expected intervals during the configured active window
 - **THEN** the query and web application expose a gap with its start, duration, and quality classification
-
-### Requirement: System comparison and ladders
-The system SHALL compare authorized or public systems across normalized generation, total generation, efficiency, capacity, location, team, and selected periods while respecting effective capacity and privacy.
-
-#### Scenario: Differently sized systems are compared
-- **WHEN** two visible systems with different effective capacities are compared by normalized generation
-- **THEN** the result uses the capacity effective for each data period and identifies the normalization unit
 
 ### Requirement: Query performance objectives
 On the certified PostgreSQL scale profile, the system SHALL target p95 server latency below 500 ms for a 30-day single-system chart and below 1,000 ms for a 25-year daily single-system chart under the documented concurrent workload, excluding network transfer outside the server.

@@ -1,5 +1,9 @@
-## ADDED Requirements
+# Documentation And Openapi Specification
 
+## Purpose
+TBD - created by archiving change build-self-hosted-pv-platform. Update Purpose after archive.
+
+## Requirements
 ### Requirement: Complete OpenAPI 3.1 contract
 The repository SHALL contain `openapi/pvlog-v1.yaml` as a valid OpenAPI 3.1 document describing every modern REST operation, parameter, request body, response, schema, security requirement, scope, error, callback/webhook, example, operation identifier, tag, and deprecation state.
 
@@ -24,7 +28,7 @@ The documentation SHALL include tested quickstarts for installation, authenticat
 - **THEN** every marked command/request example succeeds with its documented status and response shape
 
 ### Requirement: Functional coverage reference
-The documentation SHALL map ingestion, query, system management, community, provider, and notification functionality to modern API operations and tested examples.
+The documentation SHALL map ingestion, query, system management, provider, and notification functionality to modern API operations and tested examples.
 
 #### Scenario: Operator configures an uploader
 - **WHEN** an operator follows an ingestion guide for a supported workflow
@@ -50,3 +54,4 @@ The documentation site SHALL be keyboard accessible, responsive, readable in lig
 #### Scenario: Stale internal link is introduced
 - **WHEN** a documentation change references a missing local page or anchor
 - **THEN** CI fails with the broken source and target
+

@@ -17,7 +17,7 @@
 - [x] 2.2 Model local users, password/recovery state, external connector identities, sessions, hierarchical RBAC roles/permissions/assignments, accounts, memberships, API credentials, scopes, quotas, storage routing state, and audit events without Axum, SQLx, or provider-specific dependencies.
 - [x] 2.3 Model PV systems as aggregate roots over inverters and their effective-dated PV strings, plus auxiliary equipment, tariffs, calculation modes, privacy, lifecycle state, and extended channel definitions.
 - [x] 2.4 Model canonical observations, cumulative/net/battery semantics, sources, idempotency identities, corrections, segment metadata, rollups, and coverage.
-- [x] 2.5 Model teams, favourites, ranking eligibility, alert rules/events, webhook subscriptions/deliveries, providers, jobs, imports, and exports.
+- [x] 2.5 Model alert rules/events, webhook subscriptions/deliveries, providers, jobs, imports, and exports.
 - [x] 2.6 Define repository, clock, credential, identity, webhook, insolation, supply, job queue, and transactional unit-of-work interfaces with in-memory fakes.
 - [x] 2.7 Implement deny-by-default RBAC evaluation for built-in and constrained custom roles at instance, account, and system scope and test delegation, privilege-escalation, role/scope, and cross-account isolation matrices.
 
@@ -28,14 +28,14 @@
 - [x] 3.3 Implement recoverable SQLite account provisioning/deprovisioning with temporary creation, migration, integrity verification, opaque managed paths, atomic activation/quarantine, and orphan reconciliation.
 - [x] 3.4 Create SQLite account-database migrations for system-owned inverters, inverter-owned PV strings, auxiliary equipment, tariffs, channels, account audit, imports/exports, alerts, webhooks, providers, and account-local jobs.
 - [x] 3.5 Create SQLite account and PostgreSQL migrations for hot telemetry, archived segment payloads, correction overlays, idempotency, rollups, summaries, invalidations, and data quality.
-- [x] 3.6 Create PostgreSQL management/account-owned migrations with `account_id` in all owned keys and constraints plus schemas for teams, projections, jobs, and integrations.
+- [x] 3.6 Create PostgreSQL management/account-owned migrations with `account_id` in all owned keys and constraints plus schemas for jobs and integrations.
 - [x] 3.7 Add PostgreSQL time partitions, partition-horizon management, B-tree/BRIN indexes, constraints, and query-plan fixtures for telemetry and rollups.
 - [x] 3.8 Implement bounded lazy SQLite account connection-pool routing, opaque path validation, per-account WAL/foreign keys/busy timeout/writer serialization, idle pool eviction, checkpoints, and integrity probes.
 - [x] 3.9 Implement account-local transactional outbox, management inbox/projections, sequence checkpoints, idempotent replay, privacy-first invalidation, and reconciliation tests.
 - [x] 3.10 Implement user/account/session/credential/membership/routing/global-audit repositories and run shared authorization and isolation contract tests.
 - [x] 3.11 Implement aggregate-safe system/inverter/string, auxiliary-equipment, tariff, channel, and account-audit repositories for routed SQLite account databases and PostgreSQL with shared effective-date tests.
 - [x] 3.12 Implement hot telemetry/idempotency/correction repositories for routed SQLite account databases and PostgreSQL with shared transaction, uniqueness, and range-query tests.
-- [x] 3.13 Implement rollup/summary, team/community projection, alerts/webhooks, provider, and job repositories for both engines with shared contract tests.
+- [x] 3.13 Implement rollup/summary, alerts/webhooks, provider, and job repositories for both engines with shared contract tests.
 
 ## 4. Authentication, Authorization, and Audit
 
@@ -90,15 +90,12 @@
 - [x] 8.2 Implement multi-series raw and aggregate queries with explicit units, resolution, coverage, gaps, provenance, and bounded result validation.
 - [x] 8.3 Implement daily/monthly/yearly/lifetime statistics for generation, consumption, grid, efficiency, peaks, environment, battery, finance, and coverage.
 - [x] 8.4 Implement missing/suspect interval, source conflict, counter reset, rejected-ingestion, and aggregate-lag detection without fabricated raw points.
-- [x] 8.5 Implement system/team comparison and ladder services using effective capacity, eligibility, privacy, coverage, normalization, and tie rules.
-- [x] 8.6 Implement modern time-series, statistics, missing-data, comparison, ladder, and synchronous/asynchronous CSV/JSON export endpoints.
+- [x] 8.6 Implement modern time-series, statistics, missing-data, and synchronous/asynchronous CSV/JSON export endpoints.
 - [x] 8.7 Complete OpenAPI query models and executable examples, including point budgets, timezone/DST, errors, jobs, CSV headers, and conditional caching.
 - [x] 8.8 Add query-plan regression tests and performance harness assertions for 30-day and 25-year chart service objectives.
 
-## 10. Community and Provider Services
+## 10. Provider Services
 
-- [x] 10.1 Implement privacy-safe account projection events and management-catalog system search, visibility, country/location filters, favourites, and modern API resources with freshness and privacy integration tests.
-- [x] 10.2 Implement team lifecycle, membership transfer/join/leave, eligibility, projected aggregates, ladders, ranking coverage, and cross-account projection lag behavior with modern API tests.
 - [x] 10.5 Define insolation and regional supply adapter contracts, persistence/cache/provenance models, circuit breakers, and administrator configuration without bundling unapproved data.
 - [x] 10.6 Implement configured insolation and regional supply adapters with freshness/licensing metadata, degraded behavior, and deterministic fake-provider tests.
 
@@ -120,7 +117,7 @@
 - [x] 12.5 Add keyboard/screen-reader chart summaries and tables, localized time/unit formatting, non-color cues, reduced motion, zoom/comparison, and matching CSV/JSON export.
 - [x] 12.6 Implement data-quality inspection, rejected-ingestion details, missing/suspect intervals, optimistic correction, deletion, and reconciliation progress.
 - [x] 12.7 Implement local user/invitation, hierarchical role/permission, external identity, generic OIDC/OAuth2 connector and Google/GitHub/Facebook/X preset administration alongside system, equipment, tariff, channel, member, credential, privacy, lifecycle, session, and audit views.
-- [x] 12.8 Implement search, favourites, teams, ladders, system comparisons, regional supply, and provider freshness/provenance views.
+- [x] 12.8 Implement regional supply and provider freshness/provenance views.
 - [x] 12.9 Implement alert rules, webhook subscriptions/delivery history, import/export jobs, worker/dead-letter, storage integrity, backup, and instance administration views.
 - [x] 12.10 Add frontend unit/component tests under `tests/ui/`, Playwright critical flows under `tests/e2e/`, API schema failure tests, axe checks, keyboard tests, bundle budgets, and 80/75/80/80 coverage gates without co-located test files under `src/ui/`.
 

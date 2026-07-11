@@ -6,7 +6,7 @@ PV system owners and operators need a self-hosted, long-lived photovoltaic monit
 
 - Create a Rust/Axum backend and web application for registering, configuring, monitoring, comparing, and administering photovoltaic systems.
 - Organize all backend crates and backend source beneath `src/crates/`, all frontend source beneath `src/ui/`, and all unit, integration, contract, end-to-end, performance, fixture, and test-support code beneath the repository-root `tests/` directory.
-- Provide complete modern API functionality for output/status ingestion, queries and statistics, system management, search, teams and ladders, favourites, insolation and supply data, and notification registration without emulating a third-party wire protocol.
+- Provide complete modern API functionality for output/status ingestion, queries and statistics, system management, insolation and supply data, and notification registration without emulating a third-party wire protocol.
 - Add a versioned, resource-oriented JSON REST API with consistent authentication, pagination, filtering, timestamps, idempotency, bulk operations, validation errors, and rate-limit metadata.
 - Publish a complete OpenAPI 3.1 specification plus rendered reference documentation, guides, examples, feature coverage notes, and executable API conformance checks.
 - Support SQLite and PostgreSQL through one storage contract, with SQLite split into an instance-wide management database and one isolated data database per account, plus a tiered time-series model that retains exact raw measurements for at least 25 years while serving chart queries from precomputed rollups.
@@ -20,14 +20,13 @@ PV system owners and operators need a self-hosted, long-lived photovoltaic monit
 ### New Capabilities
 
 - `identity-and-access`: Local users and password authentication, multiple external OIDC/OAuth2 login connectors including Google/GitHub/Facebook/X presets, identity linking, hierarchical RBAC, accounts, sessions, scoped API credentials, quotas, and audit records.
-- `pv-system-management`: PV system aggregates containing inverters and their PV strings, plus tariffs, privacy, lifecycle operations, favourites, search, and bulk import/export.
+- `pv-system-management`: PV system aggregates containing inverters and their PV strings, plus tariffs, privacy, lifecycle operations, and bulk import/export.
 - `telemetry-ingestion`: Validated single and batch ingestion of generation, consumption, export/import, battery, temperature, voltage, and extended measurements with idempotent correction semantics.
 - `time-series-storage`: SQLite management/account database separation, durable hot/raw/rollup storage, compaction, retention, database portability, backup integrity, and the capacity envelope for multi-decade data.
-- `analytics-and-charting`: Fast resolution-aware time-series queries, daily and lifetime statistics, missing-data and quality signals, comparisons, ladders, and interactive charts.
+- `analytics-and-charting`: Fast resolution-aware time-series queries, daily and lifetime statistics, missing-data and quality signals, and interactive charts.
 - `modern-rest-api`: A versioned JSON API with modern resource naming, filtering, pagination, bulk operations, concurrency controls, error documents, and stable evolution rules.
-- `teams-and-community`: Teams, membership, rankings, favourites, system discovery, region supply views, and privacy-aware comparisons.
 - `notifications-and-integrations`: Alert rules, webhook registration and delivery, retries, signing, uploader integration, insolation, and regional supply data providers.
-- `web-application`: Responsive self-hosted administration and monitoring UI for onboarding, live status, historical charts, comparisons, data quality, teams, alerts, and settings.
+- `web-application`: Responsive self-hosted administration and monitoring UI for onboarding, live status, historical charts, data quality, alerts, and settings.
 - `documentation-and-openapi`: A committed OpenAPI 3.1 contract, generated API reference, task-oriented guides, examples, feature coverage documentation, changelog, and automated documentation checks.
 - `self-hosting-operations`: Reproducible deployment, configuration, migrations, workers, observability, backup/restore, upgrades, and SQLite-to-PostgreSQL migration.
 

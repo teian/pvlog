@@ -1,5 +1,9 @@
-## ADDED Requirements
+# Web Application Specification
 
+## Purpose
+TBD - created by archiving change build-self-hosted-pv-platform. Update Purpose after archive.
+
+## Requirements
 ### Requirement: Guided onboarding
 The web application SHALL guide an administrator through instance readiness and a user through authentication, first-system configuration, equipment/capacity, timezone, API/uploader credentials, a test reading, and verification of live data.
 
@@ -29,7 +33,7 @@ Authorized users SHALL be able to inspect missing/suspect intervals, source conf
 - **THEN** the UI uses optimistic concurrency, displays reconciliation progress, and eventually shows corrected charts and statistics
 
 ### Requirement: Administration workflows
-The web application SHALL expose authorized management for local users, invitations, password recovery/disablement, roles and permission assignments, linked identities, generic external OIDC/OAuth2 connectors, Google/GitHub/Facebook/X setup presets, sessions, memberships, systems/equipment, credentials, tariffs, channels, teams, alerts, webhooks, imports/exports, jobs, storage health, backups, and instance configuration.
+The web application SHALL expose authorized management for local users, invitations, password recovery/disablement, roles and permission assignments, linked identities, generic external OIDC/OAuth2 connectors, Google/GitHub/Facebook/X setup presets, sessions, memberships, systems/equipment, credentials, tariffs, channels, alerts, webhooks, imports/exports, jobs, storage health, backups, and instance configuration.
 
 #### Scenario: Non-administrator opens instance settings
 - **WHEN** a regular system owner navigates to instance administration
@@ -67,3 +71,4 @@ The production application SHALL target initial usable load below two seconds on
 #### Scenario: User rapidly changes chart ranges
 - **WHEN** several chart requests are superseded by a newer selection
 - **THEN** obsolete requests are cancelled or ignored and only the newest selection updates the view
+

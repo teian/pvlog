@@ -10,7 +10,7 @@ The implementation must comply with the repository rules: Rust changes build wit
 
 **Goals:**
 
-- Provide complete photovoltaic ingestion, query, administration, community, provider, and notification functionality through a modern, consistent `/api/v1` contract.
+- Provide complete photovoltaic ingestion, query, administration, provider, and notification functionality through a modern, consistent `/api/v1` contract.
 - Provide a useful web product rather than an API-only data sink.
 - Retain exact accepted measurements for at least 25 years and make common chart/statistics queries independent of total raw history size.
 - Certify a SQLite profile with a management catalog and isolated per-account data databases, plus a PostgreSQL scale profile behind the same domain contract and export format.
@@ -90,7 +90,7 @@ Recent and mutable observations live as indexed rows in `telemetry_hot`, partiti
 
 Corrections to archived data are written as small overlay rows, immediately visible to reads, then folded into a replacement segment by an idempotent compaction job. Raw points are deleted from the hot table only after the segment, rollups, counts, and hashes verify in one recoverable state transition. No accepted raw value is discarded by aggregation.
 
-Separate rollup tables store 15-minute, hourly, daily, monthly, and yearly aggregates with count, sum, min, max, first/last, and quality coverage. Daily/lifetime system summaries support ladders and overview pages. Query planning selects raw/segment data only when the requested resolution needs it and otherwise reads the coarsest rollup below the requested point budget. Rollups are reproducible from raw segments and are not the system of record.
+Separate rollup tables store 15-minute, hourly, daily, monthly, and yearly aggregates with count, sum, min, max, first/last, and quality coverage. Daily/lifetime system summaries support overview pages. Query planning selects raw/segment data only when the requested resolution needs it and otherwise reads the coarsest rollup below the requested point budget. Rollups are reproducible from raw segments and are not the system of record.
 
 Alternative considered: permanent row-per-observation storage. Rejected because multi-billion-row indexes and backups are avoidable for the stated retention horizon. TimescaleDB was also rejected as a required dependency because it would violate plain PostgreSQL portability and provide no SQLite path.
 
@@ -98,13 +98,13 @@ Alternative considered: permanent row-per-observation storage. Rejected because 
 
 An account is the tenancy, authorization, export, backup, and SQLite storage boundary. Every PV system belongs to exactly one account, while a user may belong to multiple accounts. The SQLite profile SHALL use an instance-wide `management.sqlite3` plus one opaque, non-user-named database file per account under a managed data directory.
 
-The management database stores users, local password credentials and recovery state, external auth connectors and identity links, sessions, RBAC roles/permissions/assignments, accounts, memberships, API credential hashes/scopes, quotas, global configuration, account-database routing and schema state, provisioning/deprovisioning state, global security audit events, and privacy-safe projections needed for discovery, teams, ladders, and instance administration. It does not store raw telemetry. Each account database stores that account's systems, equipment, tariffs, extended channels, hot observations, archived segments, corrections, rollups, summaries, account-local jobs, alerts, webhooks, imports/exports, and account-local audit history.
+The management database stores users, local password credentials and recovery state, external auth connectors and identity links, sessions, RBAC roles/permissions/assignments, accounts, memberships, API credential hashes/scopes, quotas, global configuration, account-database routing and schema state, provisioning/deprovisioning state, and global security audit events. It does not store raw telemetry. Each account database stores that account's systems, equipment, tariffs, extended channels, hot observations, archived segments, corrections, rollups, summaries, account-local jobs, alerts, webhooks, imports/exports, and account-local audit history.
 
 Globally unique system identifiers are registered in the management catalog so authentication and routing complete before opening account data. Database paths are derived only from opaque registry values beneath the configured data root; names supplied by users never become paths. The process maintains a bounded LRU of account connection pools, applies per-account concurrency limits, and closes idle pools so large account counts do not exhaust file descriptors. WAL, foreign keys, busy timeout, checkpoints, and integrity checks are configured independently for every SQLite file. Writers are serialized within an account but different accounts can write concurrently.
 
 Account provisioning uses a recoverable state machine: reserve the account in management, create and migrate a temporary data database, verify it, atomically move it to its final opaque path, then mark routing active. Deprovisioning first disables routing and quarantines the file before retention-aware deletion. Startup reconciles incomplete states and orphaned files without guessing ownership.
 
-SQLite cannot provide atomic transactions across the management and account databases, so cross-boundary changes use explicit reservations and transactional outbox/inbox records. Account-local writes commit their projection event in the same account transaction; workers idempotently update privacy-filtered management projections with sequence/checkpoint tracking. Cross-account search, community, and ladder reads use those projections and expose their freshness. A privacy reduction invalidates the management projection before or as part of disabling visibility so stale public data is never intentionally served.
+SQLite cannot provide atomic transactions across the management and account databases, so cross-boundary changes use explicit reservations and transactional outbox/inbox records.
 
 Management and account schemas have independent versions. Upgrade tooling migrates the management database first using backward-compatible routing metadata, then migrates account files with bounded parallelism and per-account status. An account with a failed migration remains unavailable and diagnosable without corrupting or silently serving an old schema; policy determines whether instance readiness tolerates isolated account failures.
 
@@ -172,7 +172,7 @@ OpenTelemetry traces/metrics and structured JSON logs include request/job IDs wi
 - **[Provider behavior drift]** Social providers can change scopes, endpoints, claims, review requirements, or user-info availability. → Keep protocol adapters generic, version the preset catalog, test each supported preset against current provider sandboxes/documentation before release, and show connector health/configuration diagnostics.
 - **[Scale estimate uncertainty]** Extended-channel density and compression vary greatly by fleet. → Benchmark multiple realistic/synthetic distributions and size storage from measured bytes per system-day with safety margins.
 - **[External data licensing/availability]** Regional supply and insolation providers may not cover all regions or permit redistribution. → Keep providers pluggable, record provenance, allow administrator-supplied sources, and show unavailable rather than fabricate data.
-- **[Large initial scope]** Full API, UI, and operations can delay a useful release. → Implement in vertical slices with acceptance gates: foundation, ingest/query, durable storage, product UI, community/integrations, then scale certification.
+- **[Large initial scope]** Full API, UI, and operations can delay a useful release. → Implement in vertical slices with acceptance gates: foundation, ingest/query, durable storage, product UI, integrations, then scale certification.
 - **[Security of self-host defaults]** Easy deployment can encourage weak public exposure. → Default private, require explicit secret/bootstrap setup, ship restrictive CORS/CSP/cookies, scan images/dependencies, and document reverse-proxy/TLS boundaries.
 
 ## Migration Plan
@@ -180,8 +180,8 @@ OpenTelemetry traces/metrics and structured JSON logs include request/job IDs wi
 1. Establish the `src/crates/`, `src/ui/`, and root `tests/` layout, workspace and test-harness configuration, configuration model, CI quality gates, empty OpenAPI contract, database adapters, separate SQLite management/account migration runners, account provisioning/routing, auth skeleton, and deployment smoke test.
 2. Implement account and system management plus a modern end-to-end telemetry slice on PostgreSQL and routed SQLite account databases, including raw hot rows, chart queries, and OpenAPI examples.
 3. Add segments, corrections, rollups, integrity verification, import/export, backup/restore, and synthetic scale tooling; keep compaction feature-gated until reconciliation tests pass.
-4. Complete the modern API for community, notifications, optional data providers, and every canonical application capability.
-5. Deliver the web onboarding, dashboards, charts, data quality, settings, and admin operations, followed by teams, notifications, and optional data providers.
+4. Complete the modern API for notifications, optional data providers, and every canonical application capability.
+5. Deliver the web onboarding, dashboards, charts, data quality, settings, and admin operations, followed by notifications and optional data providers.
 6. Run long-horizon capacity and failure testing, publish the certified profiles and feature coverage report, and cut the first stable release only when conformance, recovery, and warning-free checks pass.
 
 For rollback, application releases remain backward-compatible with the previous management and account schemas during a documented window. Destructive schema cleanup is deferred to later releases. Segment compaction can be disabled without losing hot or already archived data; account-scoped export and manifest-driven database-native backups are verified before upgrade. A failed management migration stops startup, while a failed account migration isolates that account and leaves a recorded state for operator recovery.
