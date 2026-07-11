@@ -43,6 +43,10 @@ name = "oauth2-protocol"
 path = "../../../tests/rust/application/oauth2_protocol.rs"
 
 [[test]]
+name = "provider-data-contracts"
+path = "../../../tests/rust/application/provider_data_contracts.rs"
+
+[[test]]
 name = "identity-linking"
 path = "../../../tests/rust/application/identity_linking.rs"
 

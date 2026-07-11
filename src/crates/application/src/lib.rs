@@ -24,6 +24,7 @@ mod observation_correction;
 mod oidc;
 mod pagination;
 mod ports;
+mod provider_data;
 mod query_planner;
 mod rate_limit;
 mod rbac_management;
@@ -118,6 +119,11 @@ pub use ports::{
     IdentityService, InsolationPoint, InsolationProvider, JobQueue, PortError, SecretResolver,
     SupplyPoint, SupplyProvider, Transaction, UnitOfWork, WebhookRequest, WebhookResponse,
     WebhookSender,
+};
+pub use provider_data::{
+    CircuitBreaker, CircuitBreakerPolicy, CircuitState, ExternalDataCacheEntry,
+    ExternalDataCacheKey, ExternalDataCacheRepository, ExternalDataConfiguration, ExternalDataKind,
+    ExternalDataLicense, ExternalDataProvenance, ProviderConfigurationError,
 };
 pub use query_planner::{
     QueryPlan, QueryPlanError, QueryPlanRequest, QueryResolution, QuerySource, RawSources,
