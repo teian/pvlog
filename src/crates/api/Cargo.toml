@@ -34,5 +34,21 @@ path = "src/lib.rs"
 name = "user-lifecycle-endpoints"
 path = "../../../tests/rust/api/user_lifecycle_endpoints.rs"
 
+[[test]]
+name = "http-foundation"
+path = "../../../tests/rust/api/http_foundation.rs"
+
+[[test]]
+name = "system-endpoints"
+path = "../../../tests/rust/api/system_endpoints.rs"
+
+[[test]]
+name = "managed-resource-endpoints"
+path = "../../../tests/rust/api/managed_resource_endpoints.rs"
+
+[[test]]
+name = "telemetry-endpoints"
+path = "../../../tests/rust/api/telemetry_endpoints.rs"
+
 [lints]
 workspace = true

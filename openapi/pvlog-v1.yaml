@@ -16,6 +16,10 @@ servers:
 tags:
   - name: Operations
     description: Process and deployment health
+  - name: Systems
+    description: PV system lifecycle and account-owned configuration
+  - name: Telemetry
+    description: Canonical observation ingestion and correction
 paths:
   /api/v1/health/live:
     get:
@@ -43,8 +47,168 @@ paths:
           $ref: "#/components/responses/NotAcceptable"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /api/v1/systems:
+    post:
+      operationId: createSystem
+      tags: [Systems]
+      summary: Create a private PV system
+      description: Creates one account-owned system using private and active defaults.
+      security: [{ bearerAuth: [systems:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateSystem" }
+            example: { accountId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70, name: Roof PV, timezone: Europe/Berlin }
+      responses:
+        "201": { $ref: "#/components/responses/SystemResponse" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/systems/{id}:
+    parameters:
+      - $ref: "#/components/parameters/SystemId"
+    put:
+      operationId: updateSystem
+      tags: [Systems]
+      summary: Update a PV system
+      description: Replaces mutable system settings when the supplied ETag is current.
+      security: [{ bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateSystem" }
+      responses:
+        "200": { $ref: "#/components/responses/SystemResponse" }
+        "412": { $ref: "#/components/responses/PreconditionProblem" }
+    delete:
+      operationId: deleteSystem
+      tags: [Systems]
+      summary: Permanently delete a PV system
+      description: Starts confirmed permanent deletion when the supplied ETag is current.
+      security: [{ bearerAuth: [systems:write] }]
+      parameters:
+        - $ref: "#/components/parameters/IfMatch"
+        - { name: X-Confirm-Delete, in: header, required: true, schema: { type: boolean } }
+      responses:
+        "204": { description: System deletion accepted }
+        "412": { $ref: "#/components/responses/PreconditionProblem" }
+  /api/v1/systems/{id}/archive:
+    post:
+      operationId: archiveSystem
+      tags: [Systems]
+      summary: Archive a PV system
+      description: Makes an active system inactive without deleting its stored data.
+      security: [{ bearerAuth: [systems:write] }]
+      parameters:
+        - $ref: "#/components/parameters/SystemId"
+        - $ref: "#/components/parameters/IfMatch"
+      responses: { "200": { $ref: "#/components/responses/SystemResponse" }, "412": { $ref: "#/components/responses/PreconditionProblem" } }
+  /api/v1/systems/{id}/restore:
+    post:
+      operationId: restoreSystem
+      tags: [Systems]
+      summary: Restore a PV system
+      description: Returns an archived system to active service.
+      security: [{ bearerAuth: [systems:write] }]
+      parameters:
+        - $ref: "#/components/parameters/SystemId"
+        - $ref: "#/components/parameters/IfMatch"
+      responses: { "200": { $ref: "#/components/responses/SystemResponse" }, "412": { $ref: "#/components/responses/PreconditionProblem" } }
+  /api/v1/accounts/{account_id}/systems/{system_id}/equipment:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }, { $ref: "#/components/parameters/NestedSystemId" }]
+    get: { operationId: listEquipment, summary: List equipment, description: Lists effective-dated equipment for one system., tags: [Systems], security: [{ bearerAuth: [systems:read] }], responses: { "200": { $ref: "#/components/responses/ResourceList" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+    post: { operationId: createEquipment, summary: Create equipment, description: Adds validated effective-dated equipment to one system., tags: [Systems], security: [{ bearerAuth: [systems:write] }], requestBody: { $ref: "#/components/requestBodies/ManagedResource" }, responses: { "201": { $ref: "#/components/responses/ManagedResource" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+  /api/v1/accounts/{account_id}/systems/{system_id}/tariffs:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }, { $ref: "#/components/parameters/NestedSystemId" }]
+    get: { operationId: listTariffs, summary: List tariffs, description: Lists effective-dated tariffs for one system., tags: [Systems], security: [{ bearerAuth: [systems:read] }], responses: { "200": { $ref: "#/components/responses/ResourceList" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+    post: { operationId: createTariff, summary: Create tariff, description: Adds a validated effective-dated tariff to one system., tags: [Systems], security: [{ bearerAuth: [systems:write] }], requestBody: { $ref: "#/components/requestBodies/ManagedResource" }, responses: { "201": { $ref: "#/components/responses/ManagedResource" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+  /api/v1/accounts/{account_id}/systems/{system_id}/channels:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }, { $ref: "#/components/parameters/NestedSystemId" }]
+    get: { operationId: listChannels, summary: List channels, description: Lists typed extended channels for one system., tags: [Systems], security: [{ bearerAuth: [systems:read] }], responses: { "200": { $ref: "#/components/responses/ResourceList" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+    post: { operationId: createChannel, summary: Create channel, description: Adds a validated typed extended channel to one system., tags: [Systems], security: [{ bearerAuth: [systems:write] }], requestBody: { $ref: "#/components/requestBodies/ManagedResource" }, responses: { "201": { $ref: "#/components/responses/ManagedResource" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+  /api/v1/accounts/{account_id}/memberships:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }]
+    get: { operationId: listMemberships, summary: List memberships, description: Lists authorized memberships in one account., tags: [Systems], security: [{ bearerAuth: [systems:read] }], responses: { "200": { $ref: "#/components/responses/ResourceList" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+    post: { operationId: createMembership, summary: Create membership, description: Adds a validated membership to one account., tags: [Systems], security: [{ bearerAuth: [systems:write] }], requestBody: { $ref: "#/components/requestBodies/ManagedResource" }, responses: { "201": { $ref: "#/components/responses/ManagedResource" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+  /api/v1/accounts/{account_id}/credentials:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }]
+    get: { operationId: listCredentials, summary: List credentials, description: Lists non-secret credential metadata in one account., tags: [Systems], security: [{ bearerAuth: [systems:read] }], responses: { "200": { $ref: "#/components/responses/ResourceList" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+    post: { operationId: createCredential, summary: Create credential, description: Creates a scoped credential and returns its secret only once., tags: [Systems], security: [{ bearerAuth: [systems:write] }], requestBody: { $ref: "#/components/requestBodies/ManagedResource" }, responses: { "201": { $ref: "#/components/responses/ManagedResource" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+  /api/v1/systems/{system_id}/observations:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    post:
+      operationId: createObservation
+      summary: Ingest one observation
+      description: Normalizes and durably stores one idempotent canonical observation.
+      tags: [Telemetry]
+      security: [{ bearerAuth: [telemetry:write] }]
+      parameters: [{ name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1 } }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ObservationInput" }, example: { observedAtEpochMillis: 1780000000000, generationPowerWatts: 4200, generationEnergyWh: 350 } } } }
+      responses: { "201": { description: Observation accepted, content: { application/json: { schema: { type: object } } } }, "422": { $ref: "#/components/responses/ValidationProblem" }, "503": { $ref: "#/components/responses/OverloadProblem" } }
+  /api/v1/systems/{system_id}/observations/batch:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    post:
+      operationId: createObservationBatch
+      summary: Ingest an observation batch
+      description: Processes a bounded batch in atomic or partial-result mode.
+      tags: [Telemetry]
+      security: [{ bearerAuth: [telemetry:write] }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ObservationBatchInput" } } } }
+      responses: { "200": { description: Stable indexed batch outcomes, content: { application/json: { schema: { type: object } } } }, "422": { $ref: "#/components/responses/ValidationProblem" }, "503": { $ref: "#/components/responses/OverloadProblem" } }
+  /api/v1/systems/{system_id}/observations/{observation_id}:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }, { $ref: "#/components/parameters/ObservationId" }]
+    patch:
+      operationId: correctObservation
+      summary: Correct an observation
+      description: Applies an optimistic replacement or deletion overlay and schedules reconciliation.
+      tags: [Telemetry]
+      security: [{ bearerAuth: [telemetry:write] }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [expectedVersion, reason, delete], properties: { expectedVersion: { type: integer, minimum: 1 }, reason: { type: string, minLength: 1 }, generationPowerWatts: { type: integer }, delete: { type: boolean } } } } } }
+      responses: { "200": { description: Immediately visible merged observation, content: { application/json: { schema: { type: object } } } }, "409": { $ref: "#/components/responses/ConflictProblem" } }
+    delete:
+      operationId: deleteObservation
+      summary: Delete an observation
+      description: Records an optimistic deletion while preserving audit and reconciliation history.
+      tags: [Telemetry]
+      security: [{ bearerAuth: [telemetry:write] }]
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }, { name: X-Correction-Reason, in: header, required: true, schema: { type: string, minLength: 1 } }]
+      responses: { "204": { description: Deletion accepted }, "409": { $ref: "#/components/responses/ConflictProblem" } }
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  parameters:
+    SystemId: { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }
+    AccountId: { name: account_id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }
+    NestedSystemId: { name: system_id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }
+    ObservationId: { name: observation_id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }
+    IfMatch: { name: If-Match, in: header, required: true, schema: { type: string }, example: '"3"' }
+  requestBodies:
+    ManagedResource:
+      required: true
+      content:
+        application/json:
+          schema: { type: object, additionalProperties: true }
+          example: { name: Example resource }
   responses:
+    SystemResponse:
+      description: Versioned system representation
+      headers: { ETag: { schema: { type: string } } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/System" } } }
+    ManagedResource:
+      description: Versioned managed resource
+      headers: { ETag: { schema: { type: string } } }
+      content: { application/json: { schema: { $ref: "#/components/schemas/ManagedResource" } } }
+    ResourceList:
+      description: Managed resource collection
+      content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ManagedResource" } } } }
+    ValidationProblem: { description: Request validation failed, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    PreconditionProblem: { description: ETag precondition failed, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    ForbiddenProblem: { description: Required scope is missing, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    ConflictProblem: { description: Optimistic concurrency conflict, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    OverloadProblem: { description: Ingestion is temporarily saturated, headers: { Retry-After: { schema: { type: integer, minimum: 1 } } }, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
     NotAcceptable:
       description: Requested response representation is not available
       content:
@@ -58,6 +222,32 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
   schemas:
+    CreateSystem:
+      type: object
+      required: [accountId, name, timezone]
+      properties: { accountId: { $ref: "#/components/schemas/UuidV7" }, name: { type: string, minLength: 1 }, timezone: { type: string, example: Europe/Berlin } }
+    UpdateSystem:
+      type: object
+      required: [name, timezone, visibility]
+      properties: { name: { type: string, minLength: 1 }, timezone: { type: string }, visibility: { enum: [private, account, unlisted, public] } }
+    System:
+      allOf:
+        - $ref: "#/components/schemas/UpdateSystem"
+        - type: object
+          required: [id, accountId, lifecycle, version]
+          properties: { id: { $ref: "#/components/schemas/UuidV7" }, accountId: { $ref: "#/components/schemas/UuidV7" }, lifecycle: { enum: [active, archived, pending_deletion] }, version: { type: integer, minimum: 1 } }
+    ManagedResource:
+      type: object
+      required: [id, accountId, kind, version, attributes]
+      properties: { id: { $ref: "#/components/schemas/UuidV7" }, accountId: { $ref: "#/components/schemas/UuidV7" }, systemId: { $ref: "#/components/schemas/UuidV7" }, kind: { enum: [equipment, tariff, channel, membership, credential] }, version: { type: integer, minimum: 1 }, attributes: { type: object, additionalProperties: true } }
+    ObservationInput:
+      type: object
+      required: [observedAtEpochMillis]
+      properties: { observedAtEpochMillis: { type: integer }, generationPowerWatts: { type: integer }, generationEnergyWh: { type: integer }, consumptionPowerWatts: { type: integer }, consumptionEnergyWh: { type: integer }, voltageMillivolts: { type: integer, minimum: 0 }, temperatureMillidegreesCelsius: { type: integer }, sourceReference: { type: string } }
+    ObservationBatchInput:
+      type: object
+      required: [mode, items]
+      properties: { mode: { enum: [atomic, partial] }, items: { type: array, minItems: 1, maxItems: 1000, items: { allOf: [{ $ref: "#/components/schemas/ObservationInput" }, { type: object, required: [idempotencyKey], properties: { idempotencyKey: { type: string, minLength: 1 } } }] } } }
     UuidV7:
       type: string
       format: uuid
