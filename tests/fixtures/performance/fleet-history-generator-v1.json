@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "fleet": {
+    "systemCount": 5000,
+    "seed": 20260711
+  },
+  "scenarios": [
+    {
+      "name": "sparseExtendedChannels",
+      "startEpochMillis": 1704067200000,
+      "cadenceMillis": 300000,
+      "samples": 8
+    },
+    {
+      "name": "denseExtendedChannels",
+      "startEpochMillis": 1704067200000,
+      "cadenceMillis": 300000,
+      "samples": 8
+    },
+    {
+      "name": "irregularIntervals",
+      "startEpochMillis": 1704067200000,
+      "cadenceMillis": 300000,
+      "samples": 8
+    },
+    {
+      "name": "dstSpring",
+      "startEpochMillis": 1711843200000,
+      "cadenceMillis": 300000,
+      "samples": 276
+    },
+    {
+      "name": "dstFall",
+      "startEpochMillis": 1729987200000,
+      "cadenceMillis": 300000,
+      "samples": 300
+    },
+    {
+      "name": "counterReset",
+      "startEpochMillis": 1704067200000,
+      "cadenceMillis": 300000,
+      "samples": 8
+    },
+    {
+      "name": "gap",
+      "startEpochMillis": 1704067200000,
+      "cadenceMillis": 300000,
+      "samples": 8
+    },
+    {
+      "name": "correction",
+      "startEpochMillis": 1704067200000,
+      "cadenceMillis": 300000,
+      "samples": 8
+    },
+    {
+      "name": "segmentedTwentyFiveYears",
+      "startEpochMillis": 946684800000,
+      "years": 25,
+      "leapDays": 7,
+      "pointsPerDay": 288,
+      "seed": 20260711
+    }
+  ],
+  "expectedManifestSha256": "f156741522c0a805d6421384dd1af86ac7caa9eef989c15a8a421931ccc766c2"
+}

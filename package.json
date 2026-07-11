@@ -27,6 +27,7 @@
     "test:ui": "vitest run --config vitest.config.ts",
     "test:smoke": "cargo smoke",
     "test:segment-format": "node tests/contract/segment-format.mjs",
+    "test:local-authentication-guide": "node tests/contract/local-authentication-guide.mjs",
     "test:structure": "node --test tests/contract/repository-structure/check.test.mjs && node tests/contract/repository-structure/check.mjs",
     "test:watch": "vitest",
     "test:e2e": "playwright test --config playwright.config.ts",
@@ -34,6 +35,7 @@
     "test:compatibility-conformance": "node tests/compatibility/conformance-contract.mjs",
     "test:webhook-consumer": "node tests/contract/webhook-consumer.mjs",
     "test:query-performance": "node tests/performance/chart-query-harness.mjs",
+    "test:performance-fixtures": "node tests/performance/fleet-history-generator.mjs",
     "typecheck": "tsc -b"
   },
   "dependencies": {

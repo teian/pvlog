@@ -165,7 +165,7 @@
 
 ## 15. Scale, Resilience, and Release Certification
 
-- [ ] 15.1 Build deterministic fleet/history generators under `tests/performance/` and reusable fixtures under `tests/fixtures/` for sparse/dense extended channels, irregular intervals, DST, counter resets, gaps, corrections, and 25-year segmented datasets.
+- [x] 15.1 Build deterministic fleet/history generators under `tests/performance/` and reusable fixtures under `tests/fixtures/` for sparse/dense extended channels, irregular intervals, DST, counter resets, gaps, corrections, and 25-year segmented datasets.
 - [ ] 15.2 Build reproducible burst-ingestion and concurrent chart/statistics workloads that record hardware, PostgreSQL settings, bytes per system-day, compression, queue lag, and p50/p95/p99 latency.
 - [ ] 15.3 Tune and document the PostgreSQL 5,000-system profile for 13.14 billion modeled five-minute observations, at least 250 observations/second bursts, and the specified chart p95 objectives.
 - [ ] 15.4 Benchmark and document the SQLite management/per-account profile across account count, concurrent account writers, per-account size, pool/file-descriptor limits, checkpoint and projection lag, maintenance, and the threshold for migrating to PostgreSQL without implying scale-profile parity.
