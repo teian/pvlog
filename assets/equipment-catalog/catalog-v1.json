@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "revision": "2026.07.11.1",
+  "inverters": [
+    {
+      "id": "fronius-symo-gen24-10-0",
+      "revision": "2026.07.11.1",
+      "manufacturer": "Fronius",
+      "model": "Symo GEN24 10.0",
+      "dc": {
+        "topology": "transformerless",
+        "totalStringInputCount": 3,
+        "maximumInputVoltageMillivolts": 1000000,
+        "startVoltageMillivolts": 80000,
+        "nominalInputVoltageMillivolts": 610000,
+        "minimumMpptVoltageMillivolts": 278000,
+        "maximumMpptVoltageMillivolts": 800000,
+        "maximumInputCurrentMilliamperes": 37500,
+        "maximumShortCircuitCurrentMilliamperes": 60000,
+        "mpptInputs": [
+          { "trackerIndex": 1, "stringInputCount": 2, "maximumOperatingCurrentMilliamperes": 25000, "maximumShortCircuitCurrentMilliamperes": 40000 },
+          { "trackerIndex": 2, "stringInputCount": 1, "maximumOperatingCurrentMilliamperes": 12500, "maximumShortCircuitCurrentMilliamperes": 20000 }
+        ]
+      },
+      "ac": { "phaseCount": 3, "nominalGridVoltageMillivolts": 400000, "ratedActivePowerWatts": 10000, "maximumApparentPowerVoltAmperes": 10000 },
+      "operational": { "communicationInterfaces": ["Ethernet", "WLAN", "Modbus TCP"] },
+      "provenance": { "sourceName": "Fronius Symo GEN24 technical data", "sourceReference": "https://www.fronius.com/de/help-center/solar-energie/products/solarwechselrichter/gen24/symo-gen24/fronius-symo-gen24-10-0", "retrievedOn": "2026-07-11" }
+    },
+    {
+      "id": "goodwe-gw10k-et",
+      "revision": "2026.07.11.1",
+      "manufacturer": "GoodWe",
+      "model": "GW10K-ET",
+      "dc": {
+        "topology": "hybrid",
+        "totalStringInputCount": 2,
+        "maximumInputVoltageMillivolts": 1000000,
+        "startVoltageMillivolts": 180000,
+        "nominalInputVoltageMillivolts": 620000,
+        "minimumMpptVoltageMillivolts": 200000,
+        "maximumMpptVoltageMillivolts": 850000,
+        "maximumInputCurrentMilliamperes": 25000,
+        "maximumShortCircuitCurrentMilliamperes": 30400,
+        "mpptInputs": [
+          { "trackerIndex": 1, "stringInputCount": 1, "maximumOperatingCurrentMilliamperes": 12500, "maximumShortCircuitCurrentMilliamperes": 15200 },
+          { "trackerIndex": 2, "stringInputCount": 1, "maximumOperatingCurrentMilliamperes": 12500, "maximumShortCircuitCurrentMilliamperes": 15200 }
+        ]
+      },
+      "ac": { "phaseCount": 3, "nominalGridVoltageMillivolts": 400000, "minimumGridFrequencyMillihertz": 45000, "maximumGridFrequencyMillihertz": 65000, "ratedActivePowerWatts": 10000, "maximumApparentPowerVoltAmperes": 11000, "maximumOutputCurrentMilliamperes": 16500, "minimumPowerFactorBasisPoints": -8000, "maximumPowerFactorBasisPoints": 8000, "totalHarmonicDistortionBasisPoints": 300 },
+      "operational": { "maximumEfficiencyBasisPoints": 9820, "europeanEfficiencyBasisPoints": 9750, "communicationInterfaces": ["WiFi", "LAN", "RS485"] },
+      "provenance": { "sourceName": "GoodWe ET PLUS+ Series datasheet", "sourceReference": "https://it.goodwe.com/Ftp/EN/Downloads/Datasheet/GW_ET%20PLUS%2B_Datasheet-EN.pdf", "retrievedOn": "2026-07-11" }
+    },
+    {
+      "id": "huawei-sun2000-10ktl-m1",
+      "revision": "2026.07.11.1",
+      "manufacturer": "Huawei",
+      "model": "SUN2000-10KTL-M1",
+      "dc": {
+        "topology": "hybrid",
+        "totalStringInputCount": 2,
+        "maximumInputVoltageMillivolts": 1100000,
+        "minimumMpptVoltageMillivolts": 140000,
+        "maximumMpptVoltageMillivolts": 980000,
+        "maximumInputCurrentMilliamperes": 27000,
+        "maximumShortCircuitCurrentMilliamperes": 39000,
+        "mpptInputs": [
+          { "trackerIndex": 1, "stringInputCount": 1, "maximumOperatingCurrentMilliamperes": 13500, "maximumShortCircuitCurrentMilliamperes": 19500 },
+          { "trackerIndex": 2, "stringInputCount": 1, "maximumOperatingCurrentMilliamperes": 13500, "maximumShortCircuitCurrentMilliamperes": 19500 }
+        ]
+      },
+      "ac": { "phaseCount": 3, "nominalGridVoltageMillivolts": 400000, "ratedActivePowerWatts": 10000, "maximumApparentPowerVoltAmperes": 10000, "maximumOutputCurrentMilliamperes": 16900 },
+      "operational": { "operatingTemperature": { "minimumMilliCelsius": -25000, "maximumMilliCelsius": 60000 }, "deratingStartMilliCelsius": 45000, "ingressProtectionRating": "IP65", "communicationInterfaces": ["WLAN", "Fast Ethernet", "4G", "RS485"] },
+      "provenance": { "sourceName": "Huawei SUN2000-3-10KTL-M1 datasheet", "sourceReference": "https://solar.huawei.com/en-GB/download?p=%2F-%2Fmedia%2FSolar%2Fdatasheet%2FSUN2000-3_4_5_6_8_10KTL-M1_High_Current_Version.pdf", "retrievedOn": "2026-07-11" }
+    },
+    {
+      "id": "sma-sunny-tripower-25000tl",
+      "revision": "2026.07.11.1",
+      "manufacturer": "SMA",
+      "model": "Sunny Tripower 25000TL",
+      "dc": {
+        "topology": "transformerless",
+        "totalStringInputCount": 6,
+        "maximumInputVoltageMillivolts": 1000000,
+        "startVoltageMillivolts": 188000,
+        "nominalInputVoltageMillivolts": 600000,
+        "minimumMpptVoltageMillivolts": 390000,
+        "maximumMpptVoltageMillivolts": 800000,
+        "maximumInputCurrentMilliamperes": 66000,
+        "maximumShortCircuitCurrentMilliamperes": 86000,
+        "mpptInputs": [
+          { "trackerIndex": 1, "stringInputCount": 3, "maximumOperatingCurrentMilliamperes": 33000, "maximumShortCircuitCurrentMilliamperes": 43000 },
+          { "trackerIndex": 2, "stringInputCount": 3, "maximumOperatingCurrentMilliamperes": 33000, "maximumShortCircuitCurrentMilliamperes": 43000 }
+        ]
+      },
+      "ac": { "phaseCount": 3, "nominalGridVoltageMillivolts": 400000, "ratedActivePowerWatts": 25000 },
+      "operational": { "communicationInterfaces": ["Ethernet", "Speedwire", "Modbus"] },
+      "provenance": { "sourceName": "SMA Sunny Tripower 15000TL/20000TL/25000TL datasheet", "sourceReference": "https://files.sma.de/downloads/STP15-25TL-30-DS-de-41.pdf", "retrievedOn": "2026-07-11" }
+    }
+  ],
+  "solarModules": [
+    {
+      "id": "ja-solar-jam54d40-450-lb",
+      "revision": "2026.07.11.1",
+      "manufacturer": "JA Solar",
+      "model": "JAM54D40-450/LB",
+      "specification": {
+        "cellTechnology": "n_type_monocrystalline",
+        "cellDescription": "N-type bifacial monocrystalline half-cell, multi-busbar",
+        "bifacial": true,
+        "bifacialityFactorBasisPoints": 8000,
+        "bifacialityToleranceBasisPoints": 1000,
+        "peakPowerWatts": 450,
+        "openCircuitVoltageMillivolts": 39300,
+        "maximumPowerVoltageMillivolts": 32820,
+        "shortCircuitCurrentMilliamperes": 14480,
+        "maximumPowerCurrentMilliamperes": 13710,
+        "efficiencyBasisPoints": 2250,
+        "shortCircuitCurrentTemperatureCoefficientPpmPerCelsius": 460,
+        "openCircuitVoltageTemperatureCoefficientPpmPerCelsius": -2600,
+        "peakPowerTemperatureCoefficientPpmPerCelsius": -3000,
+        "maximumSystemVoltageMillivolts": 1500000,
+        "operatingTemperature": { "minimumMilliCelsius": -40000, "maximumMilliCelsius": 85000 },
+        "maximumSeriesFuseMilliamperes": 30000,
+        "maximumFrontStaticLoadPascals": 5400,
+        "maximumRearStaticLoadPascals": 2400,
+        "dimensionsMillimetres": { "length": 1762, "width": 1134, "height": 30 },
+        "weightGrams": 22000
+      },
+      "provenance": { "sourceName": "JA Solar JAM54D40/LB product data", "sourceReference": "https://joinsunnow.com/product/deepblue-4-0-ja-solar-panel-jam54d40-lb-450w/", "retrievedOn": "2026-07-11" }
+    }
+  ]
+}
