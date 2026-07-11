@@ -42,6 +42,10 @@ path = "../../../tests/compatibility/add_batch_status.rs"
 name = "legacy-queries"
 path = "../../../tests/compatibility/legacy_queries.rs"
 
+[[test]]
+name = "legacy-outputs"
+path = "../../../tests/compatibility/legacy_outputs.rs"
+
 [lib]
 path = "src/lib.rs"
 

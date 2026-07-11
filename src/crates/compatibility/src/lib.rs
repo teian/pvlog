@@ -5,6 +5,7 @@
 mod add_batch_status;
 mod add_output;
 mod add_status;
+mod outputs;
 mod protocol;
 mod queries;
 
@@ -15,6 +16,10 @@ pub use add_output::{
 pub use add_status::{
     AddStatusPolicy, AddStatusServiceError, AddStatusUseCases, LegacyStatus, LegacyStatusEnergy,
     add_status_router,
+};
+pub use outputs::{
+    LegacyAggregate, LegacyDailyExtended, LegacyDailyOutputRecord, LegacyOutputQuery,
+    LegacyOutputUseCases, LegacyOutputsError, legacy_outputs_router,
 };
 pub use protocol::{
     LegacyAuth, LegacyError, LegacyErrorKind, LegacyMethod, LegacyParameters, LegacyProtocolError,

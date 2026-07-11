@@ -1,0 +1,33 @@
+{
+  "outputOptions": {
+    "method": "GET",
+    "path": "/service/r2/getoutput.jsp?key=write-key&sid=42&df=20241201&dt=20241220&limit=50&insolation=1&timeofexport=1",
+    "status": 200,
+    "body": "20241220,12000,2.5,3000,9000,6000,12:30,Fine,5.5,24.5,5000,1000,4000,800,1000,500,250,250,14000"
+  },
+  "extended": {
+    "method": "GET",
+    "path": "/service/r2/getextended.jsp?key=write-key&sid=42&limit=50",
+    "status": 200,
+    "body": "20241220,1,NaN,3,NaN,NaN,-12.3"
+  },
+  "missing": {
+    "method": "GET",
+    "path": "/service/r2/getmissing.jsp?key=write-key&sid=42",
+    "status": 200,
+    "body": "20241201,20241203"
+  },
+  "deletePost": {
+    "method": "POST",
+    "path": "/service/r2/deletestatus.jsp",
+    "form": "d=20241220&t=12%3A00",
+    "status": 200,
+    "body": "Deleted Status"
+  },
+  "deleteOld": {
+    "method": "GET",
+    "path": "/service/r2/deletestatus.jsp?key=write-key&sid=42&d=20241201",
+    "status": 400,
+    "body": "Bad request 400: Date is older than 14 days"
+  }
+}
