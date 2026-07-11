@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+mod equipment_catalog;
 mod identifiers;
 mod identity;
 mod measurements;
@@ -13,6 +14,14 @@ mod telemetry;
 mod time;
 mod validation;
 
+pub use equipment_catalog::{
+    CatalogEntryId, CatalogProvenance, CatalogRevision, CoolingMethod, DimensionsMillimetres,
+    EquipmentTemplateReference, EquipmentValueProvenance, InverterAcSpecification,
+    InverterCatalogEntry, InverterDcSpecification, InverterOperationalSpecification,
+    InverterSpecificationSnapshot, InverterTopology, MpptInputSpecification,
+    PvStringModuleComposition, SolarCellTechnology, SolarModuleCatalogEntry,
+    SolarModuleSpecification, SolarModuleSpecificationSnapshot, TemperatureRange,
+};
 pub use identifiers::{
     AccountId, AlertEventId, AlertRuleId, ApiCredentialId, AuditEventId, ChannelId, ConnectorId,
     CorrectionId, EquipmentId, ExportId, ExternalIdentityId, IdentifierError, ImportId, InverterId,

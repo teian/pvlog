@@ -1,6 +1,6 @@
 ## 1. Catalog Domain and Assets
 
-- [ ] 1.1 Define typed inverter and solar-module catalog domain models with normalized integer units, stable IDs, revisions, optional template provenance, manual/copied/customized snapshot provenance, explicit MPPT/string topology, per-tracker current limits, DC voltage windows, AC ratings, performance, environmental, communication, and mechanical inverter fields.
+- [x] 1.1 Define typed inverter and solar-module catalog domain models with normalized integer units, stable IDs, revisions, optional template provenance, manual/copied/customized snapshot provenance, explicit MPPT/string topology, per-tracker current limits, DC voltage windows, AC ratings, performance, environmental, communication, and mechanical inverter fields.
 - [ ] 1.2 Define the versioned bundled JSON schema and add an initial reviewed catalog containing representative inverter and solar-module models with source attribution.
 - [ ] 1.3 Implement catalog parsing, deterministic indexing, text/manufacturer filtering, bounded pagination, detail lookup, and startup loading without network access.
 - [ ] 1.4 Add catalog validation for unique IDs, ordering, required provenance, plausible ranges, signed coefficients, and electrical cross-field relationships.
