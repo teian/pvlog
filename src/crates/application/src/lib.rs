@@ -6,6 +6,7 @@ mod api_token;
 mod authorization_boundary;
 mod batch_ingestion;
 mod browser_session;
+mod data_quality;
 mod identity_linking;
 mod import_export;
 mod ingestion_admission;
@@ -41,6 +42,10 @@ pub use batch_ingestion::{
 pub use browser_session::{
     BrowserSession, BrowserSessionError, BrowserSessionPolicy, BrowserSessionRecord,
     BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, SessionCookie,
+};
+pub use data_quality::{
+    DataQualityError, DataQualityIssue, DataQualityKind, DataQualityPolicy, QualitySample,
+    RejectedIngestion, detect_data_quality,
 };
 pub use identity_linking::{
     ExternalIdentityLinkingError, ExternalIdentityLinkingRepository,

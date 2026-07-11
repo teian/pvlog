@@ -114,5 +114,9 @@ path = "../../../tests/rust/application/series_query.rs"
 name = "statistics"
 path = "../../../tests/rust/application/statistics.rs"
 
+[[test]]
+name = "data-quality"
+path = "../../../tests/rust/application/data_quality.rs"
+
 [lints]
 workspace = true
