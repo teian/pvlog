@@ -56,6 +56,12 @@ const seriesGapSchema = z.object({
   kind: z.enum(["missing", "suspect", "incomplete_coverage"]),
 });
 
+/** A point in a queried series, in canonical base units. */
+export type SeriesPoint = z.infer<typeof seriesPointSchema>;
+
+/** An interval where the requested field lacks reliable raw coverage. */
+export type SeriesGap = z.infer<typeof seriesGapSchema>;
+
 const seriesSchema = z.object({
   field: seriesFieldSchema,
   unit: seriesUnitSchema,
@@ -90,9 +96,11 @@ export interface FetchSeriesParams {
   resolution: ResolutionParam;
   /** IANA timezone used for calendar bucket boundaries. */ timezone: string;
   /** Hard per-series point budget. */ maximumPoints: number;
+  /** Cancels the request when a newer query supersedes it. */
+  signal?: AbortSignal;
 }
 
-/** Retrieves a bounded, resolution-aware time series for one system field. @param params - Query range, field, resolution, timezone, and point budget. @returns The validated series result. */
+/** Retrieves a bounded, resolution-aware time series for one system field. @param params - Query range, field, resolution, timezone, point budget, and optional abort signal. @returns The validated series result. */
 export async function fetchSeries(
   params: FetchSeriesParams,
 ): Promise<SeriesQueryResult> {
@@ -106,8 +114,67 @@ export async function fetchSeries(
   });
   const response = await fetch(
     `/api/v1/systems/${params.systemId}/series?${query.toString()}`,
-    { credentials: "same-origin" },
+    { credentials: "same-origin", signal: params.signal ?? null },
   );
   if (!response.ok) throw new Error(`series_failed:${String(response.status)}`);
   return seriesQueryResultSchema.parse(await response.json());
+}
+
+/** Parameters accepted by {@link requestAnalysisExport}. */
+export interface AnalysisExportParams {
+  /** System whose telemetry is exported. */ systemId: string;
+  /** Inclusive UTC range start in epoch milliseconds. */
+  startEpochMillis: number;
+  /** Exclusive UTC range end in epoch milliseconds. */ endEpochMillis: number;
+  /** Field to export. */ field: SeriesField;
+  /** Requested resolution; the server may return a coarser one. */
+  resolution: ResolutionParam;
+  /** IANA timezone used for calendar bucket boundaries. */ timezone: string;
+  /** Hard per-series point budget. */ maximumPoints: number;
+  /** Export file format. */ format: "csv" | "json";
+}
+
+/** Outcome of an analysis export request: an immediate file, or a queued job for a later download. */
+export type AnalysisExportResult =
+  | { kind: "file"; blob: Blob; filename: string }
+  | { kind: "queued"; jobId: string };
+
+const queuedJobSchema = z.object({ jobId: z.uuid() });
+
+function exportFilename(field: SeriesField, format: "csv" | "json"): string {
+  return `${field}.${format}`;
+}
+
+/** Requests a synchronous or queued CSV/JSON export matching a chart's current query. @param params - Range, field, resolution, timezone, point budget, and format. @returns The downloadable file, or a queued job identifier. */
+export async function requestAnalysisExport(
+  params: AnalysisExportParams,
+): Promise<AnalysisExportResult> {
+  const response = await fetch(
+    `/api/v1/systems/${params.systemId}/analysis-exports`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        startEpochMillis: params.startEpochMillis,
+        endEpochMillis: params.endEpochMillis,
+        fields: [params.field],
+        resolution: params.resolution,
+        timezone: params.timezone,
+        maximumPoints: params.maximumPoints,
+        format: params.format,
+        asynchronous: false,
+      }),
+    },
+  );
+  if (response.status === 202) {
+    const { jobId } = queuedJobSchema.parse(await response.json());
+    return { kind: "queued", jobId };
+  }
+  if (!response.ok) throw new Error(`export_failed:${String(response.status)}`);
+  return {
+    kind: "file",
+    blob: await response.blob(),
+    filename: exportFilename(params.field, params.format),
+  };
 }

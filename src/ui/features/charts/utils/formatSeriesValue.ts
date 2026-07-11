@@ -24,3 +24,20 @@ const UNIT_SYMBOLS: Record<SeriesUnit, string> = {
 export function seriesUnitSymbol(unit: SeriesUnit): string {
   return UNIT_SYMBOLS[unit];
 }
+
+/** Non-visual summary statistics for a series, used for screen-reader text and the accessible table. */
+export interface SeriesSummary {
+  /** Number of points in the series. */ count: number;
+  /** Minimum value in display units. */ minimum: number;
+  /** Maximum value in display units. */ maximum: number;
+  /** Arithmetic mean value in display units. */ average: number;
+}
+
+/** Computes non-visual summary statistics for a converted-value series. @param values - Points already converted to their display unit. @returns Count, minimum, maximum, and average, or null when empty. */
+export function computeSeriesSummary(values: number[]): SeriesSummary | null {
+  if (values.length === 0) return null;
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return { count: values.length, minimum, maximum, average };
+}

@@ -80,6 +80,15 @@
       "generation": "Generation",
       "grid": "Grid"
     },
+    "compareToggle": "Compare to previous period",
+    "comparisonSummary": "Previous period averaged {{average}} {{unit}} ({{delta}}% vs current).",
+    "export": {
+      "csv": "Export CSV",
+      "errorDescription": "The chart export could not be completed.",
+      "errorTitle": "Export failed",
+      "json": "Export JSON",
+      "queuedDescription": "The export was queued as job {{jobId}} because the range is large; it will be available once processed."
+    },
     "field": {
       "battery_power": "Battery power",
       "battery_state_of_charge": "Battery state of charge",
@@ -92,6 +101,11 @@
       "temperature": "Temperature"
     },
     "fieldLabel": "Series",
+    "gapKind": {
+      "incomplete_coverage": "Incomplete coverage",
+      "missing": "Missing",
+      "suspect": "Suspect"
+    },
     "loadErrorDescription": "The chart data could not be loaded.",
     "loadErrorTitle": "Chart unavailable",
     "noCategories": "Select at least one category to display a chart.",
@@ -116,7 +130,25 @@
     },
     "resolutionLabel": "Resolution",
     "resolutionSummary": "Resolution: {{resolution}} · Coverage: {{coverage}}%",
-    "title": "Historical charts"
+    "summary": "{{count}} points, ranging from {{minimum}} {{unit}} to {{maximum}} {{unit}}, averaging {{average}} {{unit}}.",
+    "table": {
+      "caption": "Accessible data table for the selected chart series.",
+      "corrected": "Corrected",
+      "correctedNo": "No",
+      "correctedYes": "Yes",
+      "coverage": "Coverage",
+      "coveragePercent": "{{value}}%",
+      "gapRange": "{{kind}}: {{start}} – {{end}}",
+      "gapsHeading": "{{count}} gap(s) in this range",
+      "timestamp": "Timestamp",
+      "value": "Value"
+    },
+    "title": "Historical charts",
+    "view": {
+      "chart": "Chart",
+      "table": "Table"
+    },
+    "viewLabel": "Chart view"
   },
   "dashboard": {
     "accepted": "{{count}} accepted today",

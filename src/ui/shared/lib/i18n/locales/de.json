@@ -80,6 +80,15 @@
       "generation": "Erzeugung",
       "grid": "Netz"
     },
+    "compareToggle": "Mit vorherigem Zeitraum vergleichen",
+    "comparisonSummary": "Vorheriger Zeitraum im Schnitt {{average}} {{unit}} ({{delta}} % ggü. aktuell).",
+    "export": {
+      "csv": "CSV exportieren",
+      "errorDescription": "Der Diagrammexport konnte nicht abgeschlossen werden.",
+      "errorTitle": "Export fehlgeschlagen",
+      "json": "JSON exportieren",
+      "queuedDescription": "Der Export wurde als Job {{jobId}} eingereiht, da der Zeitraum groß ist; er steht nach der Verarbeitung bereit."
+    },
     "field": {
       "battery_power": "Batterieleistung",
       "battery_state_of_charge": "Batterieladezustand",
@@ -92,6 +101,11 @@
       "temperature": "Temperatur"
     },
     "fieldLabel": "Reihe",
+    "gapKind": {
+      "incomplete_coverage": "Unvollständige Abdeckung",
+      "missing": "Fehlend",
+      "suspect": "Verdächtig"
+    },
     "loadErrorDescription": "Die Diagrammdaten konnten nicht geladen werden.",
     "loadErrorTitle": "Diagramm nicht verfügbar",
     "noCategories": "Wähle mindestens eine Kategorie, um ein Diagramm anzuzeigen.",
@@ -116,7 +130,25 @@
     },
     "resolutionLabel": "Auflösung",
     "resolutionSummary": "Auflösung: {{resolution}} · Abdeckung: {{coverage}} %",
-    "title": "Historische Diagramme"
+    "summary": "{{count}} Punkte, von {{minimum}} {{unit}} bis {{maximum}} {{unit}}, im Schnitt {{average}} {{unit}}.",
+    "table": {
+      "caption": "Barrierefreie Datentabelle für die ausgewählte Diagrammreihe.",
+      "corrected": "Korrigiert",
+      "correctedNo": "Nein",
+      "correctedYes": "Ja",
+      "coverage": "Abdeckung",
+      "coveragePercent": "{{value}} %",
+      "gapRange": "{{kind}}: {{start}} – {{end}}",
+      "gapsHeading": "{{count}} Lücke(n) in diesem Zeitraum",
+      "timestamp": "Zeitpunkt",
+      "value": "Wert"
+    },
+    "title": "Historische Diagramme",
+    "view": {
+      "chart": "Diagramm",
+      "table": "Tabelle"
+    },
+    "viewLabel": "Diagrammansicht"
   },
   "dashboard": {
     "accepted": "{{count}} heute angenommen",

@@ -8,5 +8,6 @@ export * from "./Input";
 export * from "./Label";
 export * from "./Separator";
 export * from "./Skeleton";
+export * from "./Table";
 export * from "./Toggle";
 export * from "./ToggleGroup";
