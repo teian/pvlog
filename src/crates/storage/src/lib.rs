@@ -33,6 +33,7 @@ mod sqlite_projection;
 #[cfg(feature = "sqlite")]
 mod sqlite_router;
 mod summary_rebuild;
+mod system_lifecycle_repository;
 mod telemetry_repository;
 mod user_lifecycle_repository;
 
@@ -104,6 +105,10 @@ pub use sqlite_router::{
     SqliteCheckpointMode, SqliteCheckpointReport, SqliteRoutingError,
 };
 pub use summary_rebuild::{DailyAggregate, LifetimeAggregate, SummaryDay, SummaryProjection};
+#[cfg(feature = "postgres")]
+pub use system_lifecycle_repository::PostgresSystemLifecycleRepository;
+#[cfg(feature = "sqlite")]
+pub use system_lifecycle_repository::SqliteSystemLifecycleRepository;
 #[cfg(feature = "postgres")]
 pub use telemetry_repository::PostgresTelemetryRepository;
 #[cfg(feature = "sqlite")]
