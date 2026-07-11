@@ -130,7 +130,7 @@
 
 ## 12. Web Application Product Workflows
 
-- [ ] 12.1 Implement local login/recovery/activation, external connector selection/callback states, the responsive application shell, account/system navigation, session bootstrap, route authorization, skip link, error boundaries, loading states, and English/German strings.
+- [x] 12.1 Implement local login/recovery/activation, external connector selection/callback states, the responsive application shell, account/system navigation, session bootstrap, route authorization, skip link, error boundaries, loading states, and English/German strings.
 - [ ] 12.2 Implement guided instance/first-system onboarding, equipment/capacity/timezone setup, credential creation, test ingestion, and verification workflows.
 - [ ] 12.3 Implement the operational dashboard with freshness-safe live status, KPIs, data coverage, recent alerts, ingestion health, and responsive light/dark layouts.
 - [ ] 12.4 Implement accessible historical chart controls and rendering for generation, consumption, grid, battery, environment, finance, and extended channels with bounded point requests.

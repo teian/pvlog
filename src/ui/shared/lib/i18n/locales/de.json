@@ -24,5 +24,62 @@
   "home": {
     "description": "Selbst gehostete Photovoltaik-Überwachung.",
     "title": "PVLog"
+  },
+  "auth": {
+    "activate": "Konto aktivieren",
+    "activationDescription": "Lege das erste Passwort für dein eingeladenes Konto fest.",
+    "activationDone": "Dein Konto ist aktiv. Du kannst dich jetzt anmelden.",
+    "activationTitle": "Konto aktivieren",
+    "backToLogin": "Zurück zur Anmeldung",
+    "bootstrapErrorDescription": "Der Sitzungsdienst antwortet nicht. Versuche es später erneut.",
+    "bootstrapErrorTitle": "Sitzung nicht verfügbar",
+    "callback": {
+      "continue": "Weiter",
+      "error": {
+        "description": "Der Connector konnte die Anmeldung nicht abschließen.",
+        "title": "Anmeldung fehlgeschlagen"
+      },
+      "processing": {
+        "description": "Die Connector-Antwort wird geprüft.",
+        "title": "Anmeldung wird abgeschlossen"
+      },
+      "success": {
+        "description": "Deine externe Identität wurde bestätigt.",
+        "title": "Anmeldung abgeschlossen"
+      }
+    },
+    "continueWith": "Weiter mit {{name}}",
+    "email": "E-Mail-Adresse",
+    "forgotPassword": "Passwort vergessen?",
+    "loginDescription": "Verwende ein lokales Konto oder einen konfigurierten externen Connector.",
+    "loginFailed": "Die Anmeldedaten konnten nicht bestätigt werden.",
+    "loginTitle": "Bei PVLog anmelden",
+    "newPassword": "Neues Passwort",
+    "password": "Passwort",
+    "recoveryDescription": "Gib deine E-Mail-Adresse ein, um einen Wiederherstellungslink anzufordern.",
+    "recoverySent": "Falls das Konto existiert, wurde ein Wiederherstellungslink versendet.",
+    "recoveryTitle": "Konto wiederherstellen",
+    "sendRecovery": "Wiederherstellungslink senden",
+    "signIn": "Anmelden"
+  },
+  "errors": {
+    "boundaryDescription": "Lade die Seite neu oder kehre später zurück.",
+    "boundaryTitle": "Diese Ansicht konnte nicht angezeigt werden",
+    "forbiddenDescription": "Dein Konto darf diese Ansicht nicht öffnen.",
+    "forbiddenTitle": "Zugriff verweigert"
+  },
+  "nav": {
+    "account": "Konto {{id}}",
+    "alerts": "Warnungen",
+    "dashboard": "Übersicht",
+    "system": "Anlage {{id}}"
+  },
+  "shell": {
+    "closeNavigation": "Navigation schließen",
+    "openNavigation": "Navigation öffnen",
+    "primaryNavigation": "Hauptnavigation",
+    "skip": "Zum Hauptinhalt springen",
+    "theme": "Farbschema ändern",
+    "title": "Photovoltaik-Betrieb"
   }
 }

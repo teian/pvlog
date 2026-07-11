@@ -24,5 +24,62 @@
   "home": {
     "description": "Self-hosted photovoltaic monitoring.",
     "title": "PVLog"
+  },
+  "auth": {
+    "activate": "Activate account",
+    "activationDescription": "Choose the initial password for your invited account.",
+    "activationDone": "Your account is active. You can now sign in.",
+    "activationTitle": "Activate your account",
+    "backToLogin": "Back to sign in",
+    "bootstrapErrorDescription": "The session service did not respond. Try again shortly.",
+    "bootstrapErrorTitle": "Session unavailable",
+    "callback": {
+      "continue": "Continue",
+      "error": {
+        "description": "The connector did not complete sign-in.",
+        "title": "Sign-in failed"
+      },
+      "processing": {
+        "description": "The connector response is being verified.",
+        "title": "Completing sign-in"
+      },
+      "success": {
+        "description": "Your external identity was verified.",
+        "title": "Sign-in complete"
+      }
+    },
+    "continueWith": "Continue with {{name}}",
+    "email": "Email address",
+    "forgotPassword": "Forgot password?",
+    "loginDescription": "Use a local account or a configured external connector.",
+    "loginFailed": "The credentials could not be verified.",
+    "loginTitle": "Sign in to PVLog",
+    "newPassword": "New password",
+    "password": "Password",
+    "recoveryDescription": "Enter your email address to request a recovery link.",
+    "recoverySent": "If the account exists, a recovery link has been sent.",
+    "recoveryTitle": "Recover your account",
+    "sendRecovery": "Send recovery link",
+    "signIn": "Sign in"
+  },
+  "errors": {
+    "boundaryDescription": "Reload the page or return later.",
+    "boundaryTitle": "This view could not be displayed",
+    "forbiddenDescription": "Your account does not have permission to open this view.",
+    "forbiddenTitle": "Access denied"
+  },
+  "nav": {
+    "account": "Account {{id}}",
+    "alerts": "Alerts",
+    "dashboard": "Dashboard",
+    "system": "System {{id}}"
+  },
+  "shell": {
+    "closeNavigation": "Close navigation",
+    "openNavigation": "Open navigation",
+    "primaryNavigation": "Primary navigation",
+    "skip": "Skip to main content",
+    "theme": "Change colour theme",
+    "title": "Photovoltaic operations"
   }
 }
