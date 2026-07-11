@@ -24,7 +24,7 @@ async fn sqlite_management_and_accounts_plan_apply_and_verify_independently()
     assert_eq!(initial.len(), 3);
     assert_eq!(initial[0].kind, MigrationKind::SqliteManagement);
     assert!(initial.iter().all(|status| !status.compatible));
-    assert_eq!(migration_plan(&target).await?.len(), 18);
+    assert_eq!(migration_plan(&target).await?.len(), 20);
     assert!(ensure_schema_compatible(&target).await.is_err());
 
     let applied = apply_migrations(&target).await?;
