@@ -1,5 +1,6 @@
 //! Deterministic data-quality detection over accepted and rejected ingestion metadata.
 
+use serde::Serialize;
 use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -28,7 +29,8 @@ pub struct DataQualityPolicy {
     pub aggregate_lag_threshold_millis: u64,
 }
 
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum DataQualityKind {
     MissingInterval,
     SuspectObservation,
@@ -38,7 +40,8 @@ pub enum DataQualityKind {
     AggregateLag,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DataQualityIssue {
     pub kind: DataQualityKind,
     pub start_epoch_millis: i64,

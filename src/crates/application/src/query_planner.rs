@@ -1,6 +1,7 @@
 //! Resolution-aware planning for telemetry reads.
 
 use chrono_tz::Tz;
+use serde::Serialize;
 use std::collections::BTreeSet;
 use thiserror::Error;
 
@@ -9,7 +10,8 @@ const MILLIS_PER_HOUR: u64 = 60 * MILLIS_PER_MINUTE;
 const MILLIS_PER_DAY: u64 = 24 * MILLIS_PER_HOUR;
 
 /// A queryable canonical telemetry field.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SeriesField {
     GenerationPower,
     GenerationEnergy,
@@ -30,7 +32,8 @@ impl SeriesField {
 }
 
 /// Resolution requested by the caller.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RequestedResolution {
     Auto,
     Raw,
@@ -42,7 +45,8 @@ pub enum RequestedResolution {
 }
 
 /// Physical representation selected by the planner.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum QueryResolution {
     Raw,
     FifteenMinutes,

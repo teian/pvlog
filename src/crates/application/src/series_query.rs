@@ -5,10 +5,12 @@ use crate::{
 };
 use async_trait::async_trait;
 use pvlog_domain::SystemId;
+use serde::Serialize;
 use std::{collections::BTreeSet, sync::Arc};
 use thiserror::Error;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SeriesUnit {
     Watts,
     WattHours,
@@ -17,21 +19,24 @@ pub enum SeriesUnit {
     Integer,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum GapKind {
     Missing,
     Suspect,
     IncompleteCoverage,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SeriesGap {
     pub start_epoch_millis: i64,
     pub end_epoch_millis: i64,
     pub kind: GapKind,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SeriesPoint {
     pub timestamp_epoch_millis: i64,
     pub value: i64,
@@ -40,7 +45,8 @@ pub struct SeriesPoint {
     pub provenance: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlannedSeries {
     pub field: SeriesField,
     pub unit: SeriesUnit,
@@ -48,7 +54,8 @@ pub struct PlannedSeries {
     pub gaps: Vec<SeriesGap>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SeriesQueryResult {
     pub actual_resolution: QueryResolution,
     pub timezone: String,

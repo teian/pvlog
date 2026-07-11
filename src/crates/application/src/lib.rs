@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+mod analytics_api;
 mod api_token;
 mod authorization_boundary;
 mod batch_ingestion;
@@ -31,6 +32,10 @@ mod system_configuration;
 mod system_lifecycle;
 mod user_lifecycle;
 
+pub use analytics_api::{
+    AnalysisExportFormat, AnalysisExportRequest, AnalysisExportResult, ModernAnalyticsError,
+    ModernAnalyticsUseCases,
+};
 pub use api_token::{ApiToken, ApiTokenError, ApiTokenRecord, ApiTokenRepository, ApiTokenService};
 pub use authorization_boundary::{
     AuthorizationBoundary, AuthorizationBoundaryError, AuthorizationBoundaryPorts,

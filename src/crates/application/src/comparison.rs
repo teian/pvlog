@@ -1,6 +1,7 @@
 //! Privacy-safe system comparisons and deterministic ladders.
 
 use pvlog_domain::{RankingState, SystemId, TeamId, Visibility};
+use serde::Serialize;
 use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -23,7 +24,8 @@ pub struct ComparisonCandidate {
     pub projection_updated_at_epoch_millis: i64,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum ComparisonMetric {
     TotalGeneration,
     NormalizedGeneration,
@@ -35,7 +37,8 @@ pub struct ComparisonPolicy {
     pub maximum_projection_age_millis: u64,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ComparisonEntry {
     pub rank: u32,
     pub system_id: SystemId,

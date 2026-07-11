@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+async-trait.workspace = true
 axum.workspace = true
 garde.workspace = true
 pvlog-application = { path = "../application" }
@@ -49,6 +50,10 @@ path = "../../../tests/rust/api/managed_resource_endpoints.rs"
 [[test]]
 name = "telemetry-endpoints"
 path = "../../../tests/rust/api/telemetry_endpoints.rs"
+
+[[test]]
+name = "analytics-endpoints"
+path = "../../../tests/rust/api/analytics_endpoints.rs"
 
 [lints]
 workspace = true
