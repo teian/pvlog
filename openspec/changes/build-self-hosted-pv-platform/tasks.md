@@ -45,45 +45,45 @@
 - [x] 4.4 Implement multiple provider-neutral OIDC connectors with discovery, authorization callback, issuer/audience/signature/time validation, state, nonce, PKCE, secret references, and connector health tests.
 - [x] 4.5 Implement generic OAuth2 Authorization Code connectors with configured endpoints, state/PKCE, normalized user-info subject/name/email/avatar mappings, encrypted server-side token handling, and fake-provider tests.
 - [x] 4.6 Add versioned administrator-facing Google, GitHub, Facebook, and X preset definitions, setup validation, current-provider UI/configuration-catalog conformance tests under `tests/ui/`, and display metadata without vendor-named backend DTOs/services/settings/tests.
-- [ ] 4.7 Implement just-in-time local user provisioning plus explicit external identity link/unlink with connector-subject uniqueness, recent reauthentication, verified-email opt-in policy, last-login protection, and takeover tests.
-- [ ] 4.8 Implement secure browser session cookies, rotation, CSRF protection, idle/absolute expiry, concurrent-session policy, logout/revocation, and browser-focused security tests for every login method.
-- [ ] 4.9 Implement one-time display and keyed-hash storage for modern API tokens scoped by action/account/system, including expiry, rotation, revocation, and constant-time verification.
-- [ ] 4.10 Implement per-system legacy PVOutput read-only/read-write keys and header/query authentication mapped to canonical principals and RBAC permissions.
-- [ ] 4.11 Implement authorization before account-database routing and append-only management/account audit recording for login, linking, RBAC, session, credential, destructive, import/export, and administrative events.
-- [ ] 4.12 Implement configurable principal quotas and rate limiting with modern metadata, legacy opt-in headers, retry timing, and deterministic tests.
+- [x] 4.7 Implement just-in-time local user provisioning plus explicit external identity link/unlink with connector-subject uniqueness, recent reauthentication, verified-email opt-in policy, last-login protection, and takeover tests.
+- [x] 4.8 Implement secure browser session cookies, rotation, CSRF protection, idle/absolute expiry, concurrent-session policy, logout/revocation, and browser-focused security tests for every login method.
+- [x] 4.9 Implement one-time display and keyed-hash storage for modern API tokens scoped by action/account/system, including expiry, rotation, revocation, and constant-time verification.
+- [x] 4.10 Implement per-system legacy PVOutput read-only/read-write keys and header/query authentication mapped to canonical principals and RBAC permissions.
+- [x] 4.11 Implement authorization before account-database routing and append-only management/account audit recording for login, linking, RBAC, session, credential, destructive, import/export, and administrative events.
+- [x] 4.12 Implement configurable principal quotas and rate limiting with modern metadata, legacy opt-in headers, retry timing, and deterministic tests.
 
 ## 5. System Management and Modern Resource API
 
-- [ ] 5.1 Implement system create/read/update/archive/restore/delete use cases with safe defaults, optimistic concurrency, audit, and domain tests.
-- [ ] 5.2 Implement effective-dated equipment/capacity, tariffs, calculation settings, privacy, and extended-channel use cases with validation tests.
-- [ ] 5.3 Add `/api/v1` Axum routing, content negotiation, request IDs, body/concurrency/time limits, compression, CORS/CSP/security headers, and RFC 9457 problem middleware.
-- [ ] 5.4 Implement modern system, equipment, tariff, channel, membership, and credential endpoints with ETags, scopes, examples, and integration tests on both databases.
-- [ ] 5.5 Implement deterministic filter/sort/cursor pagination primitives and contract tests for concurrent inserts, changed filters, expiry, and invalid cursors.
-- [ ] 5.6 Implement dry-run/commit metadata import and asynchronous checksummed system export resources with permissions, expiry, and integrity tests.
-- [ ] 5.7 Expand OpenAPI schemas, security requirements, examples, errors, and operation IDs for every completed system-management route and pass route coverage checks.
+- [x] 5.1 Implement system create/read/update/archive/restore/delete use cases with safe defaults, optimistic concurrency, audit, and domain tests.
+- [x] 5.2 Implement effective-dated equipment/capacity, tariffs, calculation settings, privacy, and extended-channel use cases with validation tests.
+- [x] 5.3 Add `/api/v1` Axum routing, content negotiation, request IDs, body/concurrency/time limits, compression, CORS/CSP/security headers, and RFC 9457 problem middleware.
+- [x] 5.4 Implement modern system, equipment, tariff, channel, membership, and credential endpoints with ETags, scopes, examples, and integration tests on both databases.
+- [x] 5.5 Implement deterministic filter/sort/cursor pagination primitives and contract tests for concurrent inserts, changed filters, expiry, and invalid cursors.
+- [x] 5.6 Implement dry-run/commit metadata import and asynchronous checksummed system export resources with permissions, expiry, and integrity tests.
+- [x] 5.7 Expand OpenAPI schemas, security requirements, examples, errors, and operation IDs for every completed system-management route and pass route coverage checks.
 
 ## 6. Canonical Telemetry Ingestion
 
-- [ ] 6.1 Implement canonical ingestion commands that normalize explicit units, timestamps, source/provenance, quality flags, battery fields, and registered extended channels.
-- [ ] 6.2 Implement physical/configuration validation, dependent-field rules, net/cumulative modes, counter reset/rollover handling, and table-driven edge-case tests.
-- [ ] 6.3 Implement transactional single-observation insertion with uniqueness, aggregation invalidation, audit context, routed account ownership, and identical SQLite/PostgreSQL outcomes.
-- [ ] 6.4 Implement idempotency-key persistence/replay/conflict behavior with expiry policy and concurrent-request tests.
-- [ ] 6.5 Implement bounded batch ingestion with atomic and partial modes, stable indexed outcomes, request limits, and rollback tests.
-- [ ] 6.6 Implement correction and deletion commands with optimistic concurrency, hot-row updates, archived overlays, immediate merged visibility, and rebuild invalidation.
-- [ ] 6.7 Implement ingestion backpressure, overload problems, `Retry-After`, queue-lag gates, and saturation metrics with load-oriented integration tests.
-- [ ] 6.8 Implement modern single, batch, correction, and delete telemetry endpoints and complete their OpenAPI contracts and executable examples.
+- [x] 6.1 Implement canonical ingestion commands that normalize explicit units, timestamps, source/provenance, quality flags, battery fields, and registered extended channels.
+- [x] 6.2 Implement physical/configuration validation, dependent-field rules, net/cumulative modes, counter reset/rollover handling, and table-driven edge-case tests.
+- [x] 6.3 Implement transactional single-observation insertion with uniqueness, aggregation invalidation, audit context, routed account ownership, and identical SQLite/PostgreSQL outcomes.
+- [x] 6.4 Implement idempotency-key persistence/replay/conflict behavior with expiry policy and concurrent-request tests.
+- [x] 6.5 Implement bounded batch ingestion with atomic and partial modes, stable indexed outcomes, request limits, and rollback tests.
+- [x] 6.6 Implement correction and deletion commands with optimistic concurrency, hot-row updates, archived overlays, immediate merged visibility, and rebuild invalidation.
+- [x] 6.7 Implement ingestion backpressure, overload problems, `Retry-After`, queue-lag gates, and saturation metrics with load-oriented integration tests.
+- [x] 6.8 Implement modern single, batch, correction, and delete telemetry endpoints and complete their OpenAPI contracts and executable examples.
 
 ## 7. Durable Segments, Rollups, and Reconciliation
 
-- [ ] 7.1 Define and document the versioned Protobuf columnar segment envelope, deterministic timestamp/value encoding, Zstandard settings, lengths, and content hashes.
-- [ ] 7.2 Implement segment encode/decode/version dispatch with golden fixtures under `tests/fixtures/`, sparse/extended values, corruption detection, deterministic bytes, and fuzz/property tests under `tests/rust/`.
-- [ ] 7.3 Implement leased idempotent system-day compaction with recoverable state transitions and verified cleanup only after segment and rollup durability.
-- [ ] 7.4 Implement merged hot/segment/overlay raw reads with deterministic ordering, deduplication, quality metadata, and old-version fixtures.
-- [ ] 7.5 Implement overlay folding and atomic segment replacement with generation checks, crash-point tests, and immediate query consistency.
-- [ ] 7.6 Implement 15-minute, hourly, daily, monthly, and yearly rollup builders with sums/min/max/count/first/last/coverage and timezone/DST tests.
-- [ ] 7.7 Implement daily/lifetime summaries, dependency invalidation, idempotent rebuilds, and reconciliation of late/corrected data.
-- [ ] 7.8 Implement integrity verification and repair planning for hot rows, segments, hashes, overlays, rollups, summaries, and orphaned jobs without silent data mutation.
-- [ ] 7.9 Implement management dispatch plus account-local database-backed job leasing, heartbeats, bounded retries, jitter, idempotent handlers, dead-letter inspection, and worker restart tests.
+- [x] 7.1 Define and document the versioned Protobuf columnar segment envelope, deterministic timestamp/value encoding, Zstandard settings, lengths, and content hashes.
+- [x] 7.2 Implement segment encode/decode/version dispatch with golden fixtures under `tests/fixtures/`, sparse/extended values, corruption detection, deterministic bytes, and fuzz/property tests under `tests/rust/`.
+- [x] 7.3 Implement leased idempotent system-day compaction with recoverable state transitions and verified cleanup only after segment and rollup durability.
+- [x] 7.4 Implement merged hot/segment/overlay raw reads with deterministic ordering, deduplication, quality metadata, and old-version fixtures.
+- [x] 7.5 Implement overlay folding and atomic segment replacement with generation checks, crash-point tests, and immediate query consistency.
+- [x] 7.6 Implement 15-minute, hourly, daily, monthly, and yearly rollup builders with sums/min/max/count/first/last/coverage and timezone/DST tests.
+- [x] 7.7 Implement daily/lifetime summaries, dependency invalidation, idempotent rebuilds, and reconciliation of late/corrected data.
+- [x] 7.8 Implement integrity verification and repair planning for hot rows, segments, hashes, overlays, rollups, summaries, and orphaned jobs without silent data mutation.
+- [x] 7.9 Implement management dispatch plus account-local database-backed job leasing, heartbeats, bounded retries, jitter, idempotent handlers, dead-letter inspection, and worker restart tests.
 
 ## 8. Query, Statistics, and Chart API
 
