@@ -20,6 +20,7 @@ mod observation_correction;
 mod oidc;
 mod pagination;
 mod ports;
+mod query_planner;
 mod rate_limit;
 mod rbac_management;
 mod system_configuration;
@@ -93,6 +94,10 @@ pub use ports::{
     IdentityService, InsolationPoint, InsolationProvider, JobQueue, PortError, SecretResolver,
     SupplyPoint, SupplyProvider, Transaction, UnitOfWork, WebhookRequest, WebhookResponse,
     WebhookSender,
+};
+pub use query_planner::{
+    QueryPlan, QueryPlanError, QueryPlanRequest, QueryResolution, QuerySource, RawSources,
+    RequestedResolution, SeriesField, plan_query,
 };
 pub use rate_limit::{
     PrincipalQuota, RateLimitDecision, RateLimitError, RateLimitMetadata, RateLimitRepository,

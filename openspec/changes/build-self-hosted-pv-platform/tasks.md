@@ -87,7 +87,7 @@
 
 ## 8. Query, Statistics, and Chart API
 
-- [ ] 8.1 Implement a query planner that selects hot rows, archived segments, or the coarsest valid rollup from time range, requested resolution, fields, timezone, and maximum points.
+- [x] 8.1 Implement a query planner that selects hot rows, archived segments, or the coarsest valid rollup from time range, requested resolution, fields, timezone, and maximum points.
 - [ ] 8.2 Implement multi-series raw and aggregate queries with explicit units, resolution, coverage, gaps, provenance, and bounded result validation.
 - [ ] 8.3 Implement daily/monthly/yearly/lifetime statistics for generation, consumption, grid, efficiency, peaks, environment, battery, finance, and coverage.
 - [ ] 8.4 Implement missing/suspect interval, source conflict, counter reset, rejected-ingestion, and aggregate-lag detection without fabricated raw points.

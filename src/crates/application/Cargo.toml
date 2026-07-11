@@ -11,6 +11,7 @@ argon2.workspace = true
 async-trait.workspace = true
 blake3.workspace = true
 chacha20poly1305.workspace = true
+chrono-tz.workspace = true
 openidconnect.workspace = true
 oauth2.workspace = true
 pvlog-domain = { path = "../domain" }
@@ -100,6 +101,10 @@ path = "../../../tests/rust/application/observation_correction.rs"
 [[test]]
 name = "ingestion-admission"
 path = "../../../tests/rust/application/ingestion_admission.rs"
+
+[[test]]
+name = "query-planner"
+path = "../../../tests/rust/application/query_planner.rs"
 
 [lints]
 workspace = true
