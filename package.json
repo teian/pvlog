@@ -31,6 +31,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test --config playwright.config.ts",
     "test:compatibility-inventory": "node tests/compatibility/inventory-contract.mjs",
+    "test:compatibility-conformance": "node tests/compatibility/conformance-contract.mjs",
     "test:query-performance": "node tests/performance/chart-query-harness.mjs",
     "typecheck": "tsc -b"
   },

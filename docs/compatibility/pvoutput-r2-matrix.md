@@ -31,3 +31,12 @@
 
 The machine-readable inventory preserves every documented section, table row, list item,
 success/error heading, restriction, and donation note for conformance-test traceability.
+
+## Conformance status
+
+The dated [machine-readable conformance ledger](../../tests/fixtures/pvoutput/r2-conformance-2026-07-11.json)
+links every route to its passing compatibility test. The two notification routes are explicit
+intentional differences pending the shared alert/webhook event model in OpenSpec task 11.7; they
+are not reported as implemented. The executable
+[conformance contract](../../tests/compatibility/conformance-contract.mjs) requires the ledger to
+match all 21 inventory routes and rejects missing test evidence or undocumented differences.

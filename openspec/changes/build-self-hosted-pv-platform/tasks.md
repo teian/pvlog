@@ -116,7 +116,7 @@
 - [x] 10.5 Define insolation and regional supply adapter contracts, persistence/cache/provenance models, circuit breakers, and administrator configuration without bundling unapproved data.
 - [x] 10.6 Implement configured insolation and regional supply adapters with freshness/licensing metadata, degraded behavior, and deterministic fake-provider tests.
 - [x] 10.7 Implement and fixture-test `getinsolation.jsp` and `getsupply.jsp`, including region keys, timezone/date/history behavior, unavailable providers, and field order.
-- [ ] 10.8 Run the full 21-route compatibility conformance suite and require every matrix entry to link to a passing test or documented intentional difference.
+- [x] 10.8 Run the full 21-route compatibility conformance suite and require every matrix entry to link to a passing test or documented intentional difference.
 
 ## 11. Alerts, Webhooks, and Notifications
 
