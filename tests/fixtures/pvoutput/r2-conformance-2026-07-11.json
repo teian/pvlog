@@ -98,13 +98,13 @@
     },
     {
       "route": "/service/r2/registernotification.jsp",
-      "status": "intentional_difference",
-      "reason": "Deferred with the alert and webhook event model to OpenSpec task 11.7."
+      "status": "passing",
+      "evidence": "tests/compatibility/legacy_notifications.rs"
     },
     {
       "route": "/service/r2/deregisternotification.jsp",
-      "status": "intentional_difference",
-      "reason": "Deferred with the alert and webhook event model to OpenSpec task 11.7."
+      "status": "passing",
+      "evidence": "tests/compatibility/legacy_notifications.rs"
     }
   ]
 }

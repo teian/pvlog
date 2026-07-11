@@ -64,6 +64,10 @@ path = "../../../tests/compatibility/legacy_teams.rs"
 name = "legacy-providers"
 path = "../../../tests/compatibility/legacy_providers.rs"
 
+[[test]]
+name = "legacy-notifications"
+path = "../../../tests/compatibility/legacy_notifications.rs"
+
 [lib]
 path = "src/lib.rs"
 

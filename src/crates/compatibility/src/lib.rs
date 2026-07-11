@@ -6,6 +6,7 @@ mod add_batch_status;
 mod add_output;
 mod add_status;
 mod community;
+mod legacy_notifications;
 mod legacy_providers;
 mod legacy_teams;
 mod outputs;
@@ -24,6 +25,10 @@ pub use community::{
     ExtendedConfigUpdate, LegacyArrayDetails, LegacyCommunityError, LegacyCommunityUseCases,
     LegacyFavouriteSystem, LegacyLadderSummary, LegacySearchQuery, LegacySearchSystem,
     LegacySystemDetails, LegacySystemOptions, LegacySystemUpdate, legacy_community_router,
+};
+pub use legacy_notifications::{
+    LegacyNotificationCallback, LegacyNotificationError, LegacyNotificationRegistration,
+    LegacyNotificationUseCases, legacy_notification_callback_body, legacy_notification_router,
 };
 pub use legacy_providers::{
     LegacyInsolationPoint, LegacyInsolationQuery, LegacyProviderError, LegacyProviderUseCases,
