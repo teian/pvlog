@@ -125,7 +125,7 @@
 - [x] 11.3 Implement webhook subscription verification/lifecycle, event schemas, stable event IDs, keyed signatures, timestamp/replay guidance, and secret rotation.
 - [x] 11.4 Implement SSRF-safe delivery with HTTPS defaults, DNS re-resolution, address blocking, redirect/body/time limits, explicit local-network policy, and security tests.
 - [x] 11.5 Implement leased delivery attempts, exponential backoff/jitter, outcome history, dead-letter state, administrative replay, and observability.
-- [ ] 11.6 Implement modern alert, event, webhook, attempt, and replay endpoints plus OpenAPI webhook/callback definitions and verified consumer examples.
+- [x] 11.6 Implement modern alert, event, webhook, attempt, and replay endpoints plus OpenAPI webhook/callback definitions and verified consumer examples.
 - [ ] 11.7 Implement and fixture-test `registernotification.jsp` and `deregisternotification.jsp`, all documented alert types, registration limits, and legacy callback payloads.
 
 ## 12. Web Application Product Workflows

@@ -26,6 +26,8 @@ tags:
     description: Privacy-safe comparisons and ladders
   - name: Exports
     description: Synchronous and asynchronous analysis exports
+  - name: Notifications
+    description: Alert rules, events, webhook subscriptions, and delivery attempts
 paths:
   /api/v1/health/live:
     get:
@@ -65,7 +67,12 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/CreateSystem" }
-            example: { accountId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70, name: Roof PV, timezone: Europe/Berlin }
+            example:
+              {
+                accountId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70,
+                name: Roof PV,
+                timezone: Europe/Berlin,
+              }
       responses:
         "201": { $ref: "#/components/responses/SystemResponse" }
         "422": { $ref: "#/components/responses/ValidationProblem" }
@@ -95,7 +102,12 @@ paths:
       security: [{ bearerAuth: [systems:write] }]
       parameters:
         - $ref: "#/components/parameters/IfMatch"
-        - { name: X-Confirm-Delete, in: header, required: true, schema: { type: boolean } }
+        - {
+            name: X-Confirm-Delete,
+            in: header,
+            required: true,
+            schema: { type: boolean },
+          }
       responses:
         "204": { description: System deletion accepted }
         "412": { $ref: "#/components/responses/PreconditionProblem" }
@@ -109,7 +121,11 @@ paths:
       parameters:
         - $ref: "#/components/parameters/SystemId"
         - $ref: "#/components/parameters/IfMatch"
-      responses: { "200": { $ref: "#/components/responses/SystemResponse" }, "412": { $ref: "#/components/responses/PreconditionProblem" } }
+      responses:
+        {
+          "200": { $ref: "#/components/responses/SystemResponse" },
+          "412": { $ref: "#/components/responses/PreconditionProblem" },
+        }
   /api/v1/systems/{id}/restore:
     post:
       operationId: restoreSystem
@@ -120,27 +136,168 @@ paths:
       parameters:
         - $ref: "#/components/parameters/SystemId"
         - $ref: "#/components/parameters/IfMatch"
-      responses: { "200": { $ref: "#/components/responses/SystemResponse" }, "412": { $ref: "#/components/responses/PreconditionProblem" } }
+      responses:
+        {
+          "200": { $ref: "#/components/responses/SystemResponse" },
+          "412": { $ref: "#/components/responses/PreconditionProblem" },
+        }
   /api/v1/accounts/{account_id}/systems/{system_id}/equipment:
-    parameters: [{ $ref: "#/components/parameters/AccountId" }, { $ref: "#/components/parameters/NestedSystemId" }]
-    get: { operationId: listEquipment, summary: List equipment, description: Lists effective-dated equipment for one system., tags: [Systems], security: [{ bearerAuth: [systems:read] }], responses: { "200": { $ref: "#/components/responses/ResourceList" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
-    post: { operationId: createEquipment, summary: Create equipment, description: Adds validated effective-dated equipment to one system., tags: [Systems], security: [{ bearerAuth: [systems:write] }], requestBody: { $ref: "#/components/requestBodies/ManagedResource" }, responses: { "201": { $ref: "#/components/responses/ManagedResource" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+    parameters:
+      [
+        { $ref: "#/components/parameters/AccountId" },
+        { $ref: "#/components/parameters/NestedSystemId" },
+      ]
+    get:
+      {
+        operationId: listEquipment,
+        summary: List equipment,
+        description: Lists effective-dated equipment for one system.,
+        tags: [Systems],
+        security: [{ bearerAuth: [systems:read] }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/ResourceList" },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
+    post:
+      {
+        operationId: createEquipment,
+        summary: Create equipment,
+        description: Adds validated effective-dated equipment to one system.,
+        tags: [Systems],
+        security: [{ bearerAuth: [systems:write] }],
+        requestBody: { $ref: "#/components/requestBodies/ManagedResource" },
+        responses:
+          {
+            "201": { $ref: "#/components/responses/ManagedResource" },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
   /api/v1/accounts/{account_id}/systems/{system_id}/tariffs:
-    parameters: [{ $ref: "#/components/parameters/AccountId" }, { $ref: "#/components/parameters/NestedSystemId" }]
-    get: { operationId: listTariffs, summary: List tariffs, description: Lists effective-dated tariffs for one system., tags: [Systems], security: [{ bearerAuth: [systems:read] }], responses: { "200": { $ref: "#/components/responses/ResourceList" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
-    post: { operationId: createTariff, summary: Create tariff, description: Adds a validated effective-dated tariff to one system., tags: [Systems], security: [{ bearerAuth: [systems:write] }], requestBody: { $ref: "#/components/requestBodies/ManagedResource" }, responses: { "201": { $ref: "#/components/responses/ManagedResource" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+    parameters:
+      [
+        { $ref: "#/components/parameters/AccountId" },
+        { $ref: "#/components/parameters/NestedSystemId" },
+      ]
+    get:
+      {
+        operationId: listTariffs,
+        summary: List tariffs,
+        description: Lists effective-dated tariffs for one system.,
+        tags: [Systems],
+        security: [{ bearerAuth: [systems:read] }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/ResourceList" },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
+    post:
+      {
+        operationId: createTariff,
+        summary: Create tariff,
+        description: Adds a validated effective-dated tariff to one system.,
+        tags: [Systems],
+        security: [{ bearerAuth: [systems:write] }],
+        requestBody: { $ref: "#/components/requestBodies/ManagedResource" },
+        responses:
+          {
+            "201": { $ref: "#/components/responses/ManagedResource" },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
   /api/v1/accounts/{account_id}/systems/{system_id}/channels:
-    parameters: [{ $ref: "#/components/parameters/AccountId" }, { $ref: "#/components/parameters/NestedSystemId" }]
-    get: { operationId: listChannels, summary: List channels, description: Lists typed extended channels for one system., tags: [Systems], security: [{ bearerAuth: [systems:read] }], responses: { "200": { $ref: "#/components/responses/ResourceList" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
-    post: { operationId: createChannel, summary: Create channel, description: Adds a validated typed extended channel to one system., tags: [Systems], security: [{ bearerAuth: [systems:write] }], requestBody: { $ref: "#/components/requestBodies/ManagedResource" }, responses: { "201": { $ref: "#/components/responses/ManagedResource" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+    parameters:
+      [
+        { $ref: "#/components/parameters/AccountId" },
+        { $ref: "#/components/parameters/NestedSystemId" },
+      ]
+    get:
+      {
+        operationId: listChannels,
+        summary: List channels,
+        description: Lists typed extended channels for one system.,
+        tags: [Systems],
+        security: [{ bearerAuth: [systems:read] }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/ResourceList" },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
+    post:
+      {
+        operationId: createChannel,
+        summary: Create channel,
+        description: Adds a validated typed extended channel to one system.,
+        tags: [Systems],
+        security: [{ bearerAuth: [systems:write] }],
+        requestBody: { $ref: "#/components/requestBodies/ManagedResource" },
+        responses:
+          {
+            "201": { $ref: "#/components/responses/ManagedResource" },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
   /api/v1/accounts/{account_id}/memberships:
     parameters: [{ $ref: "#/components/parameters/AccountId" }]
-    get: { operationId: listMemberships, summary: List memberships, description: Lists authorized memberships in one account., tags: [Systems], security: [{ bearerAuth: [systems:read] }], responses: { "200": { $ref: "#/components/responses/ResourceList" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
-    post: { operationId: createMembership, summary: Create membership, description: Adds a validated membership to one account., tags: [Systems], security: [{ bearerAuth: [systems:write] }], requestBody: { $ref: "#/components/requestBodies/ManagedResource" }, responses: { "201": { $ref: "#/components/responses/ManagedResource" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+    get:
+      {
+        operationId: listMemberships,
+        summary: List memberships,
+        description: Lists authorized memberships in one account.,
+        tags: [Systems],
+        security: [{ bearerAuth: [systems:read] }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/ResourceList" },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
+    post:
+      {
+        operationId: createMembership,
+        summary: Create membership,
+        description: Adds a validated membership to one account.,
+        tags: [Systems],
+        security: [{ bearerAuth: [systems:write] }],
+        requestBody: { $ref: "#/components/requestBodies/ManagedResource" },
+        responses:
+          {
+            "201": { $ref: "#/components/responses/ManagedResource" },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
   /api/v1/accounts/{account_id}/credentials:
     parameters: [{ $ref: "#/components/parameters/AccountId" }]
-    get: { operationId: listCredentials, summary: List credentials, description: Lists non-secret credential metadata in one account., tags: [Systems], security: [{ bearerAuth: [systems:read] }], responses: { "200": { $ref: "#/components/responses/ResourceList" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
-    post: { operationId: createCredential, summary: Create credential, description: Creates a scoped credential and returns its secret only once., tags: [Systems], security: [{ bearerAuth: [systems:write] }], requestBody: { $ref: "#/components/requestBodies/ManagedResource" }, responses: { "201": { $ref: "#/components/responses/ManagedResource" }, "403": { $ref: "#/components/responses/ForbiddenProblem" } } }
+    get:
+      {
+        operationId: listCredentials,
+        summary: List credentials,
+        description: Lists non-secret credential metadata in one account.,
+        tags: [Systems],
+        security: [{ bearerAuth: [systems:read] }],
+        responses:
+          {
+            "200": { $ref: "#/components/responses/ResourceList" },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
+    post:
+      {
+        operationId: createCredential,
+        summary: Create credential,
+        description: Creates a scoped credential and returns its secret only once.,
+        tags: [Systems],
+        security: [{ bearerAuth: [systems:write] }],
+        requestBody: { $ref: "#/components/requestBodies/ManagedResource" },
+        responses:
+          {
+            "201": { $ref: "#/components/responses/ManagedResource" },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
   /api/v1/systems/{system_id}/observations:
     parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     post:
@@ -149,9 +306,42 @@ paths:
       description: Normalizes and durably stores one idempotent canonical observation.
       tags: [Telemetry]
       security: [{ bearerAuth: [telemetry:write] }]
-      parameters: [{ name: Idempotency-Key, in: header, required: true, schema: { type: string, minLength: 1 } }]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ObservationInput" }, example: { observedAtEpochMillis: 1780000000000, generationPowerWatts: 4200, generationEnergyWh: 350 } } } }
-      responses: { "201": { description: Observation accepted, content: { application/json: { schema: { type: object } } } }, "422": { $ref: "#/components/responses/ValidationProblem" }, "503": { $ref: "#/components/responses/OverloadProblem" } }
+      parameters:
+        [
+          {
+            name: Idempotency-Key,
+            in: header,
+            required: true,
+            schema: { type: string, minLength: 1 },
+          },
+        ]
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/ObservationInput" },
+                  example:
+                    {
+                      observedAtEpochMillis: 1780000000000,
+                      generationPowerWatts: 4200,
+                      generationEnergyWh: 350,
+                    },
+                },
+            },
+        }
+      responses:
+        {
+          "201":
+            {
+              description: Observation accepted,
+              content: { application/json: { schema: { type: object } } },
+            },
+          "422": { $ref: "#/components/responses/ValidationProblem" },
+          "503": { $ref: "#/components/responses/OverloadProblem" },
+        }
   /api/v1/systems/{system_id}/observations/batch:
     parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     post:
@@ -160,26 +350,92 @@ paths:
       description: Processes a bounded batch in atomic or partial-result mode.
       tags: [Telemetry]
       security: [{ bearerAuth: [telemetry:write] }]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/ObservationBatchInput" } } } }
-      responses: { "200": { description: Stable indexed batch outcomes, content: { application/json: { schema: { type: object } } } }, "422": { $ref: "#/components/responses/ValidationProblem" }, "503": { $ref: "#/components/responses/OverloadProblem" } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    { $ref: "#/components/schemas/ObservationBatchInput" },
+                },
+            },
+        }
+      responses:
+        {
+          "200":
+            {
+              description: Stable indexed batch outcomes,
+              content: { application/json: { schema: { type: object } } },
+            },
+          "422": { $ref: "#/components/responses/ValidationProblem" },
+          "503": { $ref: "#/components/responses/OverloadProblem" },
+        }
   /api/v1/systems/{system_id}/observations/{observation_id}:
-    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }, { $ref: "#/components/parameters/ObservationId" }]
+    parameters:
+      [
+        { $ref: "#/components/parameters/NestedSystemId" },
+        { $ref: "#/components/parameters/ObservationId" },
+      ]
     patch:
       operationId: correctObservation
       summary: Correct an observation
       description: Applies an optimistic replacement or deletion overlay and schedules reconciliation.
       tags: [Telemetry]
       security: [{ bearerAuth: [telemetry:write] }]
-      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [expectedVersion, reason, delete], properties: { expectedVersion: { type: integer, minimum: 1 }, reason: { type: string, minLength: 1 }, generationPowerWatts: { type: integer }, delete: { type: boolean } } } } } }
-      responses: { "200": { description: Immediately visible merged observation, content: { application/json: { schema: { type: object } } } }, "409": { $ref: "#/components/responses/ConflictProblem" } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    {
+                      type: object,
+                      required: [expectedVersion, reason, delete],
+                      properties:
+                        {
+                          expectedVersion: { type: integer, minimum: 1 },
+                          reason: { type: string, minLength: 1 },
+                          generationPowerWatts: { type: integer },
+                          delete: { type: boolean },
+                        },
+                    },
+                },
+            },
+        }
+      responses:
+        {
+          "200":
+            {
+              description: Immediately visible merged observation,
+              content: { application/json: { schema: { type: object } } },
+            },
+          "409": { $ref: "#/components/responses/ConflictProblem" },
+        }
     delete:
       operationId: deleteObservation
       summary: Delete an observation
       description: Records an optimistic deletion while preserving audit and reconciliation history.
       tags: [Telemetry]
       security: [{ bearerAuth: [telemetry:write] }]
-      parameters: [{ $ref: "#/components/parameters/IfMatch" }, { name: X-Correction-Reason, in: header, required: true, schema: { type: string, minLength: 1 } }]
-      responses: { "204": { description: Deletion accepted }, "409": { $ref: "#/components/responses/ConflictProblem" } }
+      parameters:
+        [
+          { $ref: "#/components/parameters/IfMatch" },
+          {
+            name: X-Correction-Reason,
+            in: header,
+            required: true,
+            schema: { type: string, minLength: 1 },
+          },
+        ]
+      responses:
+        {
+          "204": { description: Deletion accepted },
+          "409": { $ref: "#/components/responses/ConflictProblem" },
+        }
   /api/v1/systems/{system_id}/series:
     parameters:
       - $ref: "#/components/parameters/NestedSystemId"
@@ -204,7 +460,11 @@ paths:
         "200":
           description: Resolution-aware multi-series result
           headers:
-            ETag: { schema: { type: string }, description: Validator for the query and source generations. }
+            ETag:
+              {
+                schema: { type: string },
+                description: Validator for the query and source generations.,
+              }
             Last-Modified: { schema: { type: string, format: http-date } }
             Vary: { schema: { type: string }, example: "Accept, Authorization" }
           content:
@@ -220,7 +480,12 @@ paths:
                       - field: generation_power
                         unit: watts
                         points:
-                          - { timestampEpochMillis: 1774738800000, value: 4200, coverageBasisPoints: 10000, qualityFlags: 0 }
+                          - {
+                              timestampEpochMillis: 1774738800000,
+                              value: 4200,
+                              coverageBasisPoints: 10000,
+                              qualityFlags: 0,
+                            }
                         gaps: []
         "304": { description: The query result has not changed. }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
@@ -242,11 +507,25 @@ paths:
       responses:
         "200":
           description: Period statistics
-          headers: { ETag: { schema: { type: string } }, Last-Modified: { schema: { type: string, format: http-date } } }
+          headers:
+            {
+              ETag: { schema: { type: string } },
+              Last-Modified: { schema: { type: string, format: http-date } },
+            }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/EnergyStatistics" }
-              example: { period: daily, generationWh: 18400, consumptionWh: 12100, gridImportWh: 2400, gridExportWh: 8700, efficiencyWhPerKw: 3066, peakGenerationWatts: 5800, coverageBasisPoints: 9850 }
+              example:
+                {
+                  period: daily,
+                  generationWh: 18400,
+                  consumptionWh: 12100,
+                  gridImportWh: 2400,
+                  gridExportWh: 8700,
+                  efficiencyWhPerKw: 3066,
+                  peakGenerationWatts: 5800,
+                  coverageBasisPoints: 9850,
+                }
         "304": { description: Statistics have not changed. }
         "422": { $ref: "#/components/responses/QueryProblem" }
   /api/v1/systems/{system_id}/data-quality:
@@ -265,9 +544,19 @@ paths:
           description: Ordered data-quality issues
           content:
             application/json:
-              schema: { type: array, items: { $ref: "#/components/schemas/DataQualityIssue" } }
+              schema:
+                {
+                  type: array,
+                  items: { $ref: "#/components/schemas/DataQualityIssue" },
+                }
               example:
-                - { kind: missing_interval, startEpochMillis: 1780000000000, endEpochMillis: 1780001800000, sourceReferences: [], reasonCode: not_reported }
+                - {
+                    kind: missing_interval,
+                    startEpochMillis: 1780000000000,
+                    endEpochMillis: 1780001800000,
+                    sourceReferences: [],
+                    reasonCode: not_reported,
+                  }
         "422": { $ref: "#/components/responses/QueryProblem" }
   /api/v1/comparisons:
     post:
@@ -281,9 +570,31 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/ComparisonRequest" }
-            example: { systemIds: [019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70, 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f71], metric: normalized_generation }
+            example:
+              {
+                systemIds:
+                  [
+                    019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70,
+                    019505c8-7c85-7f0b-9bc3-2a3c4d5e6f71,
+                  ],
+                metric: normalized_generation,
+              }
       responses:
-        "200": { description: Ranked comparison, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ComparisonEntry" } } } } }
+        "200":
+          {
+            description: Ranked comparison,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: array,
+                        items: { $ref: "#/components/schemas/ComparisonEntry" },
+                      },
+                  },
+              },
+          }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
         "422": { $ref: "#/components/responses/QueryProblem" }
   /api/v1/ladders:
@@ -299,13 +610,31 @@ paths:
           schema: { $ref: "#/components/schemas/UuidV7" }
         - name: metric
           in: query
-          schema: { $ref: "#/components/schemas/ComparisonMetric", default: normalized_generation }
+          schema:
+            {
+              $ref: "#/components/schemas/ComparisonMetric",
+              default: normalized_generation,
+            }
         - $ref: "#/components/parameters/IfNoneMatch"
       responses:
         "200":
           description: Ladder entries
-          headers: { ETag: { schema: { type: string } }, Last-Modified: { schema: { type: string, format: http-date } } }
-          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ComparisonEntry" } } } }
+          headers:
+            {
+              ETag: { schema: { type: string } },
+              Last-Modified: { schema: { type: string, format: http-date } },
+            }
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    {
+                      type: array,
+                      items: { $ref: "#/components/schemas/ComparisonEntry" },
+                    },
+                },
+            }
         "304": { description: Ladder projections have not changed. }
         "422": { $ref: "#/components/responses/QueryProblem" }
   /api/v1/systems/{system_id}/analysis-exports:
@@ -326,14 +655,38 @@ paths:
             schema: { $ref: "#/components/schemas/AnalysisExportRequest" }
             examples:
               csv:
-                value: { startEpochMillis: 1774738800000, endEpochMillis: 1774821600000, fields: [generation_power, consumption_power], resolution: hour, timezone: Europe/Berlin, maximumPoints: 2000, format: csv, asynchronous: false }
+                value:
+                  {
+                    startEpochMillis: 1774738800000,
+                    endEpochMillis: 1774821600000,
+                    fields: [generation_power, consumption_power],
+                    resolution: hour,
+                    timezone: Europe/Berlin,
+                    maximumPoints: 2000,
+                    format: csv,
+                    asynchronous: false,
+                  }
               queuedJson:
-                value: { startEpochMillis: 990000000000, endEpochMillis: 1780000000000, fields: [generation_energy], resolution: day, timezone: UTC, maximumPoints: 10000, format: json, asynchronous: true }
+                value:
+                  {
+                    startEpochMillis: 990000000000,
+                    endEpochMillis: 1780000000000,
+                    fields: [generation_energy],
+                    resolution: day,
+                    timezone: UTC,
+                    maximumPoints: 10000,
+                    format: json,
+                    asynchronous: true,
+                  }
       responses:
         "200":
           description: Synchronous export artifact
           headers:
-            Content-Disposition: { schema: { type: string }, example: attachment; filename="generation.csv" }
+            Content-Disposition:
+              {
+                schema: { type: string },
+                example: attachment; filename="generation.csv",
+              }
           content:
             text/csv:
               schema: { type: string }
@@ -344,28 +697,512 @@ paths:
               schema: { $ref: "#/components/schemas/SeriesQueryResult" }
         "202":
           description: Export job accepted
-          headers: { Location: { schema: { type: string, format: uri-reference }, example: /api/v1/jobs/019505c8-7c85-7f0b-9bc3-2a3c4d5e6f72 } }
-          content: { application/json: { schema: { $ref: "#/components/schemas/QueuedJob" }, example: { jobId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f72 } } }
+          headers:
+            {
+              Location:
+                {
+                  schema: { type: string, format: uri-reference },
+                  example: /api/v1/jobs/019505c8-7c85-7f0b-9bc3-2a3c4d5e6f72,
+                },
+            }
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/QueuedJob" },
+                  example: { jobId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f72 },
+                },
+            }
         "413": { $ref: "#/components/responses/RequiresAsyncProblem" }
         "422": { $ref: "#/components/responses/QueryProblem" }
+  /api/v1/accounts/{account_id}/alerts:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }]
+    get:
+      {
+        operationId: listAlertRules,
+        tags: [Notifications],
+        summary: List alert rules,
+        description: Returns alert rules visible in the selected account.,
+        security: [{ bearerAuth: [alerts:read] }],
+        responses:
+          {
+            "200":
+              {
+                description: Alert rules,
+                content:
+                  {
+                    application/json:
+                      {
+                        schema:
+                          {
+                            type: array,
+                            items: { $ref: "#/components/schemas/AlertRule" },
+                          },
+                      },
+                  },
+              },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
+    post:
+      {
+        operationId: createAlertRule,
+        tags: [Notifications],
+        summary: Create an alert rule,
+        description: Creates a validated timezone-aware alert rule.,
+        security: [{ bearerAuth: [alerts:write] }],
+        requestBody:
+          {
+            required: true,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/AlertRuleInput" } },
+              },
+          },
+        responses:
+          {
+            "201":
+              {
+                description: Alert rule created,
+                content:
+                  {
+                    application/json:
+                      { schema: { $ref: "#/components/schemas/AlertRule" } },
+                  },
+              },
+            "422": { $ref: "#/components/responses/ValidationProblem" },
+          },
+      }
+  /api/v1/accounts/{account_id}/alerts/{alert_id}:
+    parameters:
+      [
+        { $ref: "#/components/parameters/AccountId" },
+        {
+          name: alert_id,
+          in: path,
+          required: true,
+          schema: { $ref: "#/components/schemas/UuidV7" },
+        },
+      ]
+    patch:
+      {
+        operationId: updateAlertRule,
+        tags: [Notifications],
+        summary: Update an alert rule,
+        description: Updates mutable alert rule configuration.,
+        security: [{ bearerAuth: [alerts:write] }],
+        requestBody:
+          {
+            required: true,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/AlertRuleInput" } },
+              },
+          },
+        responses:
+          {
+            "200":
+              {
+                description: Alert rule updated,
+                content:
+                  {
+                    application/json:
+                      { schema: { $ref: "#/components/schemas/AlertRule" } },
+                  },
+              },
+            "422": { $ref: "#/components/responses/ValidationProblem" },
+          },
+      }
+    delete:
+      {
+        operationId: deleteAlertRule,
+        tags: [Notifications],
+        summary: Delete an alert rule,
+        description: Permanently removes one alert rule.,
+        security: [{ bearerAuth: [alerts:write] }],
+        responses:
+          {
+            "204": { description: Alert rule deleted },
+            "404": { $ref: "#/components/responses/NotFoundProblem" },
+          },
+      }
+  /api/v1/accounts/{account_id}/alert-events:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }]
+    get:
+      {
+        operationId: listAlertEvents,
+        tags: [Notifications],
+        summary: List alert events,
+        description: Returns opened and recovered alert event history.,
+        security: [{ bearerAuth: [alerts:read] }],
+        responses:
+          {
+            "200":
+              {
+                description: Alert events,
+                content:
+                  {
+                    application/json:
+                      {
+                        schema:
+                          {
+                            type: array,
+                            items: { $ref: "#/components/schemas/AlertEvent" },
+                          },
+                      },
+                  },
+              },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
+  /api/v1/accounts/{account_id}/webhooks:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }]
+    get:
+      {
+        operationId: listWebhooks,
+        tags: [Notifications],
+        summary: List webhook subscriptions,
+        description: Returns non-secret webhook subscription metadata.,
+        security: [{ bearerAuth: [webhooks:read] }],
+        responses:
+          {
+            "200":
+              {
+                description: Webhook subscriptions,
+                content:
+                  {
+                    application/json:
+                      {
+                        schema:
+                          {
+                            type: array,
+                            items:
+                              {
+                                $ref: "#/components/schemas/WebhookSubscription",
+                              },
+                          },
+                      },
+                  },
+              },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
+    post:
+      operationId: createWebhook
+      tags: [Notifications]
+      summary: Create a pending webhook subscription
+      description: Creates a subscription and returns its endpoint verification challenge.
+      security: [{ bearerAuth: [webhooks:write] }]
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/WebhookInput" } },
+            },
+        }
+      callbacks:
+        eventDelivery:
+          "{$request.body#/endpoint}":
+            post:
+              summary: Receive a signed PVLog event
+              description: Verifies the timestamp, event ID replay state, and keyed signature before accepting the event.
+              security: []
+              parameters:
+                - {
+                    name: X-PVLog-Event-Id,
+                    in: header,
+                    required: true,
+                    schema: { type: string, format: uuid },
+                  }
+                - {
+                    name: X-PVLog-Timestamp,
+                    in: header,
+                    required: true,
+                    schema: { type: integer, format: int64 },
+                  }
+                - {
+                    name: X-PVLog-Signature,
+                    in: header,
+                    required: true,
+                    schema: { type: string, pattern: "^v1=[0-9a-f]{64}$" },
+                  }
+              requestBody:
+                {
+                  required: true,
+                  content:
+                    {
+                      application/json:
+                        {
+                          schema: { $ref: "#/components/schemas/WebhookEvent" },
+                        },
+                    },
+                }
+              responses:
+                {
+                  "204": { description: Event accepted },
+                  "400": { description: Signature or replay validation failed },
+                }
+      responses:
+        {
+          "201":
+            {
+              description: Pending subscription and verification challenge,
+              content:
+                {
+                  application/json:
+                    {
+                      schema:
+                        { $ref: "#/components/schemas/WebhookSubscription" },
+                    },
+                },
+            },
+          "422": { $ref: "#/components/responses/ValidationProblem" },
+        }
+  /api/v1/accounts/{account_id}/webhooks/{webhook_id}/verify:
+    parameters:
+      [
+        { $ref: "#/components/parameters/AccountId" },
+        {
+          name: webhook_id,
+          in: path,
+          required: true,
+          schema: { $ref: "#/components/schemas/UuidV7" },
+        },
+      ]
+    post:
+      {
+        operationId: verifyWebhook,
+        tags: [Notifications],
+        summary: Verify webhook endpoint ownership,
+        description: Activates a pending subscription when its challenge matches and has not expired.,
+        security: [{ bearerAuth: [webhooks:write] }],
+        requestBody:
+          {
+            required: true,
+            content:
+              {
+                application/json:
+                  {
+                    schema:
+                      {
+                        type: object,
+                        required: [challenge],
+                        properties: { challenge: { type: string } },
+                      },
+                  },
+              },
+          },
+        responses:
+          {
+            "200":
+              {
+                description: Active webhook subscription,
+                content:
+                  {
+                    application/json:
+                      {
+                        schema:
+                          { $ref: "#/components/schemas/WebhookSubscription" },
+                      },
+                  },
+              },
+            "422": { $ref: "#/components/responses/ValidationProblem" },
+          },
+      }
+  /api/v1/accounts/{account_id}/webhooks/{webhook_id}:
+    parameters:
+      [
+        { $ref: "#/components/parameters/AccountId" },
+        {
+          name: webhook_id,
+          in: path,
+          required: true,
+          schema: { $ref: "#/components/schemas/UuidV7" },
+        },
+      ]
+    delete:
+      {
+        operationId: deleteWebhook,
+        tags: [Notifications],
+        summary: Disable a webhook subscription,
+        description: Disables delivery to one webhook subscription.,
+        security: [{ bearerAuth: [webhooks:write] }],
+        responses:
+          {
+            "204": { description: Subscription disabled },
+            "404": { $ref: "#/components/responses/NotFoundProblem" },
+          },
+      }
+  /api/v1/accounts/{account_id}/webhooks/{webhook_id}/attempts:
+    parameters:
+      [
+        { $ref: "#/components/parameters/AccountId" },
+        {
+          name: webhook_id,
+          in: path,
+          required: true,
+          schema: { $ref: "#/components/schemas/UuidV7" },
+        },
+      ]
+    get:
+      {
+        operationId: listWebhookAttempts,
+        tags: [Notifications],
+        summary: List delivery attempts,
+        description: Returns bounded outcome history for one subscription.,
+        security: [{ bearerAuth: [webhooks:read] }],
+        responses:
+          {
+            "200":
+              {
+                description: Delivery attempts,
+                content:
+                  {
+                    application/json:
+                      {
+                        schema:
+                          {
+                            type: array,
+                            items:
+                              { $ref: "#/components/schemas/WebhookAttempt" },
+                          },
+                      },
+                  },
+              },
+            "403": { $ref: "#/components/responses/ForbiddenProblem" },
+          },
+      }
+  /api/v1/accounts/{account_id}/webhook-deliveries/{delivery_id}/replay:
+    parameters:
+      [
+        { $ref: "#/components/parameters/AccountId" },
+        {
+          name: delivery_id,
+          in: path,
+          required: true,
+          schema: { $ref: "#/components/schemas/UuidV7" },
+        },
+      ]
+    post:
+      {
+        operationId: replayWebhookDelivery,
+        tags: [Notifications],
+        summary: Replay a dead-letter delivery,
+        description: Requeues a dead-letter delivery for an administrative retry.,
+        security: [{ bearerAuth: [webhooks:write] }],
+        responses:
+          {
+            "200":
+              {
+                description: Delivery queued for replay,
+                content: { application/json: { schema: { type: object } } },
+              },
+            "409": { $ref: "#/components/responses/ConflictProblem" },
+          },
+      }
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
   parameters:
-    SystemId: { name: id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }
-    AccountId: { name: account_id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }
-    NestedSystemId: { name: system_id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }
-    ObservationId: { name: observation_id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }
-    IfMatch: { name: If-Match, in: header, required: true, schema: { type: string }, example: '"3"' }
-    IfNoneMatch: { name: If-None-Match, in: header, required: false, schema: { type: string }, example: '"query-7f4a"' }
-    StartEpochMillis: { name: startEpochMillis, in: query, required: true, schema: { type: integer, format: int64 }, description: Inclusive UTC range start in Unix epoch milliseconds. }
-    EndEpochMillis: { name: endEpochMillis, in: query, required: true, schema: { type: integer, format: int64 }, description: Exclusive UTC range end in Unix epoch milliseconds. }
-    SeriesFields: { name: fields, in: query, required: true, schema: { type: string, minLength: 1 }, example: "generation_power,consumption_power" }
-    SeriesResolution: { name: resolution, in: query, required: false, schema: { enum: [auto, raw, 15m, hour, day, month, year], default: auto } }
-    Timezone: { name: timezone, in: query, required: false, schema: { type: string, default: UTC }, description: IANA timezone used for calendar buckets and DST boundaries., example: Europe/Berlin }
-    MaximumPoints: { name: maximumPoints, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000, default: 2000 }, description: Hard per-series point budget; responses may include at most two documented boundary points. }
+    SystemId:
+      {
+        name: id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/UuidV7" },
+      }
+    AccountId:
+      {
+        name: account_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/UuidV7" },
+      }
+    NestedSystemId:
+      {
+        name: system_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/UuidV7" },
+      }
+    ObservationId:
+      {
+        name: observation_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/UuidV7" },
+      }
+    IfMatch:
+      {
+        name: If-Match,
+        in: header,
+        required: true,
+        schema: { type: string },
+        example: '"3"',
+      }
+    IfNoneMatch:
+      {
+        name: If-None-Match,
+        in: header,
+        required: false,
+        schema: { type: string },
+        example: '"query-7f4a"',
+      }
+    StartEpochMillis:
+      {
+        name: startEpochMillis,
+        in: query,
+        required: true,
+        schema: { type: integer, format: int64 },
+        description: Inclusive UTC range start in Unix epoch milliseconds.,
+      }
+    EndEpochMillis:
+      {
+        name: endEpochMillis,
+        in: query,
+        required: true,
+        schema: { type: integer, format: int64 },
+        description: Exclusive UTC range end in Unix epoch milliseconds.,
+      }
+    SeriesFields:
+      {
+        name: fields,
+        in: query,
+        required: true,
+        schema: { type: string, minLength: 1 },
+        example: "generation_power,consumption_power",
+      }
+    SeriesResolution:
+      {
+        name: resolution,
+        in: query,
+        required: false,
+        schema:
+          { enum: [auto, raw, 15m, hour, day, month, year], default: auto },
+      }
+    Timezone:
+      {
+        name: timezone,
+        in: query,
+        required: false,
+        schema: { type: string, default: UTC },
+        description: IANA timezone used for calendar buckets and DST boundaries.,
+        example: Europe/Berlin,
+      }
+    MaximumPoints:
+      {
+        name: maximumPoints,
+        in: query,
+        required: false,
+        schema: { type: integer, minimum: 1, maximum: 10000, default: 2000 },
+        description: Hard per-series point budget; responses may include at most two documented boundary points.,
+      }
   requestBodies:
     ManagedResource:
       required: true
@@ -377,21 +1214,114 @@ components:
     SystemResponse:
       description: Versioned system representation
       headers: { ETag: { schema: { type: string } } }
-      content: { application/json: { schema: { $ref: "#/components/schemas/System" } } }
+      content:
+        {
+          application/json: { schema: { $ref: "#/components/schemas/System" } },
+        }
     ManagedResource:
       description: Versioned managed resource
       headers: { ETag: { schema: { type: string } } }
-      content: { application/json: { schema: { $ref: "#/components/schemas/ManagedResource" } } }
+      content:
+        {
+          application/json:
+            { schema: { $ref: "#/components/schemas/ManagedResource" } },
+        }
     ResourceList:
       description: Managed resource collection
-      content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ManagedResource" } } } }
-    ValidationProblem: { description: Request validation failed, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
-    PreconditionProblem: { description: ETag precondition failed, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
-    ForbiddenProblem: { description: Required scope is missing, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
-    ConflictProblem: { description: Optimistic concurrency conflict, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
-    OverloadProblem: { description: Ingestion is temporarily saturated, headers: { Retry-After: { schema: { type: integer, minimum: 1 } } }, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
-    QueryProblem: { description: "Query bounds, fields, resolution, timezone, or point budget are invalid.", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" }, example: { type: https://pvlog.example/problems/query, title: Invalid analytics query, status: 422, detail: The raw query exceeds maximumPoints., requestId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70 } } } }
-    RequiresAsyncProblem: { description: The requested export is too large for synchronous processing; retry with asynchronous true., content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+      content:
+        {
+          application/json:
+            {
+              schema:
+                {
+                  type: array,
+                  items: { $ref: "#/components/schemas/ManagedResource" },
+                },
+            },
+        }
+    ValidationProblem:
+      {
+        description: Request validation failed,
+        content:
+          {
+            application/problem+json:
+              { schema: { $ref: "#/components/schemas/Problem" } },
+          },
+      }
+    PreconditionProblem:
+      {
+        description: ETag precondition failed,
+        content:
+          {
+            application/problem+json:
+              { schema: { $ref: "#/components/schemas/Problem" } },
+          },
+      }
+    ForbiddenProblem:
+      {
+        description: Required scope is missing,
+        content:
+          {
+            application/problem+json:
+              { schema: { $ref: "#/components/schemas/Problem" } },
+          },
+      }
+    ConflictProblem:
+      {
+        description: Optimistic concurrency conflict,
+        content:
+          {
+            application/problem+json:
+              { schema: { $ref: "#/components/schemas/Problem" } },
+          },
+      }
+    NotFoundProblem:
+      {
+        description: Notification resource was not found,
+        content:
+          {
+            application/problem+json:
+              { schema: { $ref: "#/components/schemas/Problem" } },
+          },
+      }
+    OverloadProblem:
+      {
+        description: Ingestion is temporarily saturated,
+        headers: { Retry-After: { schema: { type: integer, minimum: 1 } } },
+        content:
+          {
+            application/problem+json:
+              { schema: { $ref: "#/components/schemas/Problem" } },
+          },
+      }
+    QueryProblem:
+      {
+        description: "Query bounds, fields, resolution, timezone, or point budget are invalid.",
+        content:
+          {
+            application/problem+json:
+              {
+                schema: { $ref: "#/components/schemas/Problem" },
+                example:
+                  {
+                    type: https://pvlog.example/problems/query,
+                    title: Invalid analytics query,
+                    status: 422,
+                    detail: The raw query exceeds maximumPoints.,
+                    requestId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70,
+                  },
+              },
+          },
+      }
+    RequiresAsyncProblem:
+      {
+        description: The requested export is too large for synchronous processing; retry with asynchronous true.,
+        content:
+          {
+            application/problem+json:
+              { schema: { $ref: "#/components/schemas/Problem" } },
+          },
+      }
     NotAcceptable:
       description: Requested response representation is not available
       content:
@@ -405,48 +1335,227 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
   schemas:
+    AlertRuleInput:
+      type: object
+      required: [name, kind, timezone, enabled]
+      properties:
+        name: { type: string, minLength: 1 }
+        kind:
+          {
+            type: string,
+            enum:
+              [
+                idle,
+                generation_below,
+                consumption_above,
+                net_power_above,
+                standby_cost_above,
+                performance_below,
+                battery_below,
+                extended_below,
+                extended_above,
+              ],
+          }
+        timezone: { type: string, example: Europe/Berlin }
+        enabled: { type: boolean }
+        condition: { type: object, additionalProperties: true }
+    AlertRule:
+      allOf:
+        - { $ref: "#/components/schemas/AlertRuleInput" }
+        - {
+            type: object,
+            required: [id],
+            properties: { id: { $ref: "#/components/schemas/UuidV7" } },
+          }
+    AlertEvent:
+      type: object
+      required: [id, ruleId, state, openedAtEpochMillis]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        ruleId: { $ref: "#/components/schemas/UuidV7" }
+        state: { type: string, enum: [open, acknowledged, resolved] }
+        openedAtEpochMillis: { type: integer, format: int64 }
+        resolvedAtEpochMillis: { type: [integer, "null"], format: int64 }
+    WebhookInput:
+      type: object
+      required: [endpoint, events]
+      properties:
+        endpoint: { type: string, format: uri, pattern: "^https://" }
+        events:
+          {
+            type: array,
+            uniqueItems: true,
+            items:
+              {
+                type: string,
+                enum:
+                  [
+                    observation_accepted,
+                    alert_opened,
+                    alert_resolved,
+                    system_changed,
+                    export_ready,
+                  ],
+              },
+          }
+    WebhookSubscription:
+      allOf:
+        - { $ref: "#/components/schemas/WebhookInput" }
+        - {
+            type: object,
+            required: [id, state],
+            properties:
+              {
+                id: { $ref: "#/components/schemas/UuidV7" },
+                state:
+                  {
+                    type: string,
+                    enum: [pending_verification, active, disabled],
+                  },
+                challenge: { type: string, writeOnly: true },
+              },
+          }
+    WebhookEvent:
+      type: object
+      required:
+        [schema_version, event_id, event_type, occurred_at_epoch_millis, data]
+      properties:
+        schema_version: { type: integer, const: 1 }
+        event_id: { type: string, format: uuid }
+        event_type: { type: string }
+        occurred_at_epoch_millis: { type: integer, format: int64 }
+        data: { type: object, additionalProperties: true }
+    WebhookAttempt:
+      type: object
+      required: [attemptedAtEpochMillis]
+      properties:
+        attemptedAtEpochMillis: { type: integer, format: int64 }
+        responseStatus: { type: [integer, "null"], minimum: 100, maximum: 599 }
+        errorClass: { type: [string, "null"] }
+        durationMilliseconds: { type: integer, minimum: 0 }
     CreateSystem:
       type: object
       required: [accountId, name, timezone]
-      properties: { accountId: { $ref: "#/components/schemas/UuidV7" }, name: { type: string, minLength: 1 }, timezone: { type: string, example: Europe/Berlin } }
+      properties:
+        {
+          accountId: { $ref: "#/components/schemas/UuidV7" },
+          name: { type: string, minLength: 1 },
+          timezone: { type: string, example: Europe/Berlin },
+        }
     UpdateSystem:
       type: object
       required: [name, timezone, visibility]
-      properties: { name: { type: string, minLength: 1 }, timezone: { type: string }, visibility: { enum: [private, account, unlisted, public] } }
+      properties:
+        {
+          name: { type: string, minLength: 1 },
+          timezone: { type: string },
+          visibility: { enum: [private, account, unlisted, public] },
+        }
     System:
       allOf:
         - $ref: "#/components/schemas/UpdateSystem"
         - type: object
           required: [id, accountId, lifecycle, version]
-          properties: { id: { $ref: "#/components/schemas/UuidV7" }, accountId: { $ref: "#/components/schemas/UuidV7" }, lifecycle: { enum: [active, archived, pending_deletion] }, version: { type: integer, minimum: 1 } }
+          properties:
+            {
+              id: { $ref: "#/components/schemas/UuidV7" },
+              accountId: { $ref: "#/components/schemas/UuidV7" },
+              lifecycle: { enum: [active, archived, pending_deletion] },
+              version: { type: integer, minimum: 1 },
+            }
     ManagedResource:
       type: object
       required: [id, accountId, kind, version, attributes]
-      properties: { id: { $ref: "#/components/schemas/UuidV7" }, accountId: { $ref: "#/components/schemas/UuidV7" }, systemId: { $ref: "#/components/schemas/UuidV7" }, kind: { enum: [equipment, tariff, channel, membership, credential] }, version: { type: integer, minimum: 1 }, attributes: { type: object, additionalProperties: true } }
+      properties:
+        {
+          id: { $ref: "#/components/schemas/UuidV7" },
+          accountId: { $ref: "#/components/schemas/UuidV7" },
+          systemId: { $ref: "#/components/schemas/UuidV7" },
+          kind: { enum: [equipment, tariff, channel, membership, credential] },
+          version: { type: integer, minimum: 1 },
+          attributes: { type: object, additionalProperties: true },
+        }
     ObservationInput:
       type: object
       required: [observedAtEpochMillis]
-      properties: { observedAtEpochMillis: { type: integer }, generationPowerWatts: { type: integer }, generationEnergyWh: { type: integer }, consumptionPowerWatts: { type: integer }, consumptionEnergyWh: { type: integer }, voltageMillivolts: { type: integer, minimum: 0 }, temperatureMillidegreesCelsius: { type: integer }, sourceReference: { type: string } }
+      properties:
+        {
+          observedAtEpochMillis: { type: integer },
+          generationPowerWatts: { type: integer },
+          generationEnergyWh: { type: integer },
+          consumptionPowerWatts: { type: integer },
+          consumptionEnergyWh: { type: integer },
+          voltageMillivolts: { type: integer, minimum: 0 },
+          temperatureMillidegreesCelsius: { type: integer },
+          sourceReference: { type: string },
+        }
     ObservationBatchInput:
       type: object
       required: [mode, items]
-      properties: { mode: { enum: [atomic, partial] }, items: { type: array, minItems: 1, maxItems: 1000, items: { allOf: [{ $ref: "#/components/schemas/ObservationInput" }, { type: object, required: [idempotencyKey], properties: { idempotencyKey: { type: string, minLength: 1 } } }] } } }
+      properties:
+        {
+          mode: { enum: [atomic, partial] },
+          items:
+            {
+              type: array,
+              minItems: 1,
+              maxItems: 1000,
+              items:
+                {
+                  allOf:
+                    [
+                      { $ref: "#/components/schemas/ObservationInput" },
+                      {
+                        type: object,
+                        required: [idempotencyKey],
+                        properties:
+                          { idempotencyKey: { type: string, minLength: 1 } },
+                      },
+                    ],
+                },
+            },
+        }
     SeriesQueryResult:
       type: object
       additionalProperties: false
       required: [actualResolution, timezone, series]
       properties:
-        actualResolution: { enum: [raw, fifteen_minutes, hourly, daily, monthly, yearly] }
-        timezone: { type: string, description: IANA timezone used for calendar bucket boundaries. }
+        actualResolution:
+          { enum: [raw, fifteen_minutes, hourly, daily, monthly, yearly] }
+        timezone:
+          {
+            type: string,
+            description: IANA timezone used for calendar bucket boundaries.,
+          }
         series: { type: array, items: { $ref: "#/components/schemas/Series" } }
     Series:
       type: object
       additionalProperties: false
       required: [field, unit, points, gaps]
       properties:
-        field: { enum: [generation_power, generation_energy, consumption_power, consumption_energy, grid_power, battery_power, battery_state_of_charge, temperature, extended, provenance] }
-        unit: { enum: [watts, watt_hours, basis_points, milli_degrees_celsius, integer] }
-        points: { type: array, items: { $ref: "#/components/schemas/SeriesPoint" } }
+        field:
+          {
+            enum:
+              [
+                generation_power,
+                generation_energy,
+                consumption_power,
+                consumption_energy,
+                grid_power,
+                battery_power,
+                battery_state_of_charge,
+                temperature,
+                extended,
+                provenance,
+              ],
+          }
+        unit:
+          {
+            enum:
+              [watts, watt_hours, basis_points, milli_degrees_celsius, integer],
+          }
+        points:
+          { type: array, items: { $ref: "#/components/schemas/SeriesPoint" } }
         gaps: { type: array, items: { $ref: "#/components/schemas/SeriesGap" } }
     SeriesPoint:
       type: object
@@ -457,7 +1566,11 @@ components:
         value: { type: integer, format: int64 }
         coverageBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
         qualityFlags: { type: integer, minimum: 0 }
-        provenance: { type: [string, "null"], description: Present only for corrected raw points. }
+        provenance:
+          {
+            type: [string, "null"],
+            description: Present only for corrected raw points.,
+          }
     SeriesGap:
       type: object
       additionalProperties: false
@@ -482,8 +1595,10 @@ components:
         maximumTemperatureMilliCelsius: { type: [integer, "null"] }
         batteryChargeWh: { type: [integer, "null"], minimum: 0 }
         batteryDischargeWh: { type: [integer, "null"], minimum: 0 }
-        minimumBatteryBasisPoints: { type: [integer, "null"], minimum: 0, maximum: 10000 }
-        maximumBatteryBasisPoints: { type: [integer, "null"], minimum: 0, maximum: 10000 }
+        minimumBatteryBasisPoints:
+          { type: [integer, "null"], minimum: 0, maximum: 10000 }
+        maximumBatteryBasisPoints:
+          { type: [integer, "null"], minimum: 0, maximum: 10000 }
         revenueMinorUnits: { type: [integer, "null"] }
         costMinorUnits: { type: [integer, "null"] }
         netFinancialMinorUnits: { type: [integer, "null"] }
@@ -493,7 +1608,18 @@ components:
       additionalProperties: false
       required: [kind, startEpochMillis, endEpochMillis, sourceReferences]
       properties:
-        kind: { enum: [missing_interval, suspect_observation, source_conflict, counter_reset, rejected_ingestion, aggregate_lag] }
+        kind:
+          {
+            enum:
+              [
+                missing_interval,
+                suspect_observation,
+                source_conflict,
+                counter_reset,
+                rejected_ingestion,
+                aggregate_lag,
+              ],
+          }
         startEpochMillis: { type: integer, format: int64 }
         endEpochMillis: { type: integer, format: int64 }
         sourceReferences: { type: array, items: { type: string } }
@@ -504,12 +1630,29 @@ components:
       additionalProperties: false
       required: [systemIds, metric]
       properties:
-        systemIds: { type: array, minItems: 2, maxItems: 20, uniqueItems: true, items: { $ref: "#/components/schemas/UuidV7" } }
+        systemIds:
+          {
+            type: array,
+            minItems: 2,
+            maxItems: 20,
+            uniqueItems: true,
+            items: { $ref: "#/components/schemas/UuidV7" },
+          }
         metric: { $ref: "#/components/schemas/ComparisonMetric" }
     ComparisonEntry:
       type: object
       additionalProperties: false
-      required: [rank, systemId, displayName, totalGenerationWh, normalizedGenerationWhPerKw, coverageBasisPoints, tied, projectionAgeMillis]
+      required:
+        [
+          rank,
+          systemId,
+          displayName,
+          totalGenerationWh,
+          normalizedGenerationWhPerKw,
+          coverageBasisPoints,
+          tied,
+          projectionAgeMillis,
+        ]
       properties:
         rank: { type: integer, minimum: 1 }
         systemId: { $ref: "#/components/schemas/UuidV7" }
@@ -526,10 +1669,18 @@ components:
       properties:
         startEpochMillis: { type: integer, format: int64 }
         endEpochMillis: { type: integer, format: int64 }
-        fields: { type: array, minItems: 1, uniqueItems: true, items: { type: string } }
-        resolution: { enum: [auto, raw, 15m, hour, day, month, year], default: auto }
+        fields:
+          {
+            type: array,
+            minItems: 1,
+            uniqueItems: true,
+            items: { type: string },
+          }
+        resolution:
+          { enum: [auto, raw, 15m, hour, day, month, year], default: auto }
         timezone: { type: string, default: UTC }
-        maximumPoints: { type: integer, minimum: 1, maximum: 10000, default: 2000 }
+        maximumPoints:
+          { type: integer, minimum: 1, maximum: 10000, default: 2000 }
         format: { enum: [csv, json] }
         asynchronous: { type: boolean, default: false }
     QueuedJob:

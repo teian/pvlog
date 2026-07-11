@@ -16,6 +16,7 @@ secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 time.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
 tower.workspace = true
 tower-http.workspace = true
@@ -62,6 +63,10 @@ path = "../../../tests/rust/api/community_endpoints.rs"
 [[test]]
 name = "team-endpoints"
 path = "../../../tests/rust/api/team_endpoints.rs"
+
+[[test]]
+name = "notification-endpoints"
+path = "../../../tests/rust/api/notification_endpoints.rs"
 
 [lints]
 workspace = true
