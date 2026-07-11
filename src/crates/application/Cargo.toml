@@ -41,5 +41,65 @@ path = "../../../tests/rust/application/oidc_protocol.rs"
 name = "oauth2-protocol"
 path = "../../../tests/rust/application/oauth2_protocol.rs"
 
+[[test]]
+name = "identity-linking"
+path = "../../../tests/rust/application/identity_linking.rs"
+
+[[test]]
+name = "browser-session"
+path = "../../../tests/rust/application/browser_session.rs"
+
+[[test]]
+name = "api-token"
+path = "../../../tests/rust/application/api_token.rs"
+
+[[test]]
+name = "legacy-credential"
+path = "../../../tests/rust/application/legacy_credential.rs"
+
+[[test]]
+name = "authorization-boundary"
+path = "../../../tests/rust/application/authorization_boundary.rs"
+
+[[test]]
+name = "rate-limit"
+path = "../../../tests/rust/application/rate_limit.rs"
+
+[[test]]
+name = "system-lifecycle"
+path = "../../../tests/rust/application/system_lifecycle.rs"
+
+[[test]]
+name = "system-configuration"
+path = "../../../tests/rust/application/system_configuration.rs"
+
+[[test]]
+name = "pagination"
+path = "../../../tests/rust/application/pagination.rs"
+
+[[test]]
+name = "import-export"
+path = "../../../tests/rust/application/import_export.rs"
+
+[[test]]
+name = "ingestion-normalization"
+path = "../../../tests/rust/application/ingestion_normalization.rs"
+
+[[test]]
+name = "ingestion-validation"
+path = "../../../tests/rust/application/ingestion_validation.rs"
+
+[[test]]
+name = "batch-ingestion"
+path = "../../../tests/rust/application/batch_ingestion.rs"
+
+[[test]]
+name = "observation-correction"
+path = "../../../tests/rust/application/observation_correction.rs"
+
+[[test]]
+name = "ingestion-admission"
+path = "../../../tests/rust/application/ingestion_admission.rs"
+
 [lints]
 workspace = true
