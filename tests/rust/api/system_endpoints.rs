@@ -4,19 +4,24 @@ use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
 };
-use pvlog_api::systems_router;
+use pvlog_api::{
+    AuthorizedRequest, ModernRequestAuthorizer, RequestAuthorizationError, systems_router,
+};
 use pvlog_application::{
     CreateSystem, SystemLifecycleError, SystemLifecycleRecord, SystemLifecycleUseCases,
     UpdateSystem,
 };
-use pvlog_domain::{AccountId, SystemId, SystemLifecycle, UserId, Visibility};
+use pvlog_domain::{
+    AccountId, Permission, PrincipalId, SystemId, SystemLifecycle, UserId, Visibility,
+};
 use std::{error::Error, sync::Arc};
 use tower::ServiceExt as _;
 
 #[tokio::test]
 async fn system_mutations_require_actor_and_etag_preconditions() -> Result<(), Box<dyn Error>> {
     let actor = UserId::new();
-    let app = systems_router(Arc::new(Stub)).layer(Extension(actor));
+    let app = systems_router(Arc::new(Stub), Arc::new(AllowAuthorizer { actor }))
+        .layer(Extension(pvlog_api::RequestPrincipal::User(actor)));
     let response = app
         .clone()
         .oneshot(
@@ -54,6 +59,38 @@ async fn system_mutations_require_actor_and_etag_preconditions() -> Result<(), B
 }
 
 struct Stub;
+struct AllowAuthorizer {
+    actor: UserId,
+}
+
+#[async_trait]
+impl ModernRequestAuthorizer for AllowAuthorizer {
+    async fn authorize_account(
+        &self,
+        _principal: PrincipalId,
+        account_id: AccountId,
+        _permission: Permission,
+        _action: &'static str,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError> {
+        Ok(AuthorizedRequest {
+            actor_user_id: self.actor,
+            account_id,
+        })
+    }
+
+    async fn authorize_system(
+        &self,
+        _principal: PrincipalId,
+        _system_id: SystemId,
+        _permission: Permission,
+        _action: &'static str,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError> {
+        Ok(AuthorizedRequest {
+            actor_user_id: self.actor,
+            account_id: AccountId::new(),
+        })
+    }
+}
 fn record(
     id: SystemId,
     account_id: AccountId,

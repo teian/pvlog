@@ -4,9 +4,12 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use async_trait::async_trait;
 use pvlog_api::{RequestAuthenticationError, RequestAuthenticator, RequestPrincipal};
-use pvlog_application::Clock;
-use pvlog_domain::ApiScope;
-use pvlog_storage::ManagementRepository;
+use pvlog_application::{
+    AuthorizationBoundary, AuthorizationBoundaryError, AuthorizationBoundaryPorts,
+    AuthorizedAccountRoute, Clock, ProtectedAccountRequest, ProtectedSystemRequest,
+};
+use pvlog_domain::{ApiScope, AuditEventId, Permission, PrincipalId, RequestId, SystemId, UserId};
+use pvlog_storage::{AuditRecord, ManagementRepository, RoutingRecord};
 use secrecy::{ExposeSecret as _, SecretString};
 
 /// Verifies bearer credentials and browser sessions from the management plane.
@@ -14,6 +17,203 @@ pub struct ManagementRequestAuthenticator {
     repository: Arc<dyn ManagementRepository>,
     clock: Arc<dyn Clock>,
     digest_key: [u8; 32],
+}
+
+/// Production authorization bridge from HTTP principals to management-plane RBAC and routing.
+pub struct ManagementRequestAuthorizer {
+    repository: Arc<dyn ManagementRepository>,
+    boundary: AuthorizationBoundary,
+}
+
+impl ManagementRequestAuthorizer {
+    #[must_use]
+    pub fn new(repository: Arc<dyn ManagementRepository>, clock: Arc<dyn Clock>) -> Self {
+        let ports = Arc::new(ManagementAuthorizationPorts {
+            repository: repository.clone(),
+            clock,
+        });
+        Self {
+            repository,
+            boundary: AuthorizationBoundary::new(ports),
+        }
+    }
+
+    async fn actor(
+        &self,
+        principal: PrincipalId,
+        account_id: pvlog_domain::AccountId,
+    ) -> Result<UserId, pvlog_api::RequestAuthorizationError> {
+        match principal {
+            PrincipalId::User(user_id) => Ok(user_id),
+            PrincipalId::ApiCredential(id) => self
+                .repository
+                .api_credential(account_id, id)
+                .await
+                .map_err(|_| pvlog_api::RequestAuthorizationError::Unavailable)?
+                .map(|credential| credential.owner_user_id)
+                .ok_or(pvlog_api::RequestAuthorizationError::Forbidden),
+        }
+    }
+}
+
+#[async_trait]
+impl pvlog_api::ModernRequestAuthorizer for ManagementRequestAuthorizer {
+    async fn authorize_account(
+        &self,
+        principal: PrincipalId,
+        account_id: pvlog_domain::AccountId,
+        permission: Permission,
+        action: &'static str,
+    ) -> Result<pvlog_api::AuthorizedRequest, pvlog_api::RequestAuthorizationError> {
+        let route = self
+            .boundary
+            .authorize_and_route(&ProtectedAccountRequest {
+                principal,
+                account_id,
+                system_id: None,
+                permission,
+                request_id: RequestId::new(),
+                action,
+            })
+            .await
+            .map_err(|error| map_authorization(&error))?;
+        Ok(pvlog_api::AuthorizedRequest {
+            actor_user_id: self.actor(principal, route.account_id).await?,
+            account_id: route.account_id,
+        })
+    }
+
+    async fn authorize_system(
+        &self,
+        principal: PrincipalId,
+        system_id: SystemId,
+        permission: Permission,
+        action: &'static str,
+    ) -> Result<pvlog_api::AuthorizedRequest, pvlog_api::RequestAuthorizationError> {
+        let route = self
+            .boundary
+            .authorize_system_and_route(&ProtectedSystemRequest {
+                principal,
+                system_id,
+                permission,
+                request_id: RequestId::new(),
+                action,
+            })
+            .await
+            .map_err(|error| map_authorization(&error))?;
+        Ok(pvlog_api::AuthorizedRequest {
+            actor_user_id: self.actor(principal, route.account_id).await?,
+            account_id: route.account_id,
+        })
+    }
+}
+
+struct ManagementAuthorizationPorts {
+    repository: Arc<dyn ManagementRepository>,
+    clock: Arc<dyn Clock>,
+}
+
+#[async_trait]
+impl AuthorizationBoundaryPorts for ManagementAuthorizationPorts {
+    async fn is_authorized(
+        &self,
+        request: &ProtectedAccountRequest,
+    ) -> Result<bool, pvlog_application::PortError> {
+        let now = i64::try_from(self.clock.now().epoch_millis())
+            .map_err(|_| pvlog_application::PortError::Unavailable)?;
+        self.repository
+            .principal_is_authorized(
+                request.principal,
+                request.account_id,
+                request.system_id,
+                request.permission,
+                now,
+            )
+            .await
+            .map_err(|_| pvlog_application::PortError::Unavailable)
+    }
+
+    async fn account_route(
+        &self,
+        account_id: pvlog_domain::AccountId,
+    ) -> Result<Option<AuthorizedAccountRoute>, pvlog_application::PortError> {
+        let route = self
+            .repository
+            .routing(account_id)
+            .await
+            .map_err(|_| pvlog_application::PortError::Unavailable)?;
+        Ok(route.and_then(authorized_route))
+    }
+
+    async fn system_account(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Option<pvlog_domain::AccountId>, pvlog_application::PortError> {
+        self.repository
+            .system_registry(system_id)
+            .await
+            .map(|record| record.map(|record| record.account_id))
+            .map_err(|_| pvlog_application::PortError::Unavailable)
+    }
+
+    async fn append_audit(
+        &self,
+        request: &ProtectedAccountRequest,
+        outcome: &'static str,
+    ) -> Result<(), pvlog_application::PortError> {
+        let id = AuditEventId::new();
+        let mut event_hash = [0_u8; 32];
+        event_hash[..16].copy_from_slice(id.as_uuid().as_bytes());
+        event_hash[16..].copy_from_slice(id.as_uuid().as_bytes());
+        let (actor_type, actor_id) = match request.principal {
+            PrincipalId::User(id) => ("user", Some(id.as_uuid())),
+            PrincipalId::ApiCredential(id) => ("api_credential", Some(id.as_uuid())),
+        };
+        let occurred_at = i64::try_from(self.clock.now().epoch_millis())
+            .map_err(|_| pvlog_application::PortError::Unavailable)?;
+        self.repository
+            .append_audit(&AuditRecord {
+                id,
+                occurred_at,
+                request_id: Some(request.request_id.as_uuid()),
+                actor_type: actor_type.to_owned(),
+                actor_id,
+                account_id: Some(request.account_id),
+                action: request.action.to_owned(),
+                target_type: request.system_id.map_or("account", |_| "system").to_owned(),
+                target_id: request
+                    .system_id
+                    .map_or(Some(request.account_id.as_uuid()), |id| Some(id.as_uuid())),
+                outcome: outcome.to_owned(),
+                previous_event_hash: None,
+                event_hash,
+                safe_metadata: serde_json::json!({}),
+            })
+            .await
+            .map_err(|_| pvlog_application::PortError::Unavailable)
+    }
+}
+
+fn authorized_route(record: RoutingRecord) -> Option<AuthorizedAccountRoute> {
+    let ready = matches!(record.state.as_str(), "active" | "ready");
+    ready.then(|| AuthorizedAccountRoute {
+        account_id: record.account_id,
+        opaque_route: record
+            .opaque_locator
+            .unwrap_or_else(|| format!("postgres:{}", record.account_id)),
+    })
+}
+
+fn map_authorization(error: &AuthorizationBoundaryError) -> pvlog_api::RequestAuthorizationError {
+    match error {
+        AuthorizationBoundaryError::Forbidden => pvlog_api::RequestAuthorizationError::Forbidden,
+        AuthorizationBoundaryError::SystemNotFound => {
+            pvlog_api::RequestAuthorizationError::NotFound
+        }
+        AuthorizationBoundaryError::AccountUnavailable | AuthorizationBoundaryError::Port(_) => {
+            pvlog_api::RequestAuthorizationError::Unavailable
+        }
+    }
 }
 
 impl ManagementRequestAuthenticator {

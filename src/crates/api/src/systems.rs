@@ -9,21 +9,32 @@ use pvlog_application::{
     CreateSystem, SystemLifecycleError, SystemLifecycleRecord, SystemLifecycleUseCases,
     UpdateSystem,
 };
-use pvlog_domain::{AccountId, SystemId, UserId, Visibility};
+use pvlog_domain::{AccountId, ApiScope, Permission, SystemId, UserId, Visibility};
 use serde::Deserialize;
 use std::sync::Arc;
+
+use crate::{
+    ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal, principal_identity,
+};
 
 #[derive(Clone)]
 struct SystemState {
     service: Arc<dyn SystemLifecycleUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
 }
-pub fn systems_router(service: Arc<dyn SystemLifecycleUseCases>) -> Router {
+pub fn systems_router(
+    service: Arc<dyn SystemLifecycleUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
+) -> Router {
     Router::new()
         .route("/api/v1/systems", post(create))
         .route("/api/v1/systems/{id}", put(update).delete(remove))
         .route("/api/v1/systems/{id}/archive", post(archive))
         .route("/api/v1/systems/{id}/restore", post(restore))
-        .with_state(SystemState { service })
+        .with_state(SystemState {
+            service,
+            authorizer,
+        })
 }
 
 #[derive(Deserialize)]
@@ -42,14 +53,14 @@ struct UpdateBody {
 
 async fn create(
     State(state): State<SystemState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Json(body): Json<CreateBody>,
 ) -> Result<Response, SystemApiError> {
     let record = state
         .service
         .create_system(CreateSystem {
             account_id: body.account_id,
-            actor: actor_id(actor)?,
+            actor: authorize_account(&state, principal, body.account_id, "system.create").await?,
             name: body.name,
             timezone: body.timezone,
         })
@@ -58,7 +69,7 @@ async fn create(
 }
 async fn update(
     State(state): State<SystemState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(id): Path<SystemId>,
     headers: HeaderMap,
     Json(body): Json<UpdateBody>,
@@ -67,7 +78,7 @@ async fn update(
         .service
         .update_system(UpdateSystem {
             id,
-            actor: actor_id(actor)?,
+            actor: authorize_system(&state, principal, id, "system.update").await?,
             expected_version: expected_version(&headers)?,
             name: body.name,
             timezone: body.timezone,
@@ -78,31 +89,39 @@ async fn update(
 }
 async fn archive(
     State(state): State<SystemState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(id): Path<SystemId>,
     headers: HeaderMap,
 ) -> Result<Response, SystemApiError> {
     let record = state
         .service
-        .archive_system(id, actor_id(actor)?, expected_version(&headers)?)
+        .archive_system(
+            id,
+            authorize_system(&state, principal, id, "system.archive").await?,
+            expected_version(&headers)?,
+        )
         .await?;
     Ok(with_etag(StatusCode::OK, record))
 }
 async fn restore(
     State(state): State<SystemState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(id): Path<SystemId>,
     headers: HeaderMap,
 ) -> Result<Response, SystemApiError> {
     let record = state
         .service
-        .restore_system(id, actor_id(actor)?, expected_version(&headers)?)
+        .restore_system(
+            id,
+            authorize_system(&state, principal, id, "system.restore").await?,
+            expected_version(&headers)?,
+        )
         .await?;
     Ok(with_etag(StatusCode::OK, record))
 }
 async fn remove(
     State(state): State<SystemState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(id): Path<SystemId>,
     headers: HeaderMap,
 ) -> Result<StatusCode, SystemApiError> {
@@ -111,15 +130,66 @@ async fn remove(
         .is_some_and(|value| value == "true");
     state
         .service
-        .delete_system(id, actor_id(actor)?, expected_version(&headers)?, confirmed)
+        .delete_system(
+            id,
+            authorize_system(&state, principal, id, "system.delete").await?,
+            expected_version(&headers)?,
+            confirmed,
+        )
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn actor_id(actor: Option<Extension<UserId>>) -> Result<UserId, SystemApiError> {
-    actor
-        .map(|Extension(id)| id)
-        .ok_or(SystemApiError::Forbidden)
+async fn authorize_account(
+    state: &SystemState,
+    principal: Option<Extension<RequestPrincipal>>,
+    account_id: AccountId,
+    action: &'static str,
+) -> Result<UserId, SystemApiError> {
+    let Extension(principal) = principal.ok_or(SystemApiError::Forbidden)?;
+    require_system_write_scope(&principal)?;
+    let authorized = state
+        .authorizer
+        .authorize_account(
+            principal_identity(&principal),
+            account_id,
+            Permission::SystemManage,
+            action,
+        )
+        .await?;
+    Ok(authorized.actor_user_id)
+}
+
+async fn authorize_system(
+    state: &SystemState,
+    principal: Option<Extension<RequestPrincipal>>,
+    system_id: SystemId,
+    action: &'static str,
+) -> Result<UserId, SystemApiError> {
+    let Extension(principal) = principal.ok_or(SystemApiError::Forbidden)?;
+    require_system_write_scope(&principal)?;
+    let authorized = state
+        .authorizer
+        .authorize_system(
+            principal_identity(&principal),
+            system_id,
+            Permission::SystemManage,
+            action,
+        )
+        .await?;
+    Ok(authorized.actor_user_id)
+}
+
+fn require_system_write_scope(principal: &RequestPrincipal) -> Result<(), SystemApiError> {
+    match principal {
+        RequestPrincipal::User(_) => Ok(()),
+        RequestPrincipal::ApiCredential { scopes, .. }
+            if scopes.contains(&ApiScope::SystemsWrite) =>
+        {
+            Ok(())
+        }
+        RequestPrincipal::ApiCredential { .. } => Err(SystemApiError::Forbidden),
+    }
 }
 fn expected_version(headers: &HeaderMap) -> Result<u64, SystemApiError> {
     headers
@@ -141,6 +211,17 @@ enum SystemApiError {
     Domain(SystemLifecycleError),
     Forbidden,
     PreconditionRequired,
+}
+impl From<RequestAuthorizationError> for SystemApiError {
+    fn from(value: RequestAuthorizationError) -> Self {
+        match value {
+            RequestAuthorizationError::Forbidden => Self::Forbidden,
+            RequestAuthorizationError::NotFound => Self::Domain(SystemLifecycleError::NotFound),
+            RequestAuthorizationError::Unavailable => Self::Domain(
+                SystemLifecycleError::Repository(pvlog_application::PortError::Unavailable),
+            ),
+        }
+    }
 }
 impl From<SystemLifecycleError> for SystemApiError {
     fn from(value: SystemLifecycleError) -> Self {

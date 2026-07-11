@@ -48,6 +48,10 @@ path = "src/main.rs"
 name = "runtime-smoke"
 path = "../../../tests/rust/smoke/runtime_smoke.rs"
 
+[[test]]
+name = "request-authorization"
+path = "../../../tests/rust/pvlog/request_authorization.rs"
+
 [lib]
 path = "src/lib.rs"
 

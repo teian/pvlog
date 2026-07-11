@@ -20,6 +20,7 @@ use utoipa::ToSchema;
 
 mod analytics;
 mod authentication;
+mod authorization;
 mod community;
 mod local_password;
 mod managed_resources;
@@ -33,6 +34,10 @@ mod user_lifecycle;
 pub use analytics::analytics_router;
 pub use authentication::{
     RequestAuthenticationError, RequestAuthenticator, RequestPrincipal, with_request_authentication,
+};
+pub use authorization::{
+    AuthorizedRequest, ModernRequestAuthorizer, RequestAuthorizationError, actor_user_id,
+    principal_identity,
 };
 pub use community::community_router;
 pub use local_password::local_password_router;
