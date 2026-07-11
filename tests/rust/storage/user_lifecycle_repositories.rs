@@ -3,9 +3,9 @@
 use std::{error::Error, sync::Arc};
 
 use pvlog_application::{
-    AdminUserActor, CreateLocalUser, LifecycleCreateOutcome, LifecycleUserRecord, LocalUserPolicy,
-    RegisterLocalUser, UserLifecycleError, UserLifecycleRepository, UserLifecycleService,
-    UserLifecycleUseCases,
+    AcceptInvitation, AdminUserActor, CreateLocalUser, CredentialService, LifecycleCreateOutcome,
+    LifecycleUserRecord, LocalCredentialRepository, LocalUserPolicy, RegisterLocalUser,
+    UserLifecycleError, UserLifecycleRepository, UserLifecycleService, UserLifecycleUseCases,
 };
 use pvlog_application_fakes::{FakeCredentialService, FixedClock};
 use pvlog_domain::{SessionId, UserId, UserStatus, UtcTimestamp};
@@ -90,7 +90,7 @@ struct ContractOutcome {
 #[allow(clippy::too_many_lines)]
 async fn verify_contract<R>(repository: Arc<R>) -> Result<ContractOutcome, Box<dyn Error>>
 where
-    R: UserLifecycleRepository + 'static,
+    R: UserLifecycleRepository + LocalCredentialRepository + 'static,
 {
     let suffix = UserId::new();
     let admin = lifecycle_user(
@@ -114,6 +114,8 @@ where
             allow_self_registration: true,
             require_verified_email: true,
             invitation_lifetime_seconds: 600,
+            password_minimum_length: 20,
+            password_maximum_length: 128,
         },
     );
 
@@ -132,6 +134,17 @@ where
             )
             .await,
         Err(UserLifecycleError::Forbidden)
+    ));
+
+    assert!(matches!(
+        service
+            .accept_invitation(AcceptInvitation {
+                token: SecretString::from("unused-token"),
+                display_name: "Too short".to_owned(),
+                password: SecretString::from("short-password"),
+            })
+            .await,
+        Err(UserLifecycleError::InvalidInput("password"))
     ));
     assert!(matches!(
         service
@@ -191,15 +204,35 @@ where
     assert!(invitation_debug.contains("[REDACTED]"));
     assert!(!invitation_debug.contains(&invitation_token));
     let accepted = service
-        .accept_invitation(invitation.token, "Invitee".to_owned())
+        .accept_invitation(AcceptInvitation {
+            token: invitation.token,
+            display_name: "Invitee".to_owned(),
+            password: SecretString::from("accepted-password-longer"),
+        })
         .await?;
     assert_eq!(
         accepted,
         pvlog_application::PublicLifecycleOutcome::Accepted
     );
+    let accepted_credential = repository
+        .credential_by_email(&format!("invitee-{suffix}@example.test"))
+        .await?
+        .ok_or("accepted invitation must create a local credential")?;
+    assert!(
+        FakeCredentialService
+            .verify_password(
+                &SecretString::from("accepted-password-longer"),
+                &accepted_credential.password_hash,
+            )
+            .await?
+    );
     assert_eq!(
         service
-            .accept_invitation(SecretString::from("unknown"), "Unknown".to_owned())
+            .accept_invitation(AcceptInvitation {
+                token: SecretString::from("unknown"),
+                display_name: "Unknown".to_owned(),
+                password: SecretString::from("accepted-password-longer"),
+            })
             .await?,
         accepted
     );
@@ -241,7 +274,7 @@ async fn exercise_destructive_lifecycle<R>(
     outcome: &ContractOutcome,
 ) -> Result<(), Box<dyn Error>>
 where
-    R: UserLifecycleRepository + 'static,
+    R: UserLifecycleRepository + LocalCredentialRepository + 'static,
 {
     let service = UserLifecycleService::new(
         repository.clone(),

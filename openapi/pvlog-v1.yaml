@@ -5,8 +5,7 @@ info:
   version: 0.1.0
   summary: Modern self-hosted photovoltaic monitoring API
   description: >-
-    The versioned JSON contract for PVLog. PVOutput r2 compatibility endpoints
-    are documented separately because they use legacy form and CSV formats.
+    The versioned JSON contract for PVLog.
   license:
     name: Apache License 2.0
     identifier: Apache-2.0
@@ -28,6 +27,10 @@ tags:
     description: Synchronous and asynchronous analysis exports
   - name: Notifications
     description: Alert rules, events, webhook subscriptions, and delivery attempts
+  - name: Authentication
+    description: Browser sessions and local authentication lifecycle
+  - name: Administration
+    description: Authorized account, role, identity, and audit administration
 paths:
   /api/v1/health/live:
     get:
@@ -55,6 +58,39 @@ paths:
           $ref: "#/components/responses/NotAcceptable"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /api/v1/health/ready:
+    get:
+      operationId: getReadiness
+      summary: Check dependency readiness
+      description: Verifies that the configured management and account database topology is available for serving requests.
+      tags: [Operations]
+      security: []
+      responses:
+        "200":
+          description: Required runtime dependencies are ready
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/ReadinessStatus" } },
+            }
+        "406": { $ref: "#/components/responses/NotAcceptable" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+  /api/v1/health/version:
+    get:
+      operationId: getBuildVersion
+      summary: Read running build version
+      description: Returns process build metadata without checking database or job readiness.
+      tags: [Operations]
+      security: []
+      responses:
+        "200":
+          description: Running process version
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/HealthStatus" } },
+            }
+        "406": { $ref: "#/components/responses/NotAcceptable" }
   /api/v1/systems:
     post:
       operationId: createSystem
@@ -1104,11 +1140,293 @@ paths:
             "409": { $ref: "#/components/responses/ConflictProblem" },
           },
       }
+  /api/v1/session:
+    get:
+      operationId: getBrowserSession
+      tags: [Authentication]
+      summary: Bootstrap the current browser session
+      description: Returns anonymous state when no cookie is present and authenticated state for a valid browser session.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Authenticated or anonymous session bootstrap
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/SessionBootstrap" } },
+            }
+        "401": { $ref: "#/components/responses/UnauthorizedProblem" }
+    post:
+      operationId: logoutBrowserSession
+      tags: [Authentication]
+      summary: Revoke the current browser session
+      description: Revokes the session represented by the secure session cookie after CSRF validation.
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfToken" }]
+      responses:
+        "204": { description: Browser session revoked }
+        "401": { $ref: "#/components/responses/UnauthorizedProblem" }
+  /api/v1/auth/local/login:
+    post:
+      operationId: loginWithLocalPassword
+      tags: [Authentication]
+      summary: Start an authenticated browser session with a local password
+      description: Verifies the local credential and issues a host-only HttpOnly browser session cookie.
+      security: []
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/LocalLogin" } },
+          }
+      responses:
+        "200":
+          description: Authenticated session; response sets the HttpOnly session cookie and returns a CSRF token header.
+          headers:
+            Set-Cookie: { schema: { type: string } }
+            X-CSRF-Token: { schema: { type: string } }
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/SessionBootstrap" } },
+            }
+        "401": { $ref: "#/components/responses/UnauthorizedProblem" }
+  /api/v1/auth/invitations/accept:
+    post:
+      operationId: acceptInvitation
+      tags: [Authentication]
+      summary: Accept a one-time local-user invitation
+      description: Consumes a valid invitation token exactly once, verifies the delivered email address, activates the local user, and stores the chosen Argon2id password atomically.
+      security: []
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/AcceptInvitation" } },
+          }
+      responses:
+        "202":
+          description: A uniform acceptance response that does not reveal token validity or account state.
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/AcceptedResponse" } },
+            }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/admin/auth-connectors:
+    get:
+      operationId: listAuthConnectors
+      tags: [Administration]
+      summary: List configured external authentication connectors
+      description: Returns only non-secret connector metadata after browser-session instance-administration authorization. Client secrets, secret references, client identifiers, token endpoints, and claim mappings are never returned.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Non-secret connector catalog
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    {
+                      type: array,
+                      items: { $ref: "#/components/schemas/ConnectorAdmin" },
+                    },
+                },
+            }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/admin/user-invitations:
+    post:
+      operationId: createLocalUserInvitation
+      tags: [Administration]
+      summary: Create a one-time local-user invitation
+      description: Requires browser-session instance administration and CSRF validation. The activation token is returned only in this response and must be delivered through an approved secure channel.
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfToken" }]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/CreateInvitation" } },
+          }
+      responses:
+        "201":
+          description: One-time invitation material; do not log or persist the activation token client-side.
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/InvitationCreated" } },
+            }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/users/me/identities:
+    get:
+      operationId: listLinkedIdentities
+      tags: [Administration]
+      summary: List external identities linked to the browser user
+      description: Returns only identities owned by the user represented by the browser session.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Linked external identities
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    {
+                      type: array,
+                      items: { $ref: "#/components/schemas/LinkedIdentity" },
+                    },
+                },
+            }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/accounts/{account_id}/audit-events:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }]
+    get:
+      operationId: listAccountAuditEvents
+      tags: [Administration]
+      summary: List safe account audit events
+      description: Requires the `audit:read` permission at account scope; metadata is already server-filtered.
+      security: [{ bearerAuth: [audit:read] }, { sessionCookie: [] }]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+      responses:
+        "200":
+          description: Bounded audit event collection
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    {
+                      type: array,
+                      items: { $ref: "#/components/schemas/AuditEvent" },
+                    },
+                },
+            }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/accounts/{account_id}/roles:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }]
+    get:
+      operationId: listAccountRoles
+      tags: [Administration]
+      summary: List account roles
+      description: Returns roles only after the server verifies account-scoped role-management permission.
+      security: [{ bearerAuth: [roles:manage] }, { sessionCookie: [] }]
+      responses:
+        "200":
+          description: Role catalog
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    {
+                      type: array,
+                      items: { $ref: "#/components/schemas/Role" },
+                    },
+                },
+            }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+    post:
+      operationId: createAccountRole
+      tags: [Administration]
+      summary: Create a constrained custom account role
+      description: Creates a custom role after a browser-session administrator passes delegation checks.
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfToken" }]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/RoleInput" } },
+          }
+      responses:
+        "201": { $ref: "#/components/responses/RoleResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/accounts/{account_id}/roles/{role_id}:
+    parameters:
+      - $ref: "#/components/parameters/AccountId"
+      - $ref: "#/components/parameters/RoleId"
+    patch:
+      operationId: updateAccountRole
+      tags: [Administration]
+      summary: Update a constrained custom account role
+      description: Updates a custom role after server-side delegation and account-scope authorization.
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfToken" }]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/RoleInput" } },
+          }
+      responses:
+        "200": { $ref: "#/components/responses/RoleResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+    delete:
+      operationId: deleteAccountRole
+      tags: [Administration]
+      summary: Delete a constrained custom account role
+      description: Deletes a custom role after server-side delegation and account-scope authorization.
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfToken" }]
+      responses:
+        "204": { description: Role deleted }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/accounts/{account_id}/role-assignments:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }]
+    post:
+      operationId: assignAccountRole
+      tags: [Administration]
+      summary: Assign a role to a user or API credential at account or system scope
+      description: Creates an account- or system-scoped assignment after delegation validation.
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfToken" }]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/RoleAssignmentInput" } },
+          }
+      responses:
+        "201": { $ref: "#/components/responses/RoleAssignmentResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/accounts/{account_id}/role-assignments/{assignment_id}:
+    parameters:
+      - $ref: "#/components/parameters/AccountId"
+      - $ref: "#/components/parameters/RoleAssignmentId"
+    delete:
+      operationId: revokeAccountRoleAssignment
+      tags: [Administration]
+      summary: Revoke a role assignment
+      description: Revokes an account- or system-scoped assignment after server-side authorization.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - $ref: "#/components/parameters/CsrfToken"
+        - name: systemId
+          in: query
+          schema: { $ref: "#/components/schemas/UuidV7" }
+      responses:
+        "204": { description: Role assignment revoked }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-pvlog_session
   parameters:
     SystemId:
       {
@@ -1123,6 +1441,27 @@ components:
         in: path,
         required: true,
         schema: { $ref: "#/components/schemas/UuidV7" },
+      }
+    RoleId:
+      {
+        name: role_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/UuidV7" },
+      }
+    RoleAssignmentId:
+      {
+        name: assignment_id,
+        in: path,
+        required: true,
+        schema: { $ref: "#/components/schemas/UuidV7" },
+      }
+    CsrfToken:
+      {
+        name: X-CSRF-Token,
+        in: header,
+        required: true,
+        schema: { type: string, minLength: 1 },
       }
     NestedSystemId:
       {
@@ -1266,6 +1605,26 @@ components:
               { schema: { $ref: "#/components/schemas/Problem" } },
           },
       }
+    UnauthorizedProblem:
+      {
+        description: Authentication is required or the supplied credential was rejected,
+        content:
+          {
+            application/problem+json:
+              { schema: { $ref: "#/components/schemas/Problem" } },
+          },
+      }
+    RoleResponse:
+      description: Versioned custom or built-in role
+      content:
+        { application/json: { schema: { $ref: "#/components/schemas/Role" } } }
+    RoleAssignmentResponse:
+      description: Created role assignment
+      content:
+        {
+          application/json:
+            { schema: { $ref: "#/components/schemas/RoleAssignment" } },
+        }
     ConflictProblem:
       {
         description: Optimistic concurrency conflict,
@@ -1334,7 +1693,175 @@ components:
         application/problem+json:
           schema:
             $ref: "#/components/schemas/Problem"
+    ServiceUnavailableProblem:
+      description: A required dependency is unavailable
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
   schemas:
+    CreateInvitation:
+      type: object
+      additionalProperties: false
+      required: [email]
+      properties: { email: { type: string, format: email } }
+    InvitationCreated:
+      type: object
+      additionalProperties: false
+      required: [invitationId, activationToken, expiresAt]
+      properties:
+        invitationId: { $ref: "#/components/schemas/UuidV7" }
+        activationToken: { type: string, writeOnly: true }
+        expiresAt: { type: integer, format: int64 }
+    ConnectorAdmin:
+      type: object
+      additionalProperties: false
+      required:
+        [id, displayName, protocol, enabled, authorizationEndpoint, scopes]
+      properties:
+        id: { type: string }
+        displayName: { type: string }
+        protocol: { enum: [oidc, oauth2] }
+        enabled: { type: boolean }
+        authorizationEndpoint: { type: [string, "null"], format: uri }
+        scopes: { type: array, items: { type: string } }
+    AcceptInvitation:
+      type: object
+      additionalProperties: false
+      required: [token, displayName, password]
+      properties:
+        token: { type: string, writeOnly: true, minLength: 1 }
+        displayName: { type: string, minLength: 1 }
+        password:
+          {
+            type: string,
+            format: password,
+            writeOnly: true,
+            minLength: 12,
+            maxLength: 128,
+          }
+    AcceptedResponse:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties: { status: { const: accepted } }
+    LocalLogin:
+      type: object
+      additionalProperties: false
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password, writeOnly: true }
+    SessionBootstrap:
+      type: object
+      additionalProperties: false
+      required:
+        [authenticated, user, accountId, systemIds, permissions, connectors]
+      properties:
+        authenticated: { type: boolean }
+        user:
+          oneOf:
+            - { $ref: "#/components/schemas/SessionUser" }
+            - { type: "null" }
+        accountId:
+          oneOf:
+            - { $ref: "#/components/schemas/UuidV7" }
+            - { type: "null" }
+        systemIds:
+          { type: array, items: { $ref: "#/components/schemas/UuidV7" } }
+        permissions: { type: array, items: { type: string } }
+        connectors:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/SessionConnector" },
+          }
+    SessionUser:
+      type: object
+      required: [id, displayName]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        displayName: { type: string }
+    SessionConnector:
+      type: object
+      required: [id, name, authorizationUrl]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        authorizationUrl: { type: string, format: uri }
+    LinkedIdentity:
+      type: object
+      required:
+        [id, connectorId, subject, linkedAtEpochMillis, lastLoginAtEpochMillis]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        connectorId: { $ref: "#/components/schemas/UuidV7" }
+        subject: { type: string }
+        linkedAtEpochMillis: { type: integer, format: int64 }
+        lastLoginAtEpochMillis: { type: [integer, "null"], format: int64 }
+    RoleInput:
+      type: object
+      required: [name, permissions]
+      properties:
+        name: { type: string, minLength: 1 }
+        permissions: { type: array, uniqueItems: true, items: { type: string } }
+        parentRoleIds:
+          {
+            type: array,
+            uniqueItems: true,
+            items: { $ref: "#/components/schemas/UuidV7" },
+          }
+    Role:
+      allOf:
+        - { $ref: "#/components/schemas/RoleInput" }
+        - type: object
+          required: [id, kind, version, createdAt, updatedAt]
+          properties:
+            id: { $ref: "#/components/schemas/UuidV7" }
+            kind: { type: string }
+            version: { type: integer, minimum: 1 }
+            createdAt: { type: integer, format: int64 }
+            updatedAt: { type: integer, format: int64 }
+    RoleAssignmentInput:
+      type: object
+      required: [roleId, principalType, principalId]
+      properties:
+        roleId: { $ref: "#/components/schemas/UuidV7" }
+        principalType: { enum: [user, api_credential] }
+        principalId: { $ref: "#/components/schemas/UuidV7" }
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        expiresAt: { type: integer, format: int64 }
+    RoleAssignment:
+      allOf:
+        - { $ref: "#/components/schemas/RoleAssignmentInput" }
+        - type: object
+          required: [id, accountId]
+          properties:
+            id: { $ref: "#/components/schemas/UuidV7" }
+            accountId: { $ref: "#/components/schemas/UuidV7" }
+    AuditEvent:
+      type: object
+      required:
+        [
+          id,
+          occurredAt,
+          actorType,
+          actorId,
+          action,
+          targetType,
+          targetId,
+          outcome,
+          safeMetadata,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        occurredAt: { type: integer, format: int64 }
+        actorType: { type: string }
+        actorId: { type: [string, "null"], format: uuid }
+        action: { type: string }
+        targetType: { type: string }
+        targetId: { type: [string, "null"], format: uuid }
+        outcome: { type: string }
+        safeMetadata: { type: object, additionalProperties: true }
     AlertRuleInput:
       type: object
       required: [name, kind, timezone, enabled]
@@ -1720,6 +2247,12 @@ components:
           description: Running application version.
           examples:
             - 0.1.0
+    ReadinessStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { const: ok }
     Problem:
       type: object
       additionalProperties: true

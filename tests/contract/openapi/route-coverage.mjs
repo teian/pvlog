@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 
 const spec = readFileSync("openapi/pvlog-v1.yaml", "utf8");
 const required = [
+  ["get", "/api/v1/health/version", "getBuildVersion"],
+  ["get", "/api/v1/health/ready", "getReadiness"],
   ["post", "/api/v1/systems", "createSystem"],
   ["put", "/api/v1/systems/{id}", "updateSystem"],
   ["delete", "/api/v1/systems/{id}", "deleteSystem"],
@@ -66,6 +68,40 @@ const required = [
     "post",
     "/api/v1/systems/{system_id}/analysis-exports",
     "createAnalysisExport",
+  ],
+  ["get", "/api/v1/session", "getBrowserSession"],
+  ["post", "/api/v1/session", "logoutBrowserSession"],
+  ["post", "/api/v1/auth/local/login", "loginWithLocalPassword"],
+  ["post", "/api/v1/auth/invitations/accept", "acceptInvitation"],
+  ["get", "/api/v1/admin/auth-connectors", "listAuthConnectors"],
+  ["post", "/api/v1/admin/user-invitations", "createLocalUserInvitation"],
+  ["get", "/api/v1/users/me/identities", "listLinkedIdentities"],
+  [
+    "get",
+    "/api/v1/accounts/{account_id}/audit-events",
+    "listAccountAuditEvents",
+  ],
+  ["get", "/api/v1/accounts/{account_id}/roles", "listAccountRoles"],
+  ["post", "/api/v1/accounts/{account_id}/roles", "createAccountRole"],
+  [
+    "patch",
+    "/api/v1/accounts/{account_id}/roles/{role_id}",
+    "updateAccountRole",
+  ],
+  [
+    "delete",
+    "/api/v1/accounts/{account_id}/roles/{role_id}",
+    "deleteAccountRole",
+  ],
+  [
+    "post",
+    "/api/v1/accounts/{account_id}/role-assignments",
+    "assignAccountRole",
+  ],
+  [
+    "delete",
+    "/api/v1/accounts/{account_id}/role-assignments/{assignment_id}",
+    "revokeAccountRoleAssignment",
   ],
 ];
 for (const [method, path, operationId] of required) {

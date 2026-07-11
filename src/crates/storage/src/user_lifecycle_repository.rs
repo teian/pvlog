@@ -140,6 +140,7 @@ impl UserLifecycleRepository for SqliteUserLifecycleRepository {
         &self,
         digest: &CredentialDigest,
         display_name: &str,
+        password_hash: &PasswordHash,
         activated: bool,
         now: i64,
     ) -> Result<bool, PortError> {
@@ -186,6 +187,23 @@ impl UserLifecycleRepository for SqliteUserLifecycleRepository {
         .bind(verified_at)
         .bind(now)
         .bind(&email)
+        .execute(&mut *transaction)
+        .await
+        .map_err(port)?;
+        let user_id: Vec<u8> = sqlx::query_scalar("SELECT id FROM users WHERE email=?")
+            .bind(&email)
+            .fetch_one(&mut *transaction)
+            .await
+            .map_err(port)?;
+        sqlx::query(
+            "INSERT INTO local_credentials (user_id,password_hash,password_changed_at,failed_attempts,locked_until,rehash_required) \
+             VALUES (?,?,?,0,NULL,0) ON CONFLICT(user_id) DO UPDATE SET \
+             password_hash=excluded.password_hash,password_changed_at=excluded.password_changed_at,\
+             failed_attempts=0,locked_until=NULL,rehash_required=0",
+        )
+        .bind(&user_id)
+        .bind(password_hash.expose_encoded())
+        .bind(now)
         .execute(&mut *transaction)
         .await
         .map_err(port)?;
@@ -329,6 +347,7 @@ impl UserLifecycleRepository for PostgresUserLifecycleRepository {
         &self,
         digest: &CredentialDigest,
         display_name: &str,
+        password_hash: &PasswordHash,
         activated: bool,
         now: i64,
     ) -> Result<bool, PortError> {
@@ -346,6 +365,13 @@ impl UserLifecycleRepository for PostgresUserLifecycleRepository {
         let user_id = UserId::new();
         sqlx::query("INSERT INTO management.users (id,email,display_name,status,email_verified_at,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING").bind(user_id.as_uuid()).bind(&email).bind(display_name).bind(status).bind(verified_at).bind(now).bind(now).execute(&mut *transaction).await.map_err(port)?;
         sqlx::query("UPDATE management.users SET display_name=$1,status=$2,email_verified_at=COALESCE(email_verified_at,$3),disabled_at=NULL,updated_at=$4,version=version+1 WHERE lower(email)=lower($5) AND status='invited'").bind(display_name).bind(status).bind(verified_at).bind(now).bind(&email).execute(&mut *transaction).await.map_err(port)?;
+        let user_id: Uuid =
+            sqlx::query_scalar("SELECT id FROM management.users WHERE lower(email)=lower($1)")
+                .bind(&email)
+                .fetch_one(&mut *transaction)
+                .await
+                .map_err(port)?;
+        sqlx::query("INSERT INTO management.local_credentials (user_id,password_hash,password_changed_at,failed_attempts,locked_until,rehash_required) VALUES ($1,$2,$3,0,NULL,FALSE) ON CONFLICT(user_id) DO UPDATE SET password_hash=excluded.password_hash,password_changed_at=excluded.password_changed_at,failed_attempts=0,locked_until=NULL,rehash_required=FALSE").bind(user_id).bind(password_hash.expose_encoded()).bind(now).execute(&mut *transaction).await.map_err(port)?;
         let result=sqlx::query("UPDATE management.user_invitations SET accepted_at=$1 WHERE id=$2 AND accepted_at IS NULL").bind(now).bind(invitation_id).execute(&mut *transaction).await.map_err(port)?;
         transaction.commit().await.map_err(port)?;
         Ok(result.rows_affected() == 1)

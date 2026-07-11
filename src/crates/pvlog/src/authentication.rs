@@ -13,7 +13,9 @@ use pvlog_application::{
 use pvlog_domain::{
     ApiScope, AuditEventId, Permission, PrincipalId, RequestId, RoleKind, SystemId, UserId,
 };
-use pvlog_storage::{AuditRecord, ManagementRepository, RoutingRecord};
+use pvlog_storage::{
+    AuditRecord, DatabaseTarget, ManagementRepository, RoutingRecord, probe_database,
+};
 use secrecy::{ExposeSecret as _, SecretString};
 
 /// Verifies bearer credentials and browser sessions from the management plane.
@@ -328,6 +330,66 @@ pub struct ManagementRbacApi {
 /// Browser-session view over provider-neutral external identity links.
 pub struct ManagementIdentityApi {
     service: Arc<dyn ExternalIdentityLinkingUseCases>,
+}
+
+/// Runtime-configured connector catalog that deliberately omits client credentials and secret references.
+pub struct ManagementConnectorApi {
+    connectors: Vec<pvlog_api::ConnectorAdminResponse>,
+}
+
+/// Readiness adapter that verifies the configured management/database topology.
+pub struct ManagementReadiness {
+    target: DatabaseTarget,
+}
+
+impl ManagementReadiness {
+    #[must_use]
+    pub const fn new(target: DatabaseTarget) -> Self {
+        Self { target }
+    }
+}
+
+#[async_trait]
+impl pvlog_api::ReadinessUseCases for ManagementReadiness {
+    async fn ready(&self) -> Result<(), pvlog_api::ReadinessError> {
+        probe_database(&self.target)
+            .await
+            .map_err(|_| pvlog_api::ReadinessError::Unavailable)
+    }
+}
+
+impl ManagementConnectorApi {
+    #[must_use]
+    pub fn new(connectors: &[crate::config::AuthConnectorConfig]) -> Self {
+        Self {
+            connectors: connectors
+                .iter()
+                .map(|connector| pvlog_api::ConnectorAdminResponse {
+                    id: connector.id.clone(),
+                    display_name: connector.display_name.clone(),
+                    protocol: match connector.protocol {
+                        crate::config::AuthProtocol::Oidc => "oidc".to_owned(),
+                        crate::config::AuthProtocol::Oauth2 => "oauth2".to_owned(),
+                    },
+                    enabled: connector.enabled,
+                    authorization_endpoint: connector
+                        .authorization_endpoint
+                        .as_ref()
+                        .map(url::Url::to_string),
+                    scopes: connector.scopes.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+#[async_trait]
+impl pvlog_api::ConnectorAdminUseCases for ManagementConnectorApi {
+    async fn connectors(
+        &self,
+    ) -> Result<Vec<pvlog_api::ConnectorAdminResponse>, pvlog_api::ConnectorAdminError> {
+        Ok(self.connectors.clone())
+    }
 }
 
 impl ManagementIdentityApi {
@@ -745,4 +807,50 @@ fn constant_time_eq(left: &[u8; 32], right: &[u8; 32]) -> bool {
 
 fn map_port(_: pvlog_storage::ManagementRepositoryError) -> RequestAuthenticationError {
     RequestAuthenticationError::Unavailable
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ManagementConnectorApi;
+    use crate::config::{AuthConnectorConfig, AuthProtocol, ClaimMappings};
+    use pvlog_api::ConnectorAdminUseCases as _;
+    use url::Url;
+
+    #[tokio::test]
+    async fn connector_catalog_never_serializes_client_credentials_or_secret_references()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let connector = AuthConnectorConfig {
+            id: "company-sso".to_owned(),
+            display_name: "Company SSO".to_owned(),
+            protocol: AuthProtocol::Oidc,
+            enabled: true,
+            client_id: "client-id-must-not-leak".to_owned(),
+            client_secret_ref: "secret-ref-must-not-leak".to_owned(),
+            discovery_url: Some(Url::parse(
+                "https://identity.example/.well-known/openid-configuration",
+            )?),
+            issuer: Some(Url::parse("https://identity.example")?),
+            authorization_endpoint: Some(Url::parse("https://identity.example/authorize")?),
+            token_endpoint: Some(Url::parse("https://identity.example/token")?),
+            userinfo_endpoint: Some(Url::parse("https://identity.example/userinfo")?),
+            scopes: vec!["openid".to_owned()],
+            claims: ClaimMappings {
+                subject: "sub".to_owned(),
+                name: None,
+                email: None,
+                email_verified: None,
+                avatar: None,
+            },
+        };
+        let response = ManagementConnectorApi::new(&[connector]).connectors().await;
+        assert!(response.is_ok());
+        let response = response.unwrap_or_default();
+        let serialized = serde_json::to_string(&response)?;
+        assert!(!serialized.contains("client-id-must-not-leak"));
+        assert!(!serialized.contains("secret-ref-must-not-leak"));
+        assert!(!serialized.contains("https://identity.example/token"));
+        assert!(!serialized.contains("https://identity.example/userinfo"));
+        assert!(serialized.contains("https://identity.example/authorize"));
+        Ok(())
+    }
 }

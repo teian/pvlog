@@ -2,13 +2,14 @@
 
 #![forbid(unsafe_code)]
 
-use std::{io, sync::Arc};
+use std::{io, sync::Arc, time::Duration};
 
 use clap::{Parser, Subcommand};
 use pvlog::SystemClock;
 use pvlog::authentication::{
-    ManagementAuditApi, ManagementIdentityApi, ManagementRbacApi, ManagementRequestAuthenticator,
-    ManagementRequestAuthorizer, ManagementSessionBootstrap, session_digest_key,
+    ManagementAuditApi, ManagementConnectorApi, ManagementIdentityApi, ManagementRbacApi,
+    ManagementReadiness, ManagementRequestAuthenticator, ManagementRequestAuthorizer,
+    ManagementSessionBootstrap, session_digest_key,
 };
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
 use pvlog_application::{
@@ -49,6 +50,15 @@ enum Command {
         /// Perform a single readiness cycle and exit.
         #[arg(long)]
         once: bool,
+        /// Seconds to wait between worker cycles.
+        #[arg(long, default_value_t = 30)]
+        interval_seconds: u64,
+    },
+    /// Verify database reachability and schema compatibility without mutation.
+    Doctor {
+        /// Emit stable machine-readable JSON instead of text.
+        #[arg(long)]
+        json: bool,
     },
     /// Inspect or explicitly apply database schema migrations.
     Migrate {
@@ -81,13 +91,69 @@ async fn main() -> Result<(), StartupError> {
 
     match cli.command {
         Command::Server => run_server(&config, &target).await,
-        Command::Worker { once: true } => {
+        Command::Worker {
+            once: true,
+            interval_seconds: _,
+        } => {
             pvlog_worker::run_once(&target).await?;
             Ok(())
         }
-        Command::Worker { once: false } => Err(StartupError::ContinuousWorkerUnavailable),
+        Command::Worker {
+            once: false,
+            interval_seconds,
+        } => run_worker(&target, interval_seconds).await,
+        Command::Doctor { json } => run_doctor(&target, json).await,
         Command::Migrate { json, action } => run_migration_command(&target, action, json).await,
     }
+}
+
+async fn run_worker(target: &DatabaseTarget, interval_seconds: u64) -> Result<(), StartupError> {
+    let interval = Duration::from_secs(interval_seconds.max(1));
+    let mut ticker = tokio::time::interval(interval);
+    tracing::info!(interval_seconds = interval.as_secs(), "worker started");
+
+    loop {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                tracing::info!("worker received shutdown signal");
+                return Ok(());
+            }
+            _ = ticker.tick() => {
+                if let Err(error) = pvlog_worker::run_once(target).await {
+                    tracing::error!(%error, "worker readiness cycle failed");
+                }
+            }
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DoctorReport {
+    database_ready: bool,
+    schema_compatible: bool,
+    migrations: Vec<DatabaseMigrationStatus>,
+}
+
+async fn run_doctor(target: &DatabaseTarget, json: bool) -> Result<(), StartupError> {
+    probe_database(target).await?;
+    let migrations = migration_status(target).await?;
+    let report = DoctorReport {
+        database_ready: true,
+        schema_compatible: migrations.iter().all(|status| status.compatible),
+        migrations,
+    };
+    if json {
+        print_json(&report)?;
+    } else {
+        println!("database_ready={}", report.database_ready);
+        println!("schema_compatible={}", report.schema_compatible);
+        print_statuses(&report.migrations, false)?;
+    }
+    report
+        .schema_compatible
+        .then_some(())
+        .ok_or(StartupError::IncompatibleSchema)
 }
 
 async fn run_migration_command(
@@ -194,10 +260,13 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     )?));
     let rbac_api = compose_rbac_api(target)?;
     let identity_api = compose_identity_api(target)?;
+    let connector_api = Arc::new(ManagementConnectorApi::new(&config.auth.connectors));
+    let readiness = Arc::new(ManagementReadiness::new(target.clone()));
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
     let router = pvlog_api::with_request_authentication(
         pvlog_api::router(env!("CARGO_PKG_VERSION"))
+            .merge(pvlog_api::readiness_router(readiness))
             .merge(pvlog_api::user_lifecycle_router(
                 user_lifecycle,
                 request_authorizer.clone(),
@@ -220,7 +289,11 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 request_authorizer.clone(),
             ))
             .merge(pvlog_api::rbac_router(rbac_api, request_authorizer.clone()))
-            .merge(pvlog_api::identities_router(identity_api)),
+            .merge(pvlog_api::identities_router(identity_api))
+            .merge(pvlog_api::connectors_router(
+                connector_api,
+                request_authorizer.clone(),
+            )),
         request_authenticator,
     );
     axum::serve(listener, router).await?;
@@ -536,6 +609,8 @@ fn compose_user_lifecycle(
             allow_self_registration: config.auth.local.allow_self_registration,
             require_verified_email: config.auth.local.require_verified_email,
             invitation_lifetime_seconds: 86_400,
+            password_minimum_length: config.auth.local.password_minimum_length,
+            password_maximum_length: config.auth.local.password_maximum_length,
         },
     )))
 }
@@ -612,8 +687,8 @@ enum StartupError {
     Migration(#[from] MigrationError),
     #[error("failed to serialize command output: {0}")]
     Json(#[from] serde_json::Error),
-    #[error("continuous worker execution is not implemented yet; pass --once")]
-    ContinuousWorkerUnavailable,
+    #[error("database schema is not compatible with this release")]
+    IncompatibleSchema,
     #[error("failed to initialize account lifecycle routing")]
     SystemLifecycleRouting,
     #[allow(dead_code)]

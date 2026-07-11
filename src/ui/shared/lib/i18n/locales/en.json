@@ -49,6 +49,7 @@
       }
     },
     "continueWith": "Continue with {{name}}",
+    "displayName": "Display name",
     "email": "Email address",
     "forgotPassword": "Forgot password?",
     "loginDescription": "Use a local account or a configured external connector.",
@@ -60,6 +61,7 @@
     "recoverySent": "If the account exists, a recovery link has been sent.",
     "recoveryTitle": "Recover your account",
     "sendRecovery": "Send recovery link",
+    "signOut": "Sign out",
     "signIn": "Sign in"
   },
   "charts": {
@@ -228,9 +230,124 @@
   },
   "nav": {
     "account": "Account {{id}}",
+    "administration": "Administration",
     "alerts": "Alerts",
+    "community": "Community",
     "dashboard": "Dashboard",
     "system": "System {{id}}"
+  },
+  "community": {
+    "title": "Community",
+    "description": "Discover visible systems, manage favourites, and compare privacy-safe energy rankings.",
+    "unavailable": "This community data is unavailable right now.",
+    "search": {
+      "title": "Find systems",
+      "description": "Search only systems whose owners have allowed discovery.",
+      "query": "Name",
+      "queryPlaceholder": "Search by system name",
+      "country": "Country code",
+      "countryPlaceholder": "DE",
+      "empty": "No visible systems match these filters.",
+      "unknown": "Not specified",
+      "details": "{{capacity}} W · {{country}} · {{location}}",
+      "stale": "Projection data may be out of date."
+    },
+    "favourites": {
+      "title": "Favourites",
+      "description": "Favourites do not grant access to private system data.",
+      "empty": "You have not favourited any visible systems.",
+      "capacity": "{{capacity}} W installed capacity",
+      "add": "Add favourite",
+      "remove": "Remove favourite"
+    },
+    "comparison": {
+      "title": "Compare systems",
+      "description": "Compare the systems currently available in your session by normalized generation.",
+      "compare": "Compare my systems",
+      "requiresSystems": "At least two systems are required for a comparison.",
+      "results": "Comparison results"
+    },
+    "ladder": {
+      "title": "Public ladder",
+      "empty": "No eligible public systems are currently ranked.",
+      "entry": "#{{rank}} · {{name}}",
+      "metrics": "{{generation}} Wh/kW · {{coverage}}% coverage"
+    }
+  },
+  "administration": {
+    "title": "Administration",
+    "description": "Review your sign-in identities and the account administration data available to you.",
+    "unavailableTitle": "Information unavailable",
+    "restricted": "Your current role does not permit viewing this account data.",
+    "identities": {
+      "title": "Linked identities",
+      "description": "External identities connected to this browser account.",
+      "empty": "No external identities are linked to this account.",
+      "unavailable": "Linked identities could not be loaded.",
+      "linked": "Connector {{connector}} · linked {{date}}"
+    },
+    "invitations": {
+      "title": "Invite local user",
+      "description": "Create a one-time invitation for a local account.",
+      "email": "Email address",
+      "create": "Create invitation",
+      "error": "The invitation could not be created.",
+      "tokenTitle": "One-time activation token",
+      "tokenDescription": "Share this token only through an approved secure channel. It will not be shown again after you leave this page."
+    },
+    "connectors": {
+      "title": "Authentication connectors",
+      "description": "Configured sign-in connectors. Secrets and client credentials are not displayed.",
+      "empty": "No external authentication connectors are configured.",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "scopes_one": "{{count}} configured scope",
+      "scopes_other": "{{count}} configured scopes"
+    },
+    "roles": {
+      "title": "Roles",
+      "description": "Roles that can be administered for the active account.",
+      "empty": "No roles are available for this account.",
+      "createTitle": "Create custom role",
+      "name": "Role name",
+      "selectPermissions": "Permissions",
+      "create": "Create role",
+      "createError": "The role could not be created.",
+      "permissions_one": "{{count}} permission",
+      "permissions_other": "{{count}} permissions"
+    },
+    "assignments": {
+      "title": "Assign role",
+      "role": "Role",
+      "principalType": "Principal type",
+      "user": "User",
+      "apiCredential": "API credential",
+      "principalId": "Principal ID",
+      "systemId": "System ID (optional)",
+      "create": "Assign role",
+      "error": "The role assignment could not be created."
+    },
+    "audit": {
+      "title": "Audit trail",
+      "description": "Recent account actions visible to your role.",
+      "empty": "No audit events are available for this account.",
+      "event": "{{target}} · {{outcome}} · {{date}}"
+    },
+    "permissions": {
+      "instance_read": "Read instance",
+      "instance_manage": "Manage instance",
+      "account_read": "Read account",
+      "account_manage": "Manage account",
+      "membership_manage": "Manage memberships",
+      "role_manage": "Manage roles",
+      "system_read": "Read systems",
+      "system_manage": "Manage systems",
+      "telemetry_read": "Read telemetry",
+      "telemetry_write": "Write telemetry",
+      "credential_manage": "Manage credentials",
+      "integration_manage": "Manage integrations",
+      "audit_read": "Read audit trail"
+    }
   },
   "onboarding": {
     "awaitingVerification": "Send a test observation to verify ingestion.",

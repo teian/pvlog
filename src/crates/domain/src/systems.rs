@@ -2,8 +2,8 @@ use serde::{Deserialize, Serialize};
 use time::Date;
 
 use crate::{
-    AccountId, ChannelId, CurrencyCode, EquipmentId, IanaTimezone, Money, SystemId, TariffId,
-    ValidationError, Visibility, Watts,
+    AccountId, ChannelId, CurrencyCode, EquipmentId, IanaTimezone, InverterId, Money, StringId,
+    SystemId, TariffId, ValidationError, Visibility, Watts,
 };
 
 /// Half-open effective date range where an omitted end means indefinitely active.
@@ -57,6 +57,74 @@ pub struct PvSystem {
     pub lifecycle: SystemLifecycle,
     pub privacy: SystemPrivacy,
     pub calculation: CalculationSettings,
+    pub inverters: Vec<Inverter>,
+}
+
+impl PvSystem {
+    /// Validates ownership throughout the system → inverter → string aggregate.
+    ///
+    /// # Errors
+    /// Returns a validation error when a child belongs to another aggregate or an inverter has no
+    /// strings.
+    pub fn validate_hierarchy(&self) -> Result<(), ValidationError> {
+        for inverter in &self.inverters {
+            if inverter.system_id != self.id {
+                return Err(ValidationError::new(
+                    "invalid_inverter_parent",
+                    "inverters.system_id",
+                    "inverter must belong to the containing system",
+                ));
+            }
+            if inverter.strings.is_empty() {
+                return Err(ValidationError::new(
+                    "inverter_without_strings",
+                    "inverters.strings",
+                    "inverter must contain at least one PV string",
+                ));
+            }
+            if inverter
+                .strings
+                .iter()
+                .any(|string| string.inverter_id != inverter.id)
+            {
+                return Err(ValidationError::new(
+                    "invalid_string_parent",
+                    "inverters.strings.inverter_id",
+                    "PV string must belong to the containing inverter",
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Effective-dated inverter contained by one photovoltaic system aggregate.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct Inverter {
+    pub id: InverterId,
+    pub system_id: SystemId,
+    pub name: String,
+    pub manufacturer: Option<String>,
+    pub model: Option<String>,
+    pub serial_reference: Option<String>,
+    pub rated_power: Option<Watts>,
+    pub period: EffectivePeriod,
+    pub strings: Vec<PvString>,
+}
+
+/// Effective-dated photovoltaic string contained by one inverter.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct PvString {
+    pub id: StringId,
+    pub inverter_id: InverterId,
+    pub name: String,
+    pub panel_count: u32,
+    pub panel_manufacturer: Option<String>,
+    pub panel_model: Option<String>,
+    pub rated_power: Watts,
+    pub orientation_degrees: Option<u16>,
+    pub tilt_degrees: Option<u8>,
+    pub period: EffectivePeriod,
 }
 
 /// System lifecycle independent from public visibility.
@@ -122,8 +190,6 @@ pub struct Equipment {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum EquipmentKind {
-    Panel,
-    Inverter,
     Battery,
     Meter,
     Sensor,

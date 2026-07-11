@@ -22,7 +22,6 @@ opentelemetry-otlp.workspace = true
 opentelemetry_sdk.workspace = true
 pvlog-api = { path = "../api" }
 pvlog-application = { path = "../application" }
-pvlog-compatibility = { path = "../compatibility" }
 pvlog-domain = { path = "../domain" }
 pvlog-storage = { path = "../storage", default-features = false }
 pvlog-worker = { path = "../worker", default-features = false }

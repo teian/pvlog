@@ -23,12 +23,14 @@ mod audit;
 mod authentication;
 mod authorization;
 mod community;
+mod connectors;
 mod identities;
 mod local_password;
 mod managed_resources;
 mod notifications;
 mod problem;
 mod rbac;
+mod readiness;
 mod sessions;
 mod systems;
 mod teams;
@@ -46,6 +48,9 @@ pub use authorization::{
     principal_identity,
 };
 pub use community::community_router;
+pub use connectors::{
+    ConnectorAdminError, ConnectorAdminResponse, ConnectorAdminUseCases, connectors_router,
+};
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,
 };
@@ -57,6 +62,7 @@ pub use rbac::{
     AssignmentPrincipalType, RbacApiError, RbacApiUseCases, RoleAssignmentInput,
     RoleAssignmentResponse, RoleInput, RoleResponse, rbac_router,
 };
+pub use readiness::{ReadinessError, ReadinessResponse, ReadinessUseCases, readiness_router};
 pub use sessions::{
     SessionApiError, SessionBootstrap, SessionBootstrapUseCases, SessionConnector, SessionUser,
     sessions_router,
@@ -72,6 +78,15 @@ pub fn router(version: &'static str) -> Router {
     Router::new()
         .route(
             "/api/v1/health/live",
+            get(move || async move {
+                Json(HealthStatus {
+                    status: "ok",
+                    version,
+                })
+            }),
+        )
+        .route(
+            "/api/v1/health/version",
             get(move || async move {
                 Json(HealthStatus {
                     status: "ok",

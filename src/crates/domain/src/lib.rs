@@ -16,9 +16,9 @@ mod validation;
 pub use identifiers::{
     AccountId, AlertEventId, AlertRuleId, ApiCredentialId, AuditEventId, ChannelId, ConnectorId,
     CorrectionId, EquipmentId, ExportId, ExternalIdentityId, FavouriteId, IdentifierError,
-    ImportId, JobId, MembershipId, ObservationId, PasswordRecoveryId, ProviderId, RequestId,
-    RoleAssignmentId, RoleId, SegmentId, SessionId, SystemId, TariffId, TeamId, TeamMembershipId,
-    UserId, UserInvitationId, WebhookDeliveryId, WebhookSubscriptionId,
+    ImportId, InverterId, JobId, MembershipId, ObservationId, PasswordRecoveryId, ProviderId,
+    RequestId, RoleAssignmentId, RoleId, SegmentId, SessionId, StringId, SystemId, TariffId,
+    TeamId, TeamMembershipId, UserId, UserInvitationId, WebhookDeliveryId, WebhookSubscriptionId,
 };
 pub use identity::{
     Account, AccountStatus, ApiCredential, ApiScope, AuditEvent, AuditOutcome, BuiltInRole,
@@ -41,8 +41,8 @@ pub use shared::{CurrencyCode, Money, Visibility};
 pub use systems::{
     CalculationSettings, CapacityPeriod, ChannelDataType, ChannelDefinition, ChannelDisplay,
     ChannelLifecycle, ChannelScale, EffectivePeriod, Equipment, EquipmentKind, GeographicPrecision,
-    NetCalculationMode, PowerCalculationMode, PvSystem, SystemLifecycle, SystemPrivacy, Tariff,
-    TariffDirection,
+    Inverter, NetCalculationMode, PowerCalculationMode, PvString, PvSystem, SystemLifecycle,
+    SystemPrivacy, Tariff, TariffDirection,
 };
 pub use telemetry::{
     AggregateValue, ArchivedSegment, BatteryFlowState, BatteryReading, CanonicalObservation,

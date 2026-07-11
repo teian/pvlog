@@ -61,6 +61,14 @@ name = "identity-endpoints"
 path = "../../../tests/rust/api/identity_endpoints.rs"
 
 [[test]]
+name = "connector-admin-endpoints"
+path = "../../../tests/rust/api/connector_admin_endpoints.rs"
+
+[[test]]
+name = "readiness-endpoints"
+path = "../../../tests/rust/api/readiness_endpoints.rs"
+
+[[test]]
 name = "system-endpoints"
 path = "../../../tests/rust/api/system_endpoints.rs"
 

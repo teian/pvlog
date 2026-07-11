@@ -129,6 +129,7 @@ pub use user_lifecycle_repository::PostgresUserLifecycleRepository;
 pub use user_lifecycle_repository::SqliteUserLifecycleRepository;
 
 /// Database topology selected for the current process.
+#[derive(Clone)]
 pub enum DatabaseTarget {
     /// Instance management database and directory of account-owned databases.
     Sqlite {

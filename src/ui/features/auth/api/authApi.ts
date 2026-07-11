@@ -1,46 +1,15 @@
 import { sessionSchema, type Session } from "@/features/auth/types/auth.types";
-
-const csrfStorageKey = "pvlog.csrf-token";
-
-function csrfToken(): string | null {
-  return typeof window === "undefined"
-    ? null
-    : window.sessionStorage.getItem(csrfStorageKey);
-}
-
-function rememberCsrfToken(response: Response): void {
-  const token = response.headers.get("x-csrf-token");
-  if (token && typeof window !== "undefined")
-    window.sessionStorage.setItem(csrfStorageKey, token);
-}
-
-async function jsonRequest(path: string, init?: RequestInit): Promise<unknown> {
-  const headers = new Headers(init?.headers);
-  headers.set("content-type", "application/json");
-  if (!["GET", "HEAD", "OPTIONS"].includes(init?.method ?? "GET")) {
-    const token = csrfToken();
-    if (token) headers.set("x-csrf-token", token);
-  }
-  const response = await fetch(path, {
-    credentials: "same-origin",
-    ...init,
-    headers,
-  });
-  if (!response.ok)
-    throw new Error(`request_failed:${String(response.status)}`);
-  rememberCsrfToken(response);
-  return response.status === 204 ? null : response.json();
-}
+import { sessionJsonRequest } from "@/shared/api/sessionRequest";
 
 /** Loads the current user, permissions, systems, and connector choices. @returns The validated session bootstrap. */
 export async function fetchSession(): Promise<Session> {
-  return sessionSchema.parse(await jsonRequest("/api/v1/session"));
+  return sessionSchema.parse(await sessionJsonRequest("/api/v1/session"));
 }
 
 /** Authenticates with a local credential. @param email - Local account email. @param password - Local password. @returns The refreshed session. */
 export async function login(email: string, password: string): Promise<Session> {
   return sessionSchema.parse(
-    await jsonRequest("/api/v1/auth/local/login", {
+    await sessionJsonRequest("/api/v1/auth/local/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
@@ -49,16 +18,25 @@ export async function login(email: string, password: string): Promise<Session> {
 
 /** Starts local password recovery. @param email - Local account email. @returns Completion after the enumeration-safe request. */
 export async function requestRecovery(email: string): Promise<void> {
-  await jsonRequest("/api/v1/auth/password-recovery", {
+  await sessionJsonRequest("/api/v1/auth/password-recovery", {
     method: "POST",
     body: JSON.stringify({ email }),
   });
 }
 
-/** Activates an invited local account. @param token - One-time activation token. @param password - Initial password. @returns Completion after activation. */
-export async function activate(token: string, password: string): Promise<void> {
-  await jsonRequest("/api/v1/auth/local/activation", {
+/** Accepts an invitation and stores the invited user's initial local password. @param token - One-time invitation token. @param displayName - Invited user's display name. @param password - Initial password. @returns Completion after acceptance. */
+export async function activate(
+  token: string,
+  displayName: string,
+  password: string,
+): Promise<void> {
+  await sessionJsonRequest("/api/v1/auth/invitations/accept", {
     method: "POST",
-    body: JSON.stringify({ token, password }),
+    body: JSON.stringify({ token, displayName, password }),
   });
+}
+
+/** Revokes the active browser session. @returns Completion after the server-side session revocation. */
+export async function logout(): Promise<void> {
+  await sessionJsonRequest("/api/v1/session", { method: "POST" });
 }

@@ -49,6 +49,7 @@
       }
     },
     "continueWith": "Weiter mit {{name}}",
+    "displayName": "Anzeigename",
     "email": "E-Mail-Adresse",
     "forgotPassword": "Passwort vergessen?",
     "loginDescription": "Verwende ein lokales Konto oder einen konfigurierten externen Connector.",
@@ -60,6 +61,7 @@
     "recoverySent": "Falls das Konto existiert, wurde ein Wiederherstellungslink versendet.",
     "recoveryTitle": "Konto wiederherstellen",
     "sendRecovery": "Wiederherstellungslink senden",
+    "signOut": "Abmelden",
     "signIn": "Anmelden"
   },
   "charts": {
@@ -228,9 +230,124 @@
   },
   "nav": {
     "account": "Konto {{id}}",
+    "administration": "Verwaltung",
     "alerts": "Warnungen",
+    "community": "Community",
     "dashboard": "Übersicht",
     "system": "Anlage {{id}}"
+  },
+  "community": {
+    "title": "Community",
+    "description": "Entdecke sichtbare Anlagen, verwalte Favoriten und vergleiche datenschutzsichere Energieranglisten.",
+    "unavailable": "Diese Community-Daten sind derzeit nicht verfügbar.",
+    "search": {
+      "title": "Anlagen finden",
+      "description": "Es werden nur Anlagen gesucht, deren Eigentümer die Auffindbarkeit erlaubt haben.",
+      "query": "Name",
+      "queryPlaceholder": "Nach Anlagenname suchen",
+      "country": "Ländercode",
+      "countryPlaceholder": "DE",
+      "empty": "Keine sichtbaren Anlagen entsprechen diesen Filtern.",
+      "unknown": "Nicht angegeben",
+      "details": "{{capacity}} W · {{country}} · {{location}}",
+      "stale": "Die Projektionsdaten können veraltet sein."
+    },
+    "favourites": {
+      "title": "Favoriten",
+      "description": "Favoriten gewähren keinen Zugriff auf private Anlagendaten.",
+      "empty": "Du hast keine sichtbaren Anlagen als Favoriten gespeichert.",
+      "capacity": "{{capacity}} W installierte Leistung",
+      "add": "Favorit hinzufügen",
+      "remove": "Favorit entfernen"
+    },
+    "comparison": {
+      "title": "Anlagen vergleichen",
+      "description": "Vergleiche die in deiner Sitzung verfügbaren Anlagen nach normierter Erzeugung.",
+      "compare": "Meine Anlagen vergleichen",
+      "requiresSystems": "Für einen Vergleich werden mindestens zwei Anlagen benötigt.",
+      "results": "Vergleichsergebnisse"
+    },
+    "ladder": {
+      "title": "Öffentliche Rangliste",
+      "empty": "Derzeit werden keine geeigneten öffentlichen Anlagen gelistet.",
+      "entry": "#{{rank}} · {{name}}",
+      "metrics": "{{generation}} Wh/kW · {{coverage}} % Abdeckung"
+    }
+  },
+  "administration": {
+    "title": "Verwaltung",
+    "description": "Prüfe deine Anmeldeidentitäten und die für dich sichtbaren Verwaltungsdaten des Kontos.",
+    "unavailableTitle": "Informationen nicht verfügbar",
+    "restricted": "Deine aktuelle Rolle erlaubt das Anzeigen dieser Kontodaten nicht.",
+    "identities": {
+      "title": "Verknüpfte Identitäten",
+      "description": "Externe Identitäten, die mit diesem Browserkonto verbunden sind.",
+      "empty": "Mit diesem Konto sind keine externen Identitäten verknüpft.",
+      "unavailable": "Verknüpfte Identitäten konnten nicht geladen werden.",
+      "linked": "Connector {{connector}} · verknüpft {{date}}"
+    },
+    "invitations": {
+      "title": "Lokalen Benutzer einladen",
+      "description": "Erstelle eine einmalige Einladung für ein lokales Konto.",
+      "email": "E-Mail-Adresse",
+      "create": "Einladung erstellen",
+      "error": "Die Einladung konnte nicht erstellt werden.",
+      "tokenTitle": "Einmaliger Aktivierungstoken",
+      "tokenDescription": "Gib diesen Token nur über einen freigegebenen sicheren Kanal weiter. Nach dem Verlassen dieser Seite wird er nicht erneut angezeigt."
+    },
+    "connectors": {
+      "title": "Anmelde-Connectoren",
+      "description": "Konfigurierte Anmelde-Connectoren. Secrets und Client-Zugänge werden nicht angezeigt.",
+      "empty": "Es sind keine externen Anmelde-Connectoren konfiguriert.",
+      "enabled": "Aktiv",
+      "disabled": "Inaktiv",
+      "scopes_one": "{{count}} konfigurierte Berechtigung",
+      "scopes_other": "{{count}} konfigurierte Berechtigungen"
+    },
+    "roles": {
+      "title": "Rollen",
+      "description": "Rollen, die für das aktive Konto verwaltet werden können.",
+      "empty": "Für dieses Konto sind keine Rollen verfügbar.",
+      "createTitle": "Benutzerdefinierte Rolle erstellen",
+      "name": "Rollenname",
+      "selectPermissions": "Berechtigungen",
+      "create": "Rolle erstellen",
+      "createError": "Die Rolle konnte nicht erstellt werden.",
+      "permissions_one": "{{count}} Berechtigung",
+      "permissions_other": "{{count}} Berechtigungen"
+    },
+    "assignments": {
+      "title": "Rolle zuweisen",
+      "role": "Rolle",
+      "principalType": "Prinzipaltyp",
+      "user": "Benutzer",
+      "apiCredential": "API-Zugang",
+      "principalId": "Prinzipal-ID",
+      "systemId": "Anlagen-ID (optional)",
+      "create": "Rolle zuweisen",
+      "error": "Die Rollenzuweisung konnte nicht erstellt werden."
+    },
+    "audit": {
+      "title": "Audit-Protokoll",
+      "description": "Aktuelle Kontoaktionen, die deine Rolle einsehen darf.",
+      "empty": "Für dieses Konto sind keine Audit-Ereignisse verfügbar.",
+      "event": "{{target}} · {{outcome}} · {{date}}"
+    },
+    "permissions": {
+      "instance_read": "Instanz lesen",
+      "instance_manage": "Instanz verwalten",
+      "account_read": "Konto lesen",
+      "account_manage": "Konto verwalten",
+      "membership_manage": "Mitgliedschaften verwalten",
+      "role_manage": "Rollen verwalten",
+      "system_read": "Anlagen lesen",
+      "system_manage": "Anlagen verwalten",
+      "telemetry_read": "Telemetrie lesen",
+      "telemetry_write": "Telemetrie schreiben",
+      "credential_manage": "Zugänge verwalten",
+      "integration_manage": "Integrationen verwalten",
+      "audit_read": "Audit-Protokoll lesen"
+    }
   },
   "onboarding": {
     "awaitingVerification": "Sende einen Testmesswert, um die Erfassung zu prüfen.",

@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Repository source and test layout
-The project SHALL place all production Rust crates and backend source beneath `src/crates/`, use `src/ui/` itself as the production frontend source root without `src/ui/src/`, and place all unit, integration, contract, compatibility, end-to-end, performance, fixture, mock, and test-support code beneath the repository-root `tests/` directory. Production source SHALL NOT depend on code beneath `tests/`.
+The project SHALL place all production Rust crates and backend source beneath `src/crates/`, use `src/ui/` itself as the production frontend source root without `src/ui/src/`, and place all unit, integration, contract, end-to-end, performance, fixture, mock, and test-support code beneath the repository-root `tests/` directory. Production source SHALL NOT depend on code beneath `tests/`.
 
 #### Scenario: Repository layout is validated
 - **WHEN** the repository structure quality check runs

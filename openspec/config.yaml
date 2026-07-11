@@ -18,3 +18,8 @@ schema: spec-driven
 #       - Always include a "Non-goals" section
 #     tasks:
 #       - Break tasks into chunks of max 2 hours
+
+rules:
+  tasks:
+    - When an implementation task is fully implemented and validated, immediately mark its checkbox complete in the change's tasks.md file.
+    - After updating tasks.md for a fully implemented and validated task, create a focused Git commit for that task; do not commit partial or incomplete tasks.

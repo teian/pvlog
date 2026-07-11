@@ -6,7 +6,7 @@ CREATE TABLE telemetry.hot_observations (
     system_id UUID NOT NULL,
     measured_at BIGINT NOT NULL,
     received_at BIGINT NOT NULL,
-    source_kind TEXT NOT NULL CHECK (source_kind IN ('modern_api', 'pvoutput_compatibility', 'import', 'provider', 'correction', 'system')),
+    source_kind TEXT NOT NULL CHECK (source_kind IN ('modern_api', 'import', 'provider', 'correction', 'system')),
     source_identity TEXT NOT NULL,
     idempotency_identity TEXT,
     quality_flags INTEGER NOT NULL DEFAULT 0 CHECK (quality_flags BETWEEN 0 AND 65535),

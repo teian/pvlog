@@ -1,5 +1,7 @@
 export { HomePage } from "./HomePage";
 export { ActivationPage } from "./ActivationPage";
+export { AdministrationPage } from "./AdministrationPage";
+export { CommunityPage } from "./CommunityPage";
 export { AuthCallbackPage } from "./AuthCallbackPage";
 export { DashboardPage } from "./DashboardPage";
 export { DataQualityPage } from "./DataQualityPage";

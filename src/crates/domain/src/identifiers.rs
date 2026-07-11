@@ -107,6 +107,8 @@ identifier!(MembershipId, "Stable account membership identifier.");
 identifier!(ApiCredentialId, "Stable API credential identifier.");
 identifier!(AuditEventId, "Stable audit event identifier.");
 identifier!(EquipmentId, "Stable system equipment identifier.");
+identifier!(InverterId, "Stable inverter identifier within a PV system.");
+identifier!(StringId, "Stable PV string identifier within an inverter.");
 identifier!(TariffId, "Stable effective-dated tariff identifier.");
 identifier!(ChannelId, "Stable extended measurement channel identifier.");
 identifier!(CorrectionId, "Stable observation correction identifier.");

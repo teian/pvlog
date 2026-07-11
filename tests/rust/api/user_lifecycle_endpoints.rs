@@ -13,8 +13,8 @@ use pvlog_api::{
     local_password_router, user_lifecycle_router,
 };
 use pvlog_application::{
-    AdminUserActor, AuthenticatePassword, AuthenticationOutcome, ChangePassword, CreateLocalUser,
-    InvitationResult, InviteLocalUser, LifecycleUserRecord, LocalPasswordUseCases,
+    AcceptInvitation, AdminUserActor, AuthenticatePassword, AuthenticationOutcome, ChangePassword,
+    CreateLocalUser, InvitationResult, InviteLocalUser, LifecycleUserRecord, LocalPasswordUseCases,
     PasswordServiceError, PublicLifecycleOutcome, RegisterLocalUser, SetInitialPassword,
     UserLifecycleError, UserLifecycleUseCases,
 };
@@ -46,7 +46,7 @@ async fn public_lifecycle_responses_do_not_disclose_account_existence() -> Resul
     let invalid_invitation = request(
         &app,
         "/api/v1/auth/invitations/accept",
-        r#"{"token":"not-a-real-token","displayName":"Anybody"}"#,
+        r#"{"token":"not-a-real-token","displayName":"Anybody","password":"accepted-password"}"#,
     )
     .await?;
     assert_eq!(invalid_invitation, first);
@@ -310,8 +310,7 @@ impl UserLifecycleUseCases for StubLifecycle {
 
     async fn accept_invitation(
         &self,
-        _token: SecretString,
-        _display_name: String,
+        _command: AcceptInvitation,
     ) -> Result<PublicLifecycleOutcome, UserLifecycleError> {
         Ok(PublicLifecycleOutcome::Accepted)
     }

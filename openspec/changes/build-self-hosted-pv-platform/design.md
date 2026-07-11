@@ -1,6 +1,6 @@
 ## Context
 
-The repository currently contains project guidance and an OpenSpec configuration but no application implementation or baseline specs. The new system must serve two audiences at once: existing PVOutput clients that depend on the r2 `.jsp` endpoints and terse CSV conventions, and new clients that expect a versioned JSON API, precise schemas, strong errors, and discoverable documentation.
+The repository currently contains project guidance and an OpenSpec configuration but no application implementation or baseline specs. The new system serves operators and API clients through a versioned JSON API with precise schemas, strong errors, and discoverable documentation.
 
 The largest technical constraint is time-series longevity. A reference deployment of 5,000 systems reporting every five minutes produces about 525.6 million observations per year and 13.14 billion observations over 25 years. Bursty uploads, corrections, extended values, daily statistics, and indexes add substantial overhead. Keeping every observation as a permanently indexed relational row would make storage, vacuuming, backups, and range scans unnecessarily expensive, especially on SQLite.
 
@@ -10,17 +10,16 @@ The implementation must comply with the repository rules: Rust changes build wit
 
 **Goals:**
 
-- Preserve the documented behavior of every PVOutput r2 API service while exposing a modern, consistent `/api/v1` contract.
+- Provide complete photovoltaic ingestion, query, administration, community, provider, and notification functionality through a modern, consistent `/api/v1` contract.
 - Provide a useful web product rather than an API-only data sink.
 - Retain exact accepted measurements for at least 25 years and make common chart/statistics queries independent of total raw history size.
 - Certify a SQLite profile with a management catalog and isolated per-account data databases, plus a PostgreSQL scale profile behind the same domain contract and export format.
-- Make operations, security, API behavior, and compatibility observable and testable.
+- Make operations, security, and API behavior observable and testable.
 - Keep the first implementation deployable as a modular monolith with an independently runnable worker, avoiding distributed-systems overhead.
 
 **Non-Goals:**
 
-- Pixel-for-pixel reproduction of the hosted PVOutput website.
-- Compatibility with undocumented PVOutput internals, scraping endpoints, billing/donation policy, or third-party trademarks.
+- Wire compatibility with PVOutput or any other hosted service, including legacy routes, credentials, request formats, and response formats.
 - Forecasting, automated energy trading, inverter control, or safety-critical plant control in the initial release.
 - Transparent active-active multi-region writes or unlimited horizontal scale.
 - Identical performance from SQLite and PostgreSQL; PostgreSQL is the certified profile for thousands of systems.
@@ -29,7 +28,7 @@ The implementation must comply with the repository rules: Rust changes build wit
 
 ### 1. Use a modular Rust monolith with explicit boundaries
 
-The backend will be a Cargo workspace with domain, application, storage, HTTP, compatibility, and worker modules/crates. All workspace crates and their production Rust source live under `src/crates/`. The React/Vite project treats `src/ui/` itself as its source root: Feature-Sliced Design layers, entrypoints, TypeScript, CSS, and UI assets live directly beneath it, with no nested `src/ui/src/` directory. Axum/Tokio provides HTTP and async execution; Tower middleware owns request IDs, limits, timeouts, compression, tracing, CORS, and security headers. A server process and worker process may run from the same versioned binary using separate subcommands.
+The backend will be a Cargo workspace with domain, application, storage, HTTP API, and worker modules/crates. All workspace crates and their production Rust source live under `src/crates/`. The React/Vite project treats `src/ui/` itself as its source root: Feature-Sliced Design layers, entrypoints, TypeScript, CSS, and UI assets live directly beneath it, with no nested `src/ui/src/` directory. Axum/Tokio provides HTTP and async execution; Tower middleware owns request IDs, limits, timeouts, compression, tracing, CORS, and security headers. A server process and worker process may run from the same versioned binary using separate subcommands.
 
 The initial structure is:
 
@@ -40,7 +39,6 @@ src/
 │   ├── application/
 │   ├── storage/
 │   ├── api/
-│   ├── compatibility/
 │   ├── worker/
 │   └── pvlog/
 └── ui/
@@ -56,34 +54,31 @@ tests/
 ├── rust/
 ├── ui/
 ├── contract/
-├── compatibility/
 ├── e2e/
 ├── performance/
 ├── fixtures/
 └── support/
 ```
 
-Vite, TypeScript, Tailwind, ESLint, imports, and the `@/` alias are configured with `src/ui/` as the frontend source root. No `src/ui/src/` directory is created. No `#[cfg(test)]` modules, co-located `*.test.*` files, crate-local `tests/` folders, fixtures, mocks, fake services, or other test-only source are placed under `src/`. Rust test harness packages under `tests/rust/` are workspace members and depend on the production crates through their public APIs. Vitest, Playwright, contract, compatibility, and performance tooling are configured to discover their code under the appropriate root `tests/` subtree. Shared test-only code belongs under `tests/support/`; production code must not depend on it.
+Vite, TypeScript, Tailwind, ESLint, imports, and the `@/` alias are configured with `src/ui/` as the frontend source root. No `src/ui/src/` directory is created. No `#[cfg(test)]` modules, co-located `*.test.*` files, crate-local `tests/` folders, fixtures, mocks, fake services, or other test-only source are placed under `src/`. Rust test harness packages under `tests/rust/` are workspace members and depend on the production crates through their public APIs. Vitest, Playwright, contract, end-to-end, and performance tooling are configured to discover their code under the appropriate root `tests/` subtree. Shared test-only code belongs under `tests/support/`; production code must not depend on it.
 
-Domain types and use cases must not depend on Axum, SQLx, legacy parameter names, or a specific identity provider. Both API surfaces call the same application services so validation and authorization cannot drift. Background jobs use a database-backed queue with leases, bounded retries, idempotent handlers, and a dead-letter state; no external broker is required initially.
+Domain types and use cases must not depend on Axum, SQLx, third-party wire formats, or a specific identity provider. The modern API calls canonical application services so validation and authorization remain centralized. Background jobs use a database-backed queue with leases, bounded retries, idempotent handlers, and a dead-letter state; no external broker is required initially.
 
 Alternative considered: microservices per API area. Rejected because atomic ingestion/aggregation, dual-database testing, and self-host deployment are simpler in one process boundary; modules can be extracted later from measured pressure.
 
-### 2. Maintain two API adapters over one canonical domain model
+### 2. Expose one modern API over the canonical domain model
 
-The compatibility router is mounted at `/service/r2` and implements all 21 documented services: add output/status/batch status, get status/statistic/system/ladder/output/extended/favourite/missing/insolation/team/supply, post system, delete status, search, join/leave team, and register/deregister notification. It accepts legacy headers and query/form names, legacy dates/booleans, GET writes where documented, and legacy CSV/text responses. Donation-only limits become administrator-configurable policy rather than paid feature gates; all documented data behavior remains available.
+The router is mounted at `/api/v1`. It uses plural resources, JSON, RFC 3339 timestamps, explicit units, cursor pagination, bounded date ranges, sparse field/include controls where useful, `Idempotency-Key` on retried writes, ETags for mutable resources, and RFC 9457 problem details. API versions are path-major; additive fields are permitted, while removals or semantic breaks require a new major version and migration period.
 
-The modern router is mounted at `/api/v1`. It uses plural resources, JSON, RFC 3339 timestamps, explicit units, cursor pagination, bounded date ranges, sparse field/include controls where useful, `Idempotency-Key` on retried writes, ETags for mutable resources, and RFC 9457 problem details. API versions are path-major; additive fields are permitted, while removals or semantic breaks require a new major version and migration period.
+Every identifier generated by PVLog for an entity, event, job, session, audit record, or request correlation uses UUID version 7. UUIDv7 values are serialized as canonical lowercase hyphenated strings in the modern API and stored using native UUID/binary representations rather than arbitrary text where the database supports them. Their time ordering improves index locality but is not an authorization boundary and clients must treat them as opaque. External provider subjects, caller-supplied idempotency keys, and imported source identifiers retain their native formats and map to separate internal UUIDv7 identifiers.
 
-Every identifier generated by PVLog for an entity, event, job, session, audit record, or request correlation uses UUID version 7. UUIDv7 values are serialized as canonical lowercase hyphenated strings in the modern API and stored using native UUID/binary representations rather than arbitrary text where the database supports them. Their time ordering improves index locality but is not an authorization boundary and clients must treat them as opaque. External provider subjects, caller-supplied idempotency keys, imported source identifiers, and numeric identifiers exposed by the PVOutput compatibility API retain their native formats and map to separate internal UUIDv7 identifiers.
-
-Alternative considered: translate every modern request into a synthetic PVOutput request. Rejected because it would preserve legacy limitations and make domain semantics dependent on a compatibility format.
+Alternative considered: provide a third-party compatibility adapter. Rejected because it would preserve legacy limitations, broaden the security surface, and make release quality depend on an external protocol.
 
 ### 3. Treat the committed OpenAPI 3.1 document as a release artifact
 
 `openapi/pvlog-v1.yaml` will describe every modern operation, security scheme, parameter, schema, error, webhook, example, and deprecation. Rust handlers and DTOs remain the implementation source, but CI generates a candidate specification from route/DTO metadata, normalizes it, and fails on an unexplained diff against the committed contract. Route coverage tests ensure every Axum modern route has an operation ID and every documented operation is mounted.
 
-The documentation site will render the committed contract and combine it with quickstarts, authentication, ingestion, querying/charting, pagination/errors, webhooks, deployment, backup, and PVOutput migration/compatibility guides. Examples are tested against an ephemeral server. Legacy endpoints receive a separate compatibility matrix because their CSV formats do not map cleanly to OpenAPI-first ergonomics.
+The documentation site will render the committed contract and combine it with quickstarts, authentication, ingestion, querying/charting, pagination/errors, webhooks, deployment, backup, and functional coverage guides. Examples are tested against an ephemeral server.
 
 Alternative considered: handwritten OpenAPI with no generated comparison. Rejected because it gives better prose initially but predictably drifts from the Rust implementation.
 
@@ -167,7 +162,6 @@ OpenTelemetry traces/metrics and structured JSON logs include request/job IDs wi
 
 ## Risks / Trade-offs
 
-- **[Compatibility ambiguity]** PVOutput behavior includes legacy edge cases and can change after the documentation snapshot. → Pin a dated compatibility matrix, keep golden request/response fixtures, document deliberate differences, and version compatibility changes.
 - **[Segment format longevity]** Opaque compressed blobs cannot be queried directly with SQL and risk decoder obsolescence. → Use a versioned, widely specified protobuf envelope, retain migration readers, verify hashes, expose export tools, and continuously test old fixtures.
 - **[Correction complexity]** Late corrections can make raw segments and rollups diverge. → Use overlay visibility, transactional invalidation, generation numbers, idempotent rebuilds, and reconciliation jobs that compare counts/hashes.
 - **[Dual database divergence]** SQLite and PostgreSQL semantics differ in locking, types, and query plans. → Maintain separate adapters/migrations, run identical contract suites, and publish separate certified capacity profiles.
@@ -177,8 +171,8 @@ OpenTelemetry traces/metrics and structured JSON logs include request/job IDs wi
 - **[External identity takeover]** Automatic linking by mutable or unverified email can merge an attacker's identity into an existing user. → Key identities by connector/subject, require explicit authenticated linking and recent reauthentication, make email auto-link opt-in and verified-only, and audit every link change.
 - **[Provider behavior drift]** Social providers can change scopes, endpoints, claims, review requirements, or user-info availability. → Keep protocol adapters generic, version the preset catalog, test each supported preset against current provider sandboxes/documentation before release, and show connector health/configuration diagnostics.
 - **[Scale estimate uncertainty]** Extended-channel density and compression vary greatly by fleet. → Benchmark multiple realistic/synthetic distributions and size storage from measured bytes per system-day with safety margins.
-- **[External data licensing/availability]** Regional supply and insolation providers may not cover all PVOutput regions or permit redistribution. → Keep providers pluggable, record provenance, allow administrator-supplied sources, and show unavailable rather than fabricate data.
-- **[Large initial scope]** Full API, UI, operations, and compatibility can delay a useful release. → Implement in vertical slices with acceptance gates: foundation, ingest/query, durable storage, compatibility, product UI, community/integrations, then scale certification.
+- **[External data licensing/availability]** Regional supply and insolation providers may not cover all regions or permit redistribution. → Keep providers pluggable, record provenance, allow administrator-supplied sources, and show unavailable rather than fabricate data.
+- **[Large initial scope]** Full API, UI, and operations can delay a useful release. → Implement in vertical slices with acceptance gates: foundation, ingest/query, durable storage, product UI, community/integrations, then scale certification.
 - **[Security of self-host defaults]** Easy deployment can encourage weak public exposure. → Default private, require explicit secret/bootstrap setup, ship restrictive CORS/CSP/cookies, scan images/dependencies, and document reverse-proxy/TLS boundaries.
 
 ## Migration Plan
@@ -186,9 +180,9 @@ OpenTelemetry traces/metrics and structured JSON logs include request/job IDs wi
 1. Establish the `src/crates/`, `src/ui/`, and root `tests/` layout, workspace and test-harness configuration, configuration model, CI quality gates, empty OpenAPI contract, database adapters, separate SQLite management/account migration runners, account provisioning/routing, auth skeleton, and deployment smoke test.
 2. Implement account and system management plus a modern end-to-end telemetry slice on PostgreSQL and routed SQLite account databases, including raw hot rows, chart queries, and OpenAPI examples.
 3. Add segments, corrections, rollups, integrity verification, import/export, backup/restore, and synthetic scale tooling; keep compaction feature-gated until reconciliation tests pass.
-4. Implement the complete r2 compatibility adapter and golden fixtures service by service, mapping every route to canonical use cases.
+4. Complete the modern API for community, notifications, optional data providers, and every canonical application capability.
 5. Deliver the web onboarding, dashboards, charts, data quality, settings, and admin operations, followed by teams, notifications, and optional data providers.
-6. Run long-horizon capacity and failure testing, publish the certified profiles and compatibility matrix, and cut the first stable release only when conformance, recovery, and warning-free checks pass.
+6. Run long-horizon capacity and failure testing, publish the certified profiles and feature coverage report, and cut the first stable release only when conformance, recovery, and warning-free checks pass.
 
 For rollback, application releases remain backward-compatible with the previous management and account schemas during a documented window. Destructive schema cleanup is deferred to later releases. Segment compaction can be disabled without losing hot or already archived data; account-scoped export and manifest-driven database-native backups are verified before upgrade. A failed management migration stops startup, while a failed account migration isolates that account and leaves a recorded state for operator recovery.
 
@@ -197,4 +191,3 @@ For rollback, application releases remain backward-compatible with the previous 
 - Which regional supply and insolation datasets can be enabled by default under licenses compatible with this repository? Until resolved, adapters and administrator configuration are implemented without bundling restricted data.
 - What exact hardware defines the published PostgreSQL scale profile? The benchmark suite will ship first; release certification must record a reproducible reference machine and storage class.
 - Should public system discovery be globally disabled or merely private-by-default? The design defaults to private and gives administrators a global disable switch pending product feedback.
-- How closely should non-normative PVOutput quirks be emulated when they conflict with modern security defaults? The compatibility matrix will require an explicit security-reviewed decision per quirk rather than silent emulation.

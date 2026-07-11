@@ -84,10 +84,6 @@ name = "api-token"
 path = "../../../tests/rust/application/api_token.rs"
 
 [[test]]
-name = "legacy-credential"
-path = "../../../tests/rust/application/legacy_credential.rs"
-
-[[test]]
 name = "authorization-boundary"
 path = "../../../tests/rust/application/authorization_boundary.rs"
 

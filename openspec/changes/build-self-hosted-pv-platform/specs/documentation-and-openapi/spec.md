@@ -3,7 +3,7 @@
 ### Requirement: Complete OpenAPI 3.1 contract
 The repository SHALL contain `openapi/pvlog-v1.yaml` as a valid OpenAPI 3.1 document describing every modern REST operation, parameter, request body, response, schema, security requirement, scope, error, callback/webhook, example, operation identifier, tag, and deprecation state.
 
-Every PVLog-generated identifier in the modern contract SHALL reference a shared UUIDv7 schema that documents its canonical lowercase representation and validates the UUID version and variant bits. Native external, import, idempotency, and PVOutput compatibility identifiers SHALL use distinct schemas so clients cannot confuse them with internal resource identifiers.
+Every PVLog-generated identifier in the modern contract SHALL reference a shared UUIDv7 schema that documents its canonical lowercase representation and validates the UUID version and variant bits. Native external, import, and idempotency identifiers SHALL use distinct schemas so clients cannot confuse them with internal resource identifiers.
 
 #### Scenario: OpenAPI validation runs in CI
 - **WHEN** a change modifies a modern route, DTO, security rule, or response
@@ -23,12 +23,12 @@ The documentation SHALL include tested quickstarts for installation, authenticat
 - **WHEN** documentation conformance tests execute against an ephemeral release instance
 - **THEN** every marked command/request example succeeds with its documented status and response shape
 
-### Requirement: PVOutput compatibility reference
-The documentation SHALL publish a dated compatibility matrix for every official r2 service, parameter, response, constraint, error, donation feature, and intentional difference, plus a migration guide for existing PVOutput uploaders.
+### Requirement: Functional coverage reference
+The documentation SHALL map ingestion, query, system management, community, provider, and notification functionality to modern API operations and tested examples.
 
-#### Scenario: Operator migrates an uploader
-- **WHEN** an operator follows the compatibility guide for a documented uploader
-- **THEN** the guide identifies the base URL, credential mapping, supported endpoint, security caveats, and a verifiable test request
+#### Scenario: Operator configures an uploader
+- **WHEN** an operator follows an ingestion guide for a supported workflow
+- **THEN** the guide identifies the modern endpoint, scoped credentials, security requirements, and a verifiable test request
 
 ### Requirement: Documentation quality and navigation
 Reference content SHALL define every field and unit once, cross-link concepts, provide copyable examples in curl and at least one generated client, include a glossary and searchable navigation, identify required permissions, and distinguish normative guarantees from operational recommendations.

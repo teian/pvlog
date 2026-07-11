@@ -2,7 +2,9 @@ import { AppErrorBoundary } from "@/app/AppErrorBoundary";
 import { ProtectedRoute } from "@/features/auth";
 import {
   ActivationPage,
+  AdministrationPage,
   AuthCallbackPage,
+  CommunityPage,
   DataQualityPage,
   ForbiddenPage,
   HomePage,
@@ -43,6 +45,22 @@ export function AppRoutes() {
           <Route element={<ActivationPage />} path="/activate" />
           <Route element={<AuthCallbackPage />} path="/auth/callback" />
           <Route element={<ForbiddenPage />} path="/forbidden" />
+          <Route
+            element={
+              <ProtectedRoute>
+                <AdministrationPage />
+              </ProtectedRoute>
+            }
+            path="/administration"
+          />
+          <Route
+            element={
+              <ProtectedRoute permission="analytics:read">
+                <CommunityPage />
+              </ProtectedRoute>
+            }
+            path="/community"
+          />
           <Route
             element={
               <ProtectedRoute permission="systems:write">

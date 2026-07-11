@@ -3,7 +3,7 @@ CREATE TABLE telemetry_hot (
     system_id BLOB NOT NULL REFERENCES systems(id) ON DELETE CASCADE CHECK (length(system_id) = 16),
     measured_at INTEGER NOT NULL,
     received_at INTEGER NOT NULL,
-    source_kind TEXT NOT NULL CHECK (source_kind IN ('modern_api', 'pvoutput_compatibility', 'import', 'provider', 'correction', 'system')),
+    source_kind TEXT NOT NULL CHECK (source_kind IN ('modern_api', 'import', 'provider', 'correction', 'system')),
     source_identity TEXT NOT NULL,
     idempotency_identity TEXT,
     quality_flags INTEGER NOT NULL DEFAULT 0 CHECK (quality_flags BETWEEN 0 AND 65535),

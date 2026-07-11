@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use pvlog_domain::{CredentialDigest, UserId, UserInvitationId, UserStatus};
-use secrecy::SecretString;
+use pvlog_domain::{CredentialDigest, PasswordHash, UserId, UserInvitationId, UserStatus};
+use secrecy::{ExposeSecret as _, SecretString};
 use serde::Serialize;
 use thiserror::Error;
 use uuid::Uuid;
@@ -43,6 +43,10 @@ pub struct LocalUserPolicy {
     pub allow_self_registration: bool,
     pub require_verified_email: bool,
     pub invitation_lifetime_seconds: u32,
+    /// Minimum accepted initial-password length for invitation activation.
+    pub password_minimum_length: u16,
+    /// Maximum accepted initial-password length for invitation activation.
+    pub password_maximum_length: u16,
 }
 
 impl Default for LocalUserPolicy {
@@ -51,6 +55,8 @@ impl Default for LocalUserPolicy {
             allow_self_registration: false,
             require_verified_email: true,
             invitation_lifetime_seconds: 86_400,
+            password_minimum_length: 12,
+            password_maximum_length: 128,
         }
     }
 }
@@ -81,6 +87,24 @@ pub struct InviteLocalUser {
 pub struct RegisterLocalUser {
     pub email: String,
     pub display_name: String,
+}
+
+/// Public, single-use invitation acceptance request including the initial local password.
+pub struct AcceptInvitation {
+    pub token: SecretString,
+    pub display_name: String,
+    pub password: SecretString,
+}
+
+impl std::fmt::Debug for AcceptInvitation {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AcceptInvitation")
+            .field("token", &"[REDACTED]")
+            .field("display_name", &self.display_name)
+            .field("password", &"[REDACTED]")
+            .finish()
+    }
 }
 
 /// Result of an atomic create attempt.
@@ -128,6 +152,7 @@ pub trait UserLifecycleRepository: Send + Sync {
         &self,
         digest: &CredentialDigest,
         display_name: &str,
+        password_hash: &PasswordHash,
         activated: bool,
         now: i64,
     ) -> Result<bool, PortError>;
@@ -161,8 +186,7 @@ pub trait UserLifecycleUseCases: Send + Sync {
     ) -> Result<PublicLifecycleOutcome, UserLifecycleError>;
     async fn accept_invitation(
         &self,
-        token: SecretString,
-        display_name: String,
+        command: AcceptInvitation,
     ) -> Result<PublicLifecycleOutcome, UserLifecycleError>;
     async fn activate(
         &self,
@@ -314,18 +338,25 @@ impl UserLifecycleUseCases for UserLifecycleService {
 
     async fn accept_invitation(
         &self,
-        token: SecretString,
-        display_name: String,
+        command: AcceptInvitation,
     ) -> Result<PublicLifecycleOutcome, UserLifecycleError> {
-        let display_name = normalize_display_name(&display_name)?;
-        let digest = self.credentials.digest_bearer(&token).await?;
+        let display_name = normalize_display_name(&command.display_name)?;
+        let password_length = command.password.expose_secret().chars().count();
+        if !(usize::from(self.policy.password_minimum_length)
+            ..=usize::from(self.policy.password_maximum_length))
+            .contains(&password_length)
+        {
+            return Err(UserLifecycleError::InvalidInput("password"));
+        }
+        let digest = self.credentials.digest_bearer(&command.token).await?;
+        let password_hash = self.credentials.hash_password(&command.password).await?;
         let now = self.now()?;
         // Possession of the single-use token delivered to the invited address verifies that
         // address, so invitation acceptance may activate under either email policy.
         let activated = true;
         let _ = self
             .repository
-            .accept_invitation(&digest, &display_name, activated, now)
+            .accept_invitation(&digest, &display_name, &password_hash, activated, now)
             .await?;
         Ok(PublicLifecycleOutcome::Accepted)
     }

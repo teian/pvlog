@@ -56,6 +56,27 @@ async fn local_login_issues_host_cookie_and_session_bootstrap() -> Result<(), Bo
     Ok(())
 }
 
+#[tokio::test]
+async fn logout_revokes_the_cookie_addressed_browser_session() -> Result<(), Box<dyn Error>> {
+    let user_id = UserId::new();
+    let app = Router::new().merge(sessions_router(
+        Arc::new(Passwords { user_id }),
+        Arc::new(Sessions { user_id }),
+        Arc::new(Bootstrap),
+    ));
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/session")
+                .header("cookie", "__Host-pvlog_session=session-token")
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    Ok(())
+}
+
 struct Passwords {
     user_id: UserId,
 }

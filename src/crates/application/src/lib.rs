@@ -17,7 +17,6 @@ mod import_export;
 mod ingestion_admission;
 mod ingestion_normalization;
 mod ingestion_validation;
-mod legacy_credential;
 mod local_password;
 mod managed_resource;
 mod modern_telemetry;
@@ -97,10 +96,6 @@ pub use ingestion_normalization::{
 pub use ingestion_validation::{
     IngestionValidationError, IngestionValidationPolicy, validate_observation,
 };
-pub use legacy_credential::{
-    LegacyCredentialError, LegacyCredentialInput, LegacyCredentialPolicy, LegacyCredentialRecord,
-    LegacyCredentialRepository, LegacyCredentialService, LegacyPrincipal,
-};
 pub use local_password::{
     Argon2CredentialConfig, Argon2CredentialService, AuthenticatePassword, AuthenticationOutcome,
     ChangePassword, CommonPasswordHook, DiscardingRecoveryNotifier, LocalCredentialRecord,
@@ -172,10 +167,10 @@ pub use teams::{
     TeamServiceError, TeamUseCases,
 };
 pub use user_lifecycle::{
-    AdminUserActor, CreateLocalUser, InvitationRecord, InvitationResult, InviteLocalUser,
-    LifecycleCreateOutcome, LifecycleUserRecord, LocalUserPolicy, PublicLifecycleOutcome,
-    RegisterLocalUser, UserLifecycleError, UserLifecycleRepository, UserLifecycleService,
-    UserLifecycleUseCases,
+    AcceptInvitation, AdminUserActor, CreateLocalUser, InvitationRecord, InvitationResult,
+    InviteLocalUser, LifecycleCreateOutcome, LifecycleUserRecord, LocalUserPolicy,
+    PublicLifecycleOutcome, RegisterLocalUser, UserLifecycleError, UserLifecycleRepository,
+    UserLifecycleService, UserLifecycleUseCases,
 };
 pub use webhook_delivery::{
     DeliveryMetrics, DeliveryRepository, DeliveryService, DeliveryServiceError, DeliveryWorkItem,

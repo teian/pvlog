@@ -39,5 +39,13 @@ async fn api_foundation_emits_request_security_and_problem_contracts() -> Result
         )
         .await?;
     assert_eq!(response.status(), StatusCode::NOT_ACCEPTABLE);
+    let response = pvlog_api::router("test-version")
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/health/version")
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
     Ok(())
 }

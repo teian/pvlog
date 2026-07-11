@@ -21,6 +21,7 @@ export function ActivationPage() {
   const { t } = useTranslation();
   const [params] = useSearchParams();
   const [password, setPassword] = useState("");
+  const [displayName, setDisplayName] = useState("");
   const [done, setDone] = useState(false);
   const token = params.get("token") ?? "";
   return (
@@ -36,6 +37,18 @@ export function ActivationPage() {
         </CardHeader>
         <CardContent>
           <FieldGroup>
+            <Field>
+              <FieldLabel htmlFor="activation-display-name">
+                {t("auth.displayName")}
+              </FieldLabel>
+              <Input
+                id="activation-display-name"
+                onChange={(event) => {
+                  setDisplayName(event.target.value);
+                }}
+                value={displayName}
+              />
+            </Field>
             <Field>
               <FieldLabel htmlFor="activation-password">
                 {t("auth.newPassword")}
@@ -56,9 +69,9 @@ export function ActivationPage() {
             <Link to="/login">{t("auth.backToLogin")}</Link>
           </Button>
           <Button
-            disabled={done || !token}
+            disabled={done || !token || !displayName || !password}
             onClick={() => {
-              void activate(token, password).then(() => {
+              void activate(token, displayName, password).then(() => {
                 setDone(true);
               });
             }}

@@ -11,11 +11,15 @@ The system SHALL let authorized users create, read, update, archive, restore, an
 - **WHEN** a system update supplies a timezone that is not in the supported IANA database
 - **THEN** the system returns a field-specific validation error and preserves the prior configuration
 
-### Requirement: Equipment model
-The system SHALL represent one or more arrays, inverters, meters, batteries, orientations, and capacity changes over effective date ranges without rewriting historical telemetry.
+### Requirement: System aggregate and equipment model
+The PV system SHALL be the aggregate root for one or more inverters, and each inverter SHALL contain one or more PV strings. Strings SHALL own panel count, panel metadata, orientation, tilt, rated capacity, and effective dates. Batteries, meters, sensors, and other auxiliary equipment SHALL remain attached to the system without bypassing the inverter/string ownership hierarchy for generation equipment.
+
+#### Scenario: System hierarchy is changed
+- **WHEN** an owner adds or updates a PV string
+- **THEN** the change is validated and persisted through its containing inverter and system aggregate, and a string cannot belong to an inverter from another system
 
 #### Scenario: Capacity changes over time
-- **WHEN** an owner records an additional array with a past or future effective date
+- **WHEN** an owner records an additional string with a past or future effective date
 - **THEN** statistics and physical validation use the capacity configuration effective for each measurement date
 
 ### Requirement: Tariffs and financial settings

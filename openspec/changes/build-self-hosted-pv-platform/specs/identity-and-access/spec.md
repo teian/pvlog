@@ -108,17 +108,6 @@ The system SHALL issue high-entropy API tokens that are displayed once, stored o
 - **WHEN** a previously issued token has been revoked
 - **THEN** every subsequent request using it is rejected without revealing whether its identifier once existed
 
-### Requirement: Legacy PVOutput credentials
-The system SHALL support per-system PVOutput-compatible API keys with independent read-only or read-write policy and SHALL map legacy authentication to the same authorization model as modern credentials.
-
-#### Scenario: Legacy header authentication succeeds
-- **WHEN** a client supplies a matching `X-Pvoutput-Apikey` and `X-Pvoutput-SystemId`
-- **THEN** the compatibility API authenticates the system principal and enforces the key policy
-
-#### Scenario: Read-only legacy key attempts a write
-- **WHEN** a read-only legacy key calls a compatibility service that mutates state
-- **THEN** the system returns the documented forbidden legacy error and makes no change
-
 ### Requirement: Configurable quotas and rate limits
 The system SHALL enforce administrator-configurable request and ingestion quotas per principal, return modern rate-limit metadata, and reproduce documented legacy rate-limit metadata when requested.
 

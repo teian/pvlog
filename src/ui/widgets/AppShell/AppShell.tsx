@@ -4,6 +4,7 @@ import { MenuIcon, PanelLeftCloseIcon, SunMediumIcon } from "lucide-react";
 import { useState, type PropsWithChildren } from "react";
 import { useTranslation } from "react-i18next";
 import { Link, NavLink } from "react-router";
+import { SessionControls } from "./SessionControls";
 
 /** Responsive application shell properties. */
 export interface AppShellProps extends PropsWithChildren {
@@ -65,6 +66,18 @@ export function AppShell({
           >
             {t("nav.alerts")}
           </NavLink>
+          <NavLink
+            className="rounded-md px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent"
+            to="/community"
+          >
+            {t("nav.community")}
+          </NavLink>
+          <NavLink
+            className="rounded-md px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent"
+            to="/administration"
+          >
+            {t("nav.administration")}
+          </NavLink>
           {accountId ? (
             <p className="mt-4 truncate text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               {t("nav.account", { id: accountId.slice(0, 8) })}
@@ -98,6 +111,7 @@ export function AppShell({
           <Button aria-label={t("shell.theme")} size="icon" variant="ghost">
             <SunMediumIcon />
           </Button>
+          <SessionControls />
         </header>
         <main
           className="mx-auto flex max-w-screen-xl flex-col gap-6 px-6 py-6"

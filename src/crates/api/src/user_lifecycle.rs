@@ -10,8 +10,8 @@ use axum::{
     routing::{delete, post},
 };
 use pvlog_application::{
-    AdminUserActor, CreateLocalUser, InviteLocalUser, RegisterLocalUser, UserLifecycleError,
-    UserLifecycleUseCases,
+    AcceptInvitation, AdminUserActor, CreateLocalUser, InviteLocalUser, RegisterLocalUser,
+    UserLifecycleError, UserLifecycleUseCases,
 };
 use pvlog_domain::{Permission, UserId};
 use secrecy::{ExposeSecret as _, SecretString};
@@ -73,6 +73,7 @@ struct RegisterBody {
 struct AcceptInvitationBody {
     token: SecretString,
     display_name: String,
+    password: SecretString,
 }
 
 #[derive(Debug, Deserialize)]
@@ -157,7 +158,11 @@ async fn accept_invitation(
 ) -> Result<Response, LifecycleApiError> {
     state
         .service
-        .accept_invitation(body.token, body.display_name)
+        .accept_invitation(AcceptInvitation {
+            token: body.token,
+            display_name: body.display_name,
+            password: body.password,
+        })
         .await?;
     Ok(accepted())
 }
