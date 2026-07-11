@@ -18,6 +18,7 @@
     "lint:eslint": "eslint src/ui",
     "lint:styles": "stylelint 'src/ui/**/*.css'",
     "openapi:compare": "node tests/contract/openapi/compare.mjs tests/fixtures/openapi/pvlog-v1.generated.yaml",
+    "openapi:analytics": "node tests/contract/openapi/analytics-examples.mjs",
     "openapi:lint": "redocly lint --config .redocly.yaml openapi/pvlog-v1.yaml",
     "openapi:routes": "node tests/contract/openapi/route-coverage.mjs",
     "format": "prettier --write .",

@@ -20,6 +20,12 @@ tags:
     description: PV system lifecycle and account-owned configuration
   - name: Telemetry
     description: Canonical observation ingestion and correction
+  - name: Analytics
+    description: Resolution-aware time series, statistics, and data quality
+  - name: Community
+    description: Privacy-safe comparisons and ladders
+  - name: Exports
+    description: Synchronous and asynchronous analysis exports
 paths:
   /api/v1/health/live:
     get:
@@ -174,6 +180,174 @@ paths:
       security: [{ bearerAuth: [telemetry:write] }]
       parameters: [{ $ref: "#/components/parameters/IfMatch" }, { name: X-Correction-Reason, in: header, required: true, schema: { type: string, minLength: 1 } }]
       responses: { "204": { description: Deletion accepted }, "409": { $ref: "#/components/responses/ConflictProblem" } }
+  /api/v1/systems/{system_id}/series:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - $ref: "#/components/parameters/StartEpochMillis"
+      - $ref: "#/components/parameters/EndEpochMillis"
+      - $ref: "#/components/parameters/SeriesFields"
+      - $ref: "#/components/parameters/SeriesResolution"
+      - $ref: "#/components/parameters/Timezone"
+      - $ref: "#/components/parameters/MaximumPoints"
+      - $ref: "#/components/parameters/IfNoneMatch"
+    get:
+      operationId: getSystemSeries
+      summary: Query bounded system time series
+      description: >-
+        Returns corrected raw observations or the finest available rollup that
+        stays within maximumPoints. Calendar resolutions use the requested IANA
+        timezone, so DST days may contain 23 or 25 hours. Raw requests are never
+        silently replaced with aggregates.
+      tags: [Analytics]
+      security: [{ bearerAuth: [analytics:read] }]
+      responses:
+        "200":
+          description: Resolution-aware multi-series result
+          headers:
+            ETag: { schema: { type: string }, description: Validator for the query and source generations. }
+            Last-Modified: { schema: { type: string, format: http-date } }
+            Vary: { schema: { type: string }, example: "Accept, Authorization" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SeriesQueryResult" }
+              examples:
+                dstDay:
+                  summary: Europe/Berlin spring DST day
+                  value:
+                    actualResolution: hourly
+                    timezone: Europe/Berlin
+                    series:
+                      - field: generation_power
+                        unit: watts
+                        points:
+                          - { timestampEpochMillis: 1774738800000, value: 4200, coverageBasisPoints: 10000, qualityFlags: 0 }
+                        gaps: []
+        "304": { description: The query result has not changed. }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/QueryProblem" }
+  /api/v1/systems/{system_id}/statistics:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - name: period
+        in: query
+        required: true
+        schema: { enum: [day, month, year, lifetime] }
+      - $ref: "#/components/parameters/IfNoneMatch"
+    get:
+      operationId: getSystemStatistics
+      summary: Get period energy statistics
+      description: Returns available energy, grid, efficiency, peak, environmental, battery, financial, and coverage statistics without replacing unavailable fields with zero.
+      tags: [Analytics]
+      security: [{ bearerAuth: [analytics:read] }]
+      responses:
+        "200":
+          description: Period statistics
+          headers: { ETag: { schema: { type: string } }, Last-Modified: { schema: { type: string, format: http-date } } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/EnergyStatistics" }
+              example: { period: daily, generationWh: 18400, consumptionWh: 12100, gridImportWh: 2400, gridExportWh: 8700, efficiencyWhPerKw: 3066, peakGenerationWatts: 5800, coverageBasisPoints: 9850 }
+        "304": { description: Statistics have not changed. }
+        "422": { $ref: "#/components/responses/QueryProblem" }
+  /api/v1/systems/{system_id}/data-quality:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - $ref: "#/components/parameters/StartEpochMillis"
+      - $ref: "#/components/parameters/EndEpochMillis"
+    get:
+      operationId: getSystemDataQuality
+      summary: List missing and suspect data intervals
+      description: Reports missing intervals, suspect observations, source conflicts, counter resets, rejected ingestion, and aggregate lag without fabricating raw points.
+      tags: [Analytics]
+      security: [{ bearerAuth: [analytics:read] }]
+      responses:
+        "200":
+          description: Ordered data-quality issues
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/DataQualityIssue" } }
+              example:
+                - { kind: missing_interval, startEpochMillis: 1780000000000, endEpochMillis: 1780001800000, sourceReferences: [], reasonCode: not_reported }
+        "422": { $ref: "#/components/responses/QueryProblem" }
+  /api/v1/comparisons:
+    post:
+      operationId: compareSystems
+      summary: Compare visible systems
+      description: Compares between 2 and 20 authorized or public systems with effective-capacity normalization, coverage, privacy, and deterministic tie semantics.
+      tags: [Community]
+      security: [{ bearerAuth: [community:read] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ComparisonRequest" }
+            example: { systemIds: [019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70, 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f71], metric: normalized_generation }
+      responses:
+        "200": { description: Ranked comparison, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ComparisonEntry" } } } } }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/QueryProblem" }
+  /api/v1/ladders:
+    get:
+      operationId: getLadder
+      summary: Get a public or team ladder
+      description: Returns eligible public systems ordered by the selected metric with competition ranks such as 1, 1, 3 and projection freshness metadata.
+      tags: [Community]
+      security: [{ bearerAuth: [community:read] }]
+      parameters:
+        - name: teamId
+          in: query
+          schema: { $ref: "#/components/schemas/UuidV7" }
+        - name: metric
+          in: query
+          schema: { $ref: "#/components/schemas/ComparisonMetric", default: normalized_generation }
+        - $ref: "#/components/parameters/IfNoneMatch"
+      responses:
+        "200":
+          description: Ladder entries
+          headers: { ETag: { schema: { type: string } }, Last-Modified: { schema: { type: string, format: http-date } } }
+          content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/ComparisonEntry" } } } }
+        "304": { description: Ladder projections have not changed. }
+        "422": { $ref: "#/components/responses/QueryProblem" }
+  /api/v1/systems/{system_id}/analysis-exports:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    post:
+      operationId: createAnalysisExport
+      summary: Export an analysis query as CSV or JSON
+      description: >-
+        Returns a bounded export synchronously or queues a durable job. CSV uses
+        stable headers timestamp_epoch_millis, field, value, unit,
+        coverage_basis_points, quality_flags, resolution, and timezone.
+      tags: [Exports]
+      security: [{ bearerAuth: [exports:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnalysisExportRequest" }
+            examples:
+              csv:
+                value: { startEpochMillis: 1774738800000, endEpochMillis: 1774821600000, fields: [generation_power, consumption_power], resolution: hour, timezone: Europe/Berlin, maximumPoints: 2000, format: csv, asynchronous: false }
+              queuedJson:
+                value: { startEpochMillis: 990000000000, endEpochMillis: 1780000000000, fields: [generation_energy], resolution: day, timezone: UTC, maximumPoints: 10000, format: json, asynchronous: true }
+      responses:
+        "200":
+          description: Synchronous export artifact
+          headers:
+            Content-Disposition: { schema: { type: string }, example: attachment; filename="generation.csv" }
+          content:
+            text/csv:
+              schema: { type: string }
+              example: |-
+                timestamp_epoch_millis,field,value,unit,coverage_basis_points,quality_flags,resolution,timezone
+                1774738800000,generation_power,4200,watts,10000,0,hour,Europe/Berlin
+            application/json:
+              schema: { $ref: "#/components/schemas/SeriesQueryResult" }
+        "202":
+          description: Export job accepted
+          headers: { Location: { schema: { type: string, format: uri-reference }, example: /api/v1/jobs/019505c8-7c85-7f0b-9bc3-2a3c4d5e6f72 } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/QueuedJob" }, example: { jobId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f72 } } }
+        "413": { $ref: "#/components/responses/RequiresAsyncProblem" }
+        "422": { $ref: "#/components/responses/QueryProblem" }
 components:
   securitySchemes:
     bearerAuth:
@@ -185,6 +359,13 @@ components:
     NestedSystemId: { name: system_id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }
     ObservationId: { name: observation_id, in: path, required: true, schema: { $ref: "#/components/schemas/UuidV7" } }
     IfMatch: { name: If-Match, in: header, required: true, schema: { type: string }, example: '"3"' }
+    IfNoneMatch: { name: If-None-Match, in: header, required: false, schema: { type: string }, example: '"query-7f4a"' }
+    StartEpochMillis: { name: startEpochMillis, in: query, required: true, schema: { type: integer, format: int64 }, description: Inclusive UTC range start in Unix epoch milliseconds. }
+    EndEpochMillis: { name: endEpochMillis, in: query, required: true, schema: { type: integer, format: int64 }, description: Exclusive UTC range end in Unix epoch milliseconds. }
+    SeriesFields: { name: fields, in: query, required: true, schema: { type: string, minLength: 1 }, example: "generation_power,consumption_power" }
+    SeriesResolution: { name: resolution, in: query, required: false, schema: { enum: [auto, raw, 15m, hour, day, month, year], default: auto } }
+    Timezone: { name: timezone, in: query, required: false, schema: { type: string, default: UTC }, description: IANA timezone used for calendar buckets and DST boundaries., example: Europe/Berlin }
+    MaximumPoints: { name: maximumPoints, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 10000, default: 2000 }, description: Hard per-series point budget; responses may include at most two documented boundary points. }
   requestBodies:
     ManagedResource:
       required: true
@@ -209,6 +390,8 @@ components:
     ForbiddenProblem: { description: Required scope is missing, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
     ConflictProblem: { description: Optimistic concurrency conflict, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
     OverloadProblem: { description: Ingestion is temporarily saturated, headers: { Retry-After: { schema: { type: integer, minimum: 1 } } }, content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
+    QueryProblem: { description: "Query bounds, fields, resolution, timezone, or point budget are invalid.", content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" }, example: { type: https://pvlog.example/problems/query, title: Invalid analytics query, status: 422, detail: The raw query exceeds maximumPoints., requestId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70 } } } }
+    RequiresAsyncProblem: { description: The requested export is too large for synchronous processing; retry with asynchronous true., content: { application/problem+json: { schema: { $ref: "#/components/schemas/Problem" } } } }
     NotAcceptable:
       description: Requested response representation is not available
       content:
@@ -248,6 +431,112 @@ components:
       type: object
       required: [mode, items]
       properties: { mode: { enum: [atomic, partial] }, items: { type: array, minItems: 1, maxItems: 1000, items: { allOf: [{ $ref: "#/components/schemas/ObservationInput" }, { type: object, required: [idempotencyKey], properties: { idempotencyKey: { type: string, minLength: 1 } } }] } } }
+    SeriesQueryResult:
+      type: object
+      additionalProperties: false
+      required: [actualResolution, timezone, series]
+      properties:
+        actualResolution: { enum: [raw, fifteen_minutes, hourly, daily, monthly, yearly] }
+        timezone: { type: string, description: IANA timezone used for calendar bucket boundaries. }
+        series: { type: array, items: { $ref: "#/components/schemas/Series" } }
+    Series:
+      type: object
+      additionalProperties: false
+      required: [field, unit, points, gaps]
+      properties:
+        field: { enum: [generation_power, generation_energy, consumption_power, consumption_energy, grid_power, battery_power, battery_state_of_charge, temperature, extended, provenance] }
+        unit: { enum: [watts, watt_hours, basis_points, milli_degrees_celsius, integer] }
+        points: { type: array, items: { $ref: "#/components/schemas/SeriesPoint" } }
+        gaps: { type: array, items: { $ref: "#/components/schemas/SeriesGap" } }
+    SeriesPoint:
+      type: object
+      additionalProperties: false
+      required: [timestampEpochMillis, value, coverageBasisPoints, qualityFlags]
+      properties:
+        timestampEpochMillis: { type: integer, format: int64 }
+        value: { type: integer, format: int64 }
+        coverageBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+        qualityFlags: { type: integer, minimum: 0 }
+        provenance: { type: [string, "null"], description: Present only for corrected raw points. }
+    SeriesGap:
+      type: object
+      additionalProperties: false
+      required: [startEpochMillis, endEpochMillis, kind]
+      properties:
+        startEpochMillis: { type: integer, format: int64 }
+        endEpochMillis: { type: integer, format: int64 }
+        kind: { enum: [missing, suspect, incomplete_coverage] }
+    EnergyStatistics:
+      type: object
+      required: [period, coverageBasisPoints]
+      properties:
+        period: { enum: [daily, monthly, yearly, lifetime] }
+        generationWh: { type: [integer, "null"], minimum: 0 }
+        consumptionWh: { type: [integer, "null"], minimum: 0 }
+        gridImportWh: { type: [integer, "null"], minimum: 0 }
+        gridExportWh: { type: [integer, "null"], minimum: 0 }
+        selfConsumptionWh: { type: [integer, "null"], minimum: 0 }
+        efficiencyWhPerKw: { type: [integer, "null"], minimum: 0 }
+        peakGenerationWatts: { type: [integer, "null"] }
+        minimumTemperatureMilliCelsius: { type: [integer, "null"] }
+        maximumTemperatureMilliCelsius: { type: [integer, "null"] }
+        batteryChargeWh: { type: [integer, "null"], minimum: 0 }
+        batteryDischargeWh: { type: [integer, "null"], minimum: 0 }
+        minimumBatteryBasisPoints: { type: [integer, "null"], minimum: 0, maximum: 10000 }
+        maximumBatteryBasisPoints: { type: [integer, "null"], minimum: 0, maximum: 10000 }
+        revenueMinorUnits: { type: [integer, "null"] }
+        costMinorUnits: { type: [integer, "null"] }
+        netFinancialMinorUnits: { type: [integer, "null"] }
+        coverageBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+    DataQualityIssue:
+      type: object
+      additionalProperties: false
+      required: [kind, startEpochMillis, endEpochMillis, sourceReferences]
+      properties:
+        kind: { enum: [missing_interval, suspect_observation, source_conflict, counter_reset, rejected_ingestion, aggregate_lag] }
+        startEpochMillis: { type: integer, format: int64 }
+        endEpochMillis: { type: integer, format: int64 }
+        sourceReferences: { type: array, items: { type: string } }
+        reasonCode: { type: [string, "null"] }
+    ComparisonMetric: { enum: [total_generation, normalized_generation] }
+    ComparisonRequest:
+      type: object
+      additionalProperties: false
+      required: [systemIds, metric]
+      properties:
+        systemIds: { type: array, minItems: 2, maxItems: 20, uniqueItems: true, items: { $ref: "#/components/schemas/UuidV7" } }
+        metric: { $ref: "#/components/schemas/ComparisonMetric" }
+    ComparisonEntry:
+      type: object
+      additionalProperties: false
+      required: [rank, systemId, displayName, totalGenerationWh, normalizedGenerationWhPerKw, coverageBasisPoints, tied, projectionAgeMillis]
+      properties:
+        rank: { type: integer, minimum: 1 }
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        displayName: { type: string }
+        totalGenerationWh: { type: integer, minimum: 0 }
+        normalizedGenerationWhPerKw: { type: integer, minimum: 0 }
+        coverageBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+        tied: { type: boolean }
+        projectionAgeMillis: { type: integer, minimum: 0 }
+    AnalysisExportRequest:
+      type: object
+      additionalProperties: false
+      required: [startEpochMillis, endEpochMillis, fields, format]
+      properties:
+        startEpochMillis: { type: integer, format: int64 }
+        endEpochMillis: { type: integer, format: int64 }
+        fields: { type: array, minItems: 1, uniqueItems: true, items: { type: string } }
+        resolution: { enum: [auto, raw, 15m, hour, day, month, year], default: auto }
+        timezone: { type: string, default: UTC }
+        maximumPoints: { type: integer, minimum: 1, maximum: 10000, default: 2000 }
+        format: { enum: [csv, json] }
+        asynchronous: { type: boolean, default: false }
+    QueuedJob:
+      type: object
+      additionalProperties: false
+      required: [jobId]
+      properties: { jobId: { $ref: "#/components/schemas/UuidV7" } }
     UuidV7:
       type: string
       format: uuid
