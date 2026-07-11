@@ -19,6 +19,7 @@ tracing.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+pvlog-api = { path = "../api" }
 tokio.workspace = true
 tower.workspace = true
 
@@ -45,6 +46,10 @@ path = "../../../tests/compatibility/legacy_queries.rs"
 [[test]]
 name = "legacy-outputs"
 path = "../../../tests/compatibility/legacy_outputs.rs"
+
+[[test]]
+name = "uploader-convergence"
+path = "../../../tests/e2e/uploader_convergence.rs"
 
 [lib]
 path = "src/lib.rs"
