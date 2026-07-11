@@ -6,7 +6,9 @@ use async_trait::async_trait;
 use pvlog_api::{RequestAuthenticationError, RequestAuthenticator, RequestPrincipal};
 use pvlog_application::{
     AuthorizationBoundary, AuthorizationBoundaryError, AuthorizationBoundaryPorts,
-    AuthorizedAccountRoute, Clock, ProtectedAccountRequest, ProtectedSystemRequest,
+    AuthorizedAccountRoute, Clock, CreateCustomRole, ProtectedAccountRequest,
+    ProtectedSystemRequest, RbacManagementError, RbacRepository, RoleManagementService,
+    UpdateCustomRole,
 };
 use pvlog_domain::{
     ApiScope, AuditEventId, Permission, PrincipalId, RequestId, RoleKind, SystemId, UserId,
@@ -319,13 +321,17 @@ pub struct ManagementAuditApi {
 
 /// Management-backed role catalog for the RBAC HTTP adapter.
 pub struct ManagementRbacApi {
-    repository: Arc<dyn pvlog_application::RbacRepository>,
+    repository: Arc<dyn RbacRepository>,
+    service: RoleManagementService,
 }
 
 impl ManagementRbacApi {
     #[must_use]
-    pub fn new(repository: Arc<dyn pvlog_application::RbacRepository>) -> Self {
-        Self { repository }
+    pub fn new(repository: Arc<dyn RbacRepository>, clock: Arc<dyn Clock>) -> Self {
+        Self {
+            service: RoleManagementService::new(repository.clone(), clock),
+            repository,
+        }
     }
 }
 
@@ -357,6 +363,115 @@ impl pvlog_api::RbacApiUseCases for ManagementRbacApi {
                     .collect()
             })
             .map_err(|_| pvlog_api::RbacApiError::Unavailable)
+    }
+
+    async fn create_role(
+        &self,
+        actor: UserId,
+        account_id: pvlog_domain::AccountId,
+        input: pvlog_api::RoleInput,
+    ) -> Result<pvlog_api::RoleResponse, pvlog_api::RbacApiError> {
+        let record = self
+            .service
+            .create_custom_role(
+                actor,
+                CreateCustomRole {
+                    account_id,
+                    name: input.name,
+                    permissions: input.permissions,
+                    parent_role_ids: input.parent_role_ids,
+                },
+            )
+            .await
+            .map_err(|error| map_rbac_error(&error))?;
+        Ok(role_response(record))
+    }
+
+    async fn update_role(
+        &self,
+        actor: UserId,
+        account_id: pvlog_domain::AccountId,
+        role_id: pvlog_domain::RoleId,
+        input: pvlog_api::RoleInput,
+    ) -> Result<pvlog_api::RoleResponse, pvlog_api::RbacApiError> {
+        let existing = self
+            .repository
+            .role(role_id)
+            .await
+            .map_err(|_| pvlog_api::RbacApiError::Unavailable)?
+            .ok_or(pvlog_api::RbacApiError::NotFound)?;
+        if existing.role.account_id != Some(account_id) {
+            return Err(pvlog_api::RbacApiError::NotFound);
+        }
+        let record = self
+            .service
+            .update_custom_role(
+                actor,
+                UpdateCustomRole {
+                    id: role_id,
+                    name: input.name,
+                    permissions: input.permissions,
+                    parent_role_ids: input.parent_role_ids,
+                },
+            )
+            .await
+            .map_err(|error| map_rbac_error(&error))?;
+        Ok(role_response(record))
+    }
+
+    async fn delete_role(
+        &self,
+        actor: UserId,
+        account_id: pvlog_domain::AccountId,
+        role_id: pvlog_domain::RoleId,
+    ) -> Result<(), pvlog_api::RbacApiError> {
+        let existing = self
+            .repository
+            .role(role_id)
+            .await
+            .map_err(|_| pvlog_api::RbacApiError::Unavailable)?
+            .ok_or(pvlog_api::RbacApiError::NotFound)?;
+        if existing.role.account_id != Some(account_id) {
+            return Err(pvlog_api::RbacApiError::NotFound);
+        }
+        self.service
+            .delete_custom_role(actor, role_id)
+            .await
+            .map_err(|error| map_rbac_error(&error))
+    }
+}
+
+fn role_response(record: pvlog_application::RbacRoleRecord) -> pvlog_api::RoleResponse {
+    pvlog_api::RoleResponse {
+        id: record.role.id,
+        name: record.role.name,
+        kind: match record.role.kind {
+            RoleKind::BuiltIn(kind) => format!("built_in:{kind:?}"),
+            RoleKind::Custom => "custom".to_owned(),
+        },
+        permissions: record.role.permissions,
+        parent_role_ids: record.role.parent_role_ids,
+        version: record.version,
+        created_at: record.created_at,
+        updated_at: record.updated_at,
+    }
+}
+
+fn map_rbac_error(error: &RbacManagementError) -> pvlog_api::RbacApiError {
+    match error {
+        RbacManagementError::Forbidden | RbacManagementError::PrivilegeEscalation => {
+            pvlog_api::RbacApiError::Forbidden
+        }
+        RbacManagementError::NotFound | RbacManagementError::BuiltInImmutable => {
+            pvlog_api::RbacApiError::NotFound
+        }
+        RbacManagementError::InvalidName
+        | RbacManagementError::InvalidParent
+        | RbacManagementError::InvalidScope
+        | RbacManagementError::InvalidExpiry => pvlog_api::RbacApiError::Invalid,
+        RbacManagementError::Persistence | RbacManagementError::Internal(_) => {
+            pvlog_api::RbacApiError::Unavailable
+        }
     }
 }
 

@@ -8,7 +8,7 @@ use axum::{
 };
 use pvlog_api::{
     AuthorizedRequest, ModernRequestAuthorizer, RbacApiError, RbacApiUseCases,
-    RequestAuthorizationError, RequestPrincipal, RoleResponse, rbac_router,
+    RequestAuthorizationError, RequestPrincipal, RoleInput, RoleResponse, rbac_router,
 };
 use pvlog_domain::{AccountId, Permission, PrincipalId, RoleId, SystemId, UserId};
 use tower::ServiceExt as _;
@@ -19,6 +19,7 @@ async fn role_catalog_requires_role_manage_permission() -> Result<(), Box<dyn Er
     let app = rbac_router(Arc::new(Roles), Arc::new(Authorizer { account_id }))
         .layer(Extension(RequestPrincipal::User(UserId::new())));
     let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .uri(format!("/api/v1/accounts/{account_id}/roles"))
@@ -26,6 +27,18 @@ async fn role_catalog_requires_role_manage_permission() -> Result<(), Box<dyn Er
         )
         .await?;
     assert_eq!(response.status(), StatusCode::OK);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/api/v1/accounts/{account_id}/roles"))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"name":"operator","permissions":["role_manage"],"parentRoleIds":[]}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::CREATED);
     Ok(())
 }
 
@@ -43,6 +56,40 @@ impl RbacApiUseCases for Roles {
             created_at: 0,
             updated_at: 0,
         }])
+    }
+    async fn create_role(
+        &self,
+        _actor: UserId,
+        _account_id: AccountId,
+        _input: RoleInput,
+    ) -> Result<RoleResponse, RbacApiError> {
+        Ok(RoleResponse {
+            id: RoleId::new(),
+            name: "operator".to_owned(),
+            kind: "custom".to_owned(),
+            permissions: BTreeSet::from([Permission::RoleManage]),
+            parent_role_ids: BTreeSet::new(),
+            version: 1,
+            created_at: 0,
+            updated_at: 0,
+        })
+    }
+    async fn update_role(
+        &self,
+        _actor: UserId,
+        _account_id: AccountId,
+        _role_id: RoleId,
+        _input: RoleInput,
+    ) -> Result<RoleResponse, RbacApiError> {
+        Err(RbacApiError::Unavailable)
+    }
+    async fn delete_role(
+        &self,
+        _actor: UserId,
+        _account_id: AccountId,
+        _role_id: RoleId,
+    ) -> Result<(), RbacApiError> {
+        Err(RbacApiError::Unavailable)
     }
 }
 

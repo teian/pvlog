@@ -253,7 +253,10 @@ fn compose_rbac_api(
             }
         }
     };
-    Ok(Arc::new(ManagementRbacApi::new(repository)))
+    Ok(Arc::new(ManagementRbacApi::new(
+        repository,
+        Arc::new(SystemClock),
+    )))
 }
 
 #[allow(clippy::unnecessary_wraps)]
