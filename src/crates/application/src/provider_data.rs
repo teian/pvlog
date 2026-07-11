@@ -1,12 +1,13 @@
 //! Provider-neutral contracts for optional insolation and regional supply data.
 
 use async_trait::async_trait;
-use pvlog_domain::{ProviderId, UtcTimestamp};
+use pvlog_domain::{ProviderId, SystemId, TimeRange, UtcTimestamp};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
 
-use crate::{InsolationPoint, PortError, SupplyPoint};
+use crate::{Clock, InsolationPoint, PortError, SupplyPoint};
+use std::sync::{Arc, Mutex};
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -108,6 +109,17 @@ pub enum ExternalDataCacheEntry {
     },
 }
 
+impl ExternalDataCacheEntry {
+    #[must_use]
+    pub const fn provenance(&self) -> &ExternalDataProvenance {
+        match self {
+            Self::Insolation { provenance, .. } | Self::RegionalSupply { provenance, .. } => {
+                provenance
+            }
+        }
+    }
+}
+
 #[async_trait]
 pub trait ExternalDataCacheRepository: Send + Sync {
     async fn get(
@@ -119,6 +131,135 @@ pub trait ExternalDataCacheRepository: Send + Sync {
         key: &ExternalDataCacheKey,
         entry: &ExternalDataCacheEntry,
     ) -> Result<(), PortError>;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ExternalDataRequest {
+    Insolation {
+        system_id: SystemId,
+        range: TimeRange,
+    },
+    RegionalSupply {
+        region_key: String,
+        range: TimeRange,
+    },
+}
+
+#[async_trait]
+pub trait ConfiguredExternalDataAdapter: Send + Sync {
+    async fn fetch(
+        &self,
+        configuration: &ExternalDataConfiguration,
+        request: &ExternalDataRequest,
+        fetched_at: UtcTimestamp,
+    ) -> Result<ExternalDataCacheEntry, PortError>;
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExternalDataFreshness {
+    Fresh,
+    StaleDegraded,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ExternalDataResult {
+    pub entry: ExternalDataCacheEntry,
+    pub freshness: ExternalDataFreshness,
+}
+
+pub struct ConfiguredExternalDataService<A, R, C> {
+    configuration: ExternalDataConfiguration,
+    adapter: Arc<A>,
+    cache: Arc<R>,
+    clock: Arc<C>,
+    circuit: Mutex<CircuitBreaker>,
+}
+
+impl<A, R, C> ConfiguredExternalDataService<A, R, C>
+where
+    A: ConfiguredExternalDataAdapter,
+    R: ExternalDataCacheRepository,
+    C: Clock,
+{
+    #[must_use]
+    pub fn new(
+        configuration: ExternalDataConfiguration,
+        adapter: Arc<A>,
+        cache: Arc<R>,
+        clock: Arc<C>,
+        circuit_policy: CircuitBreakerPolicy,
+    ) -> Self {
+        Self {
+            configuration,
+            adapter,
+            cache,
+            clock,
+            circuit: Mutex::new(CircuitBreaker::new(circuit_policy)),
+        }
+    }
+
+    /// Returns configured provider data, preferring fresh cache data and degrading to stale data.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PortError::Unavailable`] when neither the configured provider nor cached data can
+    /// satisfy the request. Repository failures are propagated.
+    pub async fn query(
+        &self,
+        key: &ExternalDataCacheKey,
+        request: &ExternalDataRequest,
+    ) -> Result<ExternalDataResult, PortError> {
+        if !self.configuration.enabled {
+            return Err(PortError::Unavailable);
+        }
+        let now = self.clock.now();
+        let cached = self.cache.get(key).await?;
+        if cached
+            .as_ref()
+            .is_some_and(|entry| entry.provenance().valid_until >= now)
+        {
+            return Ok(ExternalDataResult {
+                entry: cached.ok_or(PortError::Unavailable)?,
+                freshness: ExternalDataFreshness::Fresh,
+            });
+        }
+        let allowed = self
+            .circuit
+            .lock()
+            .map_err(|_| PortError::Unavailable)?
+            .allow(now);
+        if !allowed {
+            return stale_or_unavailable(cached);
+        }
+        if let Ok(entry) = self.adapter.fetch(&self.configuration, request, now).await {
+            self.cache.put(key, &entry).await?;
+            self.circuit
+                .lock()
+                .map_err(|_| PortError::Unavailable)?
+                .record_success();
+            Ok(ExternalDataResult {
+                entry,
+                freshness: ExternalDataFreshness::Fresh,
+            })
+        } else {
+            self.circuit
+                .lock()
+                .map_err(|_| PortError::Unavailable)?
+                .record_failure(now);
+            stale_or_unavailable(cached)
+        }
+    }
+}
+
+fn stale_or_unavailable(
+    cached: Option<ExternalDataCacheEntry>,
+) -> Result<ExternalDataResult, PortError> {
+    cached.map_or(Err(PortError::Unavailable), |entry| {
+        Ok(ExternalDataResult {
+            entry,
+            freshness: ExternalDataFreshness::StaleDegraded,
+        })
+    })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -121,9 +121,11 @@ pub use ports::{
     WebhookSender,
 };
 pub use provider_data::{
-    CircuitBreaker, CircuitBreakerPolicy, CircuitState, ExternalDataCacheEntry,
-    ExternalDataCacheKey, ExternalDataCacheRepository, ExternalDataConfiguration, ExternalDataKind,
-    ExternalDataLicense, ExternalDataProvenance, ProviderConfigurationError,
+    CircuitBreaker, CircuitBreakerPolicy, CircuitState, ConfiguredExternalDataAdapter,
+    ConfiguredExternalDataService, ExternalDataCacheEntry, ExternalDataCacheKey,
+    ExternalDataCacheRepository, ExternalDataConfiguration, ExternalDataFreshness,
+    ExternalDataKind, ExternalDataLicense, ExternalDataProvenance, ExternalDataRequest,
+    ExternalDataResult, ProviderConfigurationError,
 };
 pub use query_planner::{
     QueryPlan, QueryPlanError, QueryPlanRequest, QueryResolution, QuerySource, RawSources,

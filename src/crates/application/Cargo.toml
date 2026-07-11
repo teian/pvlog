@@ -47,6 +47,10 @@ name = "provider-data-contracts"
 path = "../../../tests/rust/application/provider_data_contracts.rs"
 
 [[test]]
+name = "provider-data-adapters"
+path = "../../../tests/rust/application/provider_data_adapters.rs"
+
+[[test]]
 name = "identity-linking"
 path = "../../../tests/rust/application/identity_linking.rs"
 
