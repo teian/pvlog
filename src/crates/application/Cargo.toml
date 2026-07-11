@@ -143,5 +143,9 @@ path = "../../../tests/rust/application/statistics.rs"
 name = "data-quality"
 path = "../../../tests/rust/application/data_quality.rs"
 
+[[test]]
+name = "equipment-catalog"
+path = "../../../tests/rust/application/equipment_catalog.rs"
+
 [lints]
 workspace = true
