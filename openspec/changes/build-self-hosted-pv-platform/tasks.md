@@ -103,7 +103,7 @@
 - [x] 9.3 Implement and fixture-test `addoutput.jsp`, including single/CSV/batched daily outputs, all documented fields, calculations, restrictions, and errors.
 - [x] 9.4 Implement and fixture-test `addstatus.jsp`, including cumulative energy, power calculation, net data, battery state, extended values, restrictions, and errors.
 - [x] 9.5 Implement and fixture-test `addbatchstatus.jsp`, including documented batch formats, net fields, item status codes, limits, and retry behavior.
-- [ ] 9.6 Implement and fixture-test `getstatus.jsp` and `getstatistic.jsp`, including history, day statistics, system selection, date/range filters, and errors.
+- [x] 9.6 Implement and fixture-test `getstatus.jsp` and `getstatistic.jsp`, including history, day statistics, system selection, date/range filters, and errors.
 - [ ] 9.7 Implement and fixture-test `getoutput.jsp`, `getextended.jsp`, `getmissing.jsp`, and `deletestatus.jsp`, including aggregate/team/insolation flags and legacy field ordering.
 - [ ] 9.8 Add end-to-end uploader compatibility tests that prove legacy requests and the modern API converge on identical canonical data and statistics.
 
