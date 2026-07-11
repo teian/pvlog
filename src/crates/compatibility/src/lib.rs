@@ -2,10 +2,12 @@
 
 #![forbid(unsafe_code)]
 
+mod add_batch_status;
 mod add_output;
 mod add_status;
 mod protocol;
 
+pub use add_batch_status::{AddBatchStatusUseCases, BatchStatusOutcome, add_batch_status_router};
 pub use add_output::{
     AddOutputPolicy, AddOutputServiceError, AddOutputUseCases, DailyOutput, add_output_router,
 };

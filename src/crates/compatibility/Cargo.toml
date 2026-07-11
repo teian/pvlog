@@ -34,6 +34,10 @@ path = "../../../tests/compatibility/add_output.rs"
 name = "add-status"
 path = "../../../tests/compatibility/add_status.rs"
 
+[[test]]
+name = "add-batch-status"
+path = "../../../tests/compatibility/add_batch_status.rs"
+
 [lib]
 path = "src/lib.rs"
 

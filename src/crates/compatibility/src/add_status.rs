@@ -133,7 +133,7 @@ async fn execute(
 }
 
 #[allow(clippy::too_many_lines)]
-fn parse_status(
+pub(crate) fn parse_status(
     parameters: &LegacyParameters,
     policy: AddStatusPolicy,
 ) -> Result<LegacyStatus, AddStatusApiError> {
@@ -287,7 +287,7 @@ fn round_time(time: Time, interval_minutes: u8) -> Result<Time, AddStatusApiErro
     .map_err(|_| AddStatusApiError::bad("Status time invalid"))
 }
 
-fn derive_energy_and_power(
+pub(crate) fn derive_energy_and_power(
     status: &mut LegacyStatus,
     previous: Option<&LegacyStatus>,
 ) -> Result<(), AddStatusApiError> {
@@ -373,7 +373,7 @@ fn net_flows(v2: Option<i64>, v4: Option<i64>) -> Result<(i64, i64), AddStatusAp
     Ok((export, import))
 }
 
-fn validate_status(
+pub(crate) fn validate_status(
     status: &LegacyStatus,
     policy: AddStatusPolicy,
 ) -> Result<(), AddStatusApiError> {
@@ -531,14 +531,14 @@ pub enum AddStatusServiceError {
     Unavailable,
 }
 
-enum AddStatusApiError {
+pub(crate) enum AddStatusApiError {
     Legacy(LegacyError),
     Protocol(LegacyProtocolError),
     Service(AddStatusServiceError),
 }
 
 impl AddStatusApiError {
-    fn bad(detail: impl Into<String>) -> Self {
+    pub(crate) fn bad(detail: impl Into<String>) -> Self {
         Self::Legacy(LegacyError {
             kind: LegacyErrorKind::BadRequest,
             detail: detail.into(),
