@@ -1,0 +1,37 @@
+{
+  "system": {
+    "method": "GET",
+    "path": "/service/r2/getsystem.jsp?key=write-key&sid=42&array2=1&tz=1&tariffs=1&teams=1&est=1&donations=1&ext=1&sid1=99",
+    "form": null,
+    "status": 200,
+    "body": "Solar House,6000,1234,15,400,PanelCo,1,5000,InvertCo,North,22.5,None,20200102,-33.875,151.2,5,10,300,West,15,Australia/Sydney;0.25,0.3,0.1,0.2,0.225,1.1;7,9;3;Temperature,C,ff0000,1,line;100,110,120,130,140,150,160,170,180,190,200,210"
+  },
+  "update": {
+    "method": "POST",
+    "path": "/service/r2/postsystem.jsp",
+    "form": "name=Roof+Array&v7l=Temperature&v7u=C&v7c=ff0000&v7a=1&v7g=line",
+    "status": 200,
+    "body": "Updated System"
+  },
+  "search": {
+    "method": "GET",
+    "path": "/service/r2/search.jsp?key=write-key&sid=42&q=Solar&ll=-33.875%2C151.2&country=1&country_code=au&seen=30",
+    "form": null,
+    "status": 200,
+    "body": "Solar House,6000,1234,North,365,20241231,99,PanelCo,InvertCo,12,-33.875,151.2"
+  },
+  "favourite": {
+    "method": "GET",
+    "path": "/service/r2/getfavourite.jsp?key=write-key&sid=42&sid1=99",
+    "form": null,
+    "status": 200,
+    "body": "99,Solar House,6000,1234,15,400,PanelCo,1,5000,InvertCo,North,22.5,None,20200102,-33.875,151.2,5"
+  },
+  "ladder": {
+    "method": "GET",
+    "path": "/service/r2/getladder.jsp?key=write-key&sid=42&sid1=99",
+    "form": null,
+    "status": 200,
+    "body": "20241231,4,6,4.25,365,20241230,5000000,4200000,14000,12000,30000,25000,1825"
+  }
+}
