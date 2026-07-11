@@ -19,6 +19,15 @@ pub struct ManagementRequestAuthenticator {
     digest_key: [u8; 32],
 }
 
+/// Derives the keyed digest material shared by browser-session issuance and verification.
+#[must_use]
+pub fn session_digest_key(session_secret: &SecretString) -> [u8; 32] {
+    blake3::derive_key(
+        "pvlog/http-credential-digest/v1",
+        session_secret.expose_secret().as_bytes(),
+    )
+}
+
 /// Production authorization bridge from HTTP principals to management-plane RBAC and routing.
 pub struct ManagementRequestAuthorizer {
     repository: Arc<dyn ManagementRepository>,
@@ -226,10 +235,7 @@ impl ManagementRequestAuthenticator {
         Self {
             repository,
             clock,
-            digest_key: blake3::derive_key(
-                "pvlog/http-credential-digest/v1",
-                session_secret.expose_secret().as_bytes(),
-            ),
+            digest_key: session_digest_key(session_secret),
         }
     }
 
@@ -240,6 +246,44 @@ impl ManagementRequestAuthenticator {
     fn now(&self) -> Result<i64, RequestAuthenticationError> {
         i64::try_from(self.clock.now().epoch_millis())
             .map_err(|_| RequestAuthenticationError::Unavailable)
+    }
+}
+
+/// Management-backed session bootstrap used by the browser application shell.
+pub struct ManagementSessionBootstrap {
+    repository: Arc<dyn ManagementRepository>,
+}
+
+impl ManagementSessionBootstrap {
+    #[must_use]
+    pub fn new(repository: Arc<dyn ManagementRepository>) -> Self {
+        Self { repository }
+    }
+}
+
+#[async_trait]
+impl pvlog_api::SessionBootstrapUseCases for ManagementSessionBootstrap {
+    async fn bootstrap(
+        &self,
+        user_id: UserId,
+    ) -> Result<pvlog_api::SessionBootstrap, pvlog_api::SessionApiError> {
+        let user = self
+            .repository
+            .user(user_id)
+            .await
+            .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?
+            .ok_or(pvlog_api::SessionApiError::Bootstrap)?;
+        Ok(pvlog_api::SessionBootstrap {
+            authenticated: true,
+            user: Some(pvlog_api::SessionUser {
+                id: user.id,
+                display_name: user.display_name,
+            }),
+            account_id: None,
+            system_ids: Vec::new(),
+            permissions: Vec::new(),
+            connectors: Vec::new(),
+        })
     }
 }
 

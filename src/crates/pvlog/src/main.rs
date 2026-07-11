@@ -6,10 +6,14 @@ use std::{io, sync::Arc};
 
 use clap::{Parser, Subcommand};
 use pvlog::SystemClock;
-use pvlog::authentication::{ManagementRequestAuthenticator, ManagementRequestAuthorizer};
+use pvlog::authentication::{
+    ManagementRequestAuthenticator, ManagementRequestAuthorizer, ManagementSessionBootstrap,
+    session_digest_key,
+};
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
 use pvlog_application::{
-    Argon2CredentialConfig, Argon2CredentialService, CommonPasswordHook,
+    Argon2CredentialConfig, Argon2CredentialService, BrowserSessionPolicy,
+    BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, CommonPasswordHook,
     DiscardingRecoveryNotifier, LocalCredentialRepository, LocalPasswordPolicy,
     LocalPasswordService, LocalPasswordUseCases, LocalUserPolicy, SystemLifecycleRepository,
     SystemLifecycleService, SystemLifecycleUseCases, UserLifecycleRepository, UserLifecycleService,
@@ -180,6 +184,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     let request_authenticator = compose_request_authenticator(config, target)?;
     let request_authorizer = compose_request_authorizer(target)?;
     let system_lifecycle = compose_system_lifecycle(target)?;
+    let browser_sessions = compose_browser_sessions(config, target)?;
+    let session_bootstrap = Arc::new(ManagementSessionBootstrap::new(
+        compose_management_repository(target)?,
+    ));
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
     let router = pvlog_api::with_request_authentication(
@@ -189,11 +197,64 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
             .merge(pvlog_api::systems_router(
                 system_lifecycle,
                 request_authorizer,
+            ))
+            .merge(pvlog_api::sessions_router(
+                compose_local_password(config, target)?,
+                browser_sessions,
+                session_bootstrap,
             )),
         request_authenticator,
     );
     axum::serve(listener, router).await?;
     Ok(())
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn compose_browser_sessions(
+    config: &RuntimeConfig,
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn BrowserSessionUseCases>, StartupError> {
+    let repository: Arc<dyn BrowserSessionRepository> = match target {
+        DatabaseTarget::Sqlite {
+            management_path, ..
+        } => {
+            #[cfg(feature = "sqlite")]
+            {
+                Arc::new(pvlog_storage::SqliteManagementRepository::new(
+                    management_path.clone(),
+                ))
+            }
+            #[cfg(not(feature = "sqlite"))]
+            {
+                let _ = management_path;
+                return Err(StartupError::AdapterDisabled("sqlite"));
+            }
+        }
+        DatabaseTarget::Postgres { url } => {
+            #[cfg(feature = "postgres")]
+            {
+                Arc::new(pvlog_storage::PostgresManagementRepository::new(
+                    url.clone(),
+                ))
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                let _ = url;
+                return Err(StartupError::AdapterDisabled("postgres"));
+            }
+        }
+    };
+    Ok(Arc::new(BrowserSessionService::new(
+        repository,
+        Arc::new(SystemClock),
+        session_digest_key(&config.security.session_secret),
+        BrowserSessionPolicy {
+            idle_lifetime_seconds: 1_800,
+            absolute_lifetime_seconds: 28_800,
+            max_concurrent_sessions: 8,
+            secure_cookies: config.http.secure_cookies,
+        },
+    )))
 }
 
 #[allow(clippy::unnecessary_wraps)]

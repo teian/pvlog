@@ -26,6 +26,7 @@ mod local_password;
 mod managed_resources;
 mod notifications;
 mod problem;
+mod sessions;
 mod systems;
 mod teams;
 mod telemetry;
@@ -33,7 +34,8 @@ mod user_lifecycle;
 
 pub use analytics::analytics_router;
 pub use authentication::{
-    RequestAuthenticationError, RequestAuthenticator, RequestPrincipal, with_request_authentication,
+    RequestAuthenticationError, RequestAuthenticator, RequestPrincipal, session_cookie_token,
+    with_request_authentication,
 };
 pub use authorization::{
     AuthorizedRequest, ModernRequestAuthorizer, RequestAuthorizationError, actor_user_id,
@@ -44,6 +46,10 @@ pub use local_password::local_password_router;
 pub use managed_resources::managed_resources_router;
 pub use notifications::{NotificationApiError, NotificationApiUseCases, notifications_router};
 pub use problem::Problem;
+pub use sessions::{
+    SessionApiError, SessionBootstrap, SessionBootstrapUseCases, SessionConnector, SessionUser,
+    sessions_router,
+};
 pub use systems::systems_router;
 pub use teams::teams_router;
 pub use telemetry::telemetry_router;

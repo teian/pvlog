@@ -84,7 +84,7 @@ async fn authenticate(
     };
     let result = if let Some(token) = bearer {
         state.service.authenticate_bearer(token).await.map(Some)
-    } else if let Some(session_token) = session_cookie(request.headers()) {
+    } else if let Some(session_token) = session_cookie_token(request.headers()) {
         state
             .service
             .authenticate_session(session_token, csrf_token(request.headers()), state_changing)
@@ -123,7 +123,9 @@ fn bearer_token(
     Ok(Some(SecretString::from(token.to_owned())))
 }
 
-fn session_cookie(headers: &axum::http::HeaderMap) -> Option<SecretString> {
+/// Extracts the browser session cookie without exposing its value in logs or responses.
+#[must_use]
+pub fn session_cookie_token(headers: &axum::http::HeaderMap) -> Option<SecretString> {
     headers
         .get(header::COOKIE)?
         .to_str()

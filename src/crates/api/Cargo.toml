@@ -45,6 +45,10 @@ name = "authentication"
 path = "../../../tests/rust/api/authentication.rs"
 
 [[test]]
+name = "session-endpoints"
+path = "../../../tests/rust/api/session_endpoints.rs"
+
+[[test]]
 name = "system-endpoints"
 path = "../../../tests/rust/api/system_endpoints.rs"
 
