@@ -62,6 +62,34 @@
     "sendRecovery": "Send recovery link",
     "signIn": "Sign in"
   },
+  "dashboard": {
+    "accepted": "{{count}} accepted today",
+    "alertState": { "open": "Open", "resolved": "Resolved" },
+    "alertsDescription": "Recent alert state changes.",
+    "alertsTitle": "Recent alerts",
+    "battery": "Battery",
+    "coverageDescription": "{{value}}% of expected intervals are available.",
+    "coverageLabel": "Data coverage",
+    "coverageTitle": "Data coverage",
+    "ingestionDescription": "Current processing lag: {{lag}} seconds.",
+    "ingestionTitle": "Ingestion health",
+    "kpi": {
+      "battery": "Battery",
+      "consumption": "Consumption",
+      "generation": "Generation",
+      "grid": "Grid"
+    },
+    "live": "Live data received {{age}} seconds ago.",
+    "loadErrorDescription": "The operational projection could not be loaded.",
+    "loadErrorTitle": "Dashboard unavailable",
+    "noAlerts": "No recent alerts.",
+    "rejected": "{{count}} rejected today",
+    "stale": "Last data arrived {{age}} seconds ago; live values are withheld.",
+    "staleDescription": "Check the uploader and ingestion health before acting on these values.",
+    "staleTitle": "Live data is stale",
+    "title": "Operational dashboard",
+    "unavailable": "Unavailable"
+  },
   "errors": {
     "boundaryDescription": "Reload the page or return later.",
     "boundaryTitle": "This view could not be displayed",

@@ -1,5 +1,5 @@
-import { useTranslation } from "react-i18next";
 import { useSession } from "@/features/auth";
+import { DashboardPage } from "@/pages/DashboardPage";
 import { AppShell } from "@/widgets";
 
 /**
@@ -8,7 +8,6 @@ import { AppShell } from "@/widgets";
  * @returns The accessible initial page.
  */
 export function HomePage() {
-  const { t } = useTranslation();
   const session = useSession();
 
   return (
@@ -16,8 +15,7 @@ export function HomePage() {
       accountId={session.data?.accountId}
       systemIds={session.data?.systemIds}
     >
-      <h1 className="text-2xl font-bold tracking-tight">{t("home.title")}</h1>
-      <p className="text-sm text-muted-foreground">{t("home.description")}</p>
+      <DashboardPage />
     </AppShell>
   );
 }

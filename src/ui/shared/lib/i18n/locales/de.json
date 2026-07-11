@@ -62,6 +62,34 @@
     "sendRecovery": "Wiederherstellungslink senden",
     "signIn": "Anmelden"
   },
+  "dashboard": {
+    "accepted": "{{count}} heute angenommen",
+    "alertState": { "open": "Offen", "resolved": "Gelöst" },
+    "alertsDescription": "Letzte Änderungen des Warnungsstatus.",
+    "alertsTitle": "Letzte Warnungen",
+    "battery": "Batterie",
+    "coverageDescription": "{{value}} % der erwarteten Intervalle sind verfügbar.",
+    "coverageLabel": "Datenabdeckung",
+    "coverageTitle": "Datenabdeckung",
+    "ingestionDescription": "Aktuelle Verarbeitungslatenz: {{lag}} Sekunden.",
+    "ingestionTitle": "Erfassungszustand",
+    "kpi": {
+      "battery": "Batterie",
+      "consumption": "Verbrauch",
+      "generation": "Erzeugung",
+      "grid": "Netz"
+    },
+    "live": "Live-Daten vor {{age}} Sekunden empfangen.",
+    "loadErrorDescription": "Die Betriebsprojektion konnte nicht geladen werden.",
+    "loadErrorTitle": "Übersicht nicht verfügbar",
+    "noAlerts": "Keine aktuellen Warnungen.",
+    "rejected": "{{count}} heute abgelehnt",
+    "stale": "Die letzten Daten sind {{age}} Sekunden alt; Live-Werte werden nicht angezeigt.",
+    "staleDescription": "Prüfe Uploader und Erfassungszustand, bevor du anhand dieser Werte handelst.",
+    "staleTitle": "Live-Daten sind veraltet",
+    "title": "Betriebsübersicht",
+    "unavailable": "Nicht verfügbar"
+  },
   "errors": {
     "boundaryDescription": "Lade die Seite neu oder kehre später zurück.",
     "boundaryTitle": "Diese Ansicht konnte nicht angezeigt werden",
