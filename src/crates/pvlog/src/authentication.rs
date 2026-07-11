@@ -6,9 +6,9 @@ use async_trait::async_trait;
 use pvlog_api::{RequestAuthenticationError, RequestAuthenticator, RequestPrincipal};
 use pvlog_application::{
     AssignRole, AuthorizationBoundary, AuthorizationBoundaryError, AuthorizationBoundaryPorts,
-    AuthorizedAccountRoute, Clock, CreateCustomRole, ProtectedAccountRequest,
-    ProtectedSystemRequest, RbacManagementError, RbacRepository, RoleManagementService,
-    UpdateCustomRole,
+    AuthorizedAccountRoute, Clock, CreateCustomRole, ExternalIdentityLinkingUseCases,
+    ProtectedAccountRequest, ProtectedSystemRequest, RbacManagementError, RbacRepository,
+    RoleManagementService, UpdateCustomRole,
 };
 use pvlog_domain::{
     ApiScope, AuditEventId, Permission, PrincipalId, RequestId, RoleKind, SystemId, UserId,
@@ -323,6 +323,43 @@ pub struct ManagementAuditApi {
 pub struct ManagementRbacApi {
     repository: Arc<dyn RbacRepository>,
     service: RoleManagementService,
+}
+
+/// Browser-session view over provider-neutral external identity links.
+pub struct ManagementIdentityApi {
+    service: Arc<dyn ExternalIdentityLinkingUseCases>,
+}
+
+impl ManagementIdentityApi {
+    #[must_use]
+    pub fn new(service: Arc<dyn ExternalIdentityLinkingUseCases>) -> Self {
+        Self { service }
+    }
+}
+
+#[async_trait]
+impl pvlog_api::IdentityApiUseCases for ManagementIdentityApi {
+    async fn list_identities(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<pvlog_api::LinkedIdentityResponse>, pvlog_api::IdentityApiError> {
+        self.service
+            .list_external_identities(user_id)
+            .await
+            .map(|identities| {
+                identities
+                    .into_iter()
+                    .map(|identity| pvlog_api::LinkedIdentityResponse {
+                        id: identity.id,
+                        connector_id: identity.connector_id,
+                        subject: identity.subject,
+                        linked_at_epoch_millis: identity.linked_at_epoch_millis,
+                        last_login_at_epoch_millis: identity.last_login_at_epoch_millis,
+                    })
+                    .collect()
+            })
+            .map_err(|_| pvlog_api::IdentityApiError::Unavailable)
+    }
 }
 
 impl ManagementRbacApi {

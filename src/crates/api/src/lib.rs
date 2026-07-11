@@ -23,6 +23,7 @@ mod audit;
 mod authentication;
 mod authorization;
 mod community;
+mod identities;
 mod local_password;
 mod managed_resources;
 mod notifications;
@@ -45,6 +46,9 @@ pub use authorization::{
     principal_identity,
 };
 pub use community::community_router;
+pub use identities::{
+    IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,
+};
 pub use local_password::local_password_router;
 pub use managed_resources::managed_resources_router;
 pub use notifications::{NotificationApiError, NotificationApiUseCases, notifications_router};

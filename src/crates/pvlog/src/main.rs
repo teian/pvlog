@@ -7,17 +7,18 @@ use std::{io, sync::Arc};
 use clap::{Parser, Subcommand};
 use pvlog::SystemClock;
 use pvlog::authentication::{
-    ManagementAuditApi, ManagementRbacApi, ManagementRequestAuthenticator,
+    ManagementAuditApi, ManagementIdentityApi, ManagementRbacApi, ManagementRequestAuthenticator,
     ManagementRequestAuthorizer, ManagementSessionBootstrap, session_digest_key,
 };
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
 use pvlog_application::{
     Argon2CredentialConfig, Argon2CredentialService, BrowserSessionPolicy,
     BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, CommonPasswordHook,
-    DiscardingRecoveryNotifier, LocalCredentialRepository, LocalPasswordPolicy,
-    LocalPasswordService, LocalPasswordUseCases, LocalUserPolicy, SystemLifecycleRepository,
-    SystemLifecycleService, SystemLifecycleUseCases, UserLifecycleRepository, UserLifecycleService,
-    UserLifecycleUseCases,
+    DiscardingRecoveryNotifier, ExternalIdentityLinkingRepository, ExternalIdentityLinkingService,
+    ExternalIdentityLinkingUseCases, ExternalLoginPolicy, LocalCredentialRepository,
+    LocalPasswordPolicy, LocalPasswordService, LocalPasswordUseCases, LocalUserPolicy,
+    SystemLifecycleRepository, SystemLifecycleService, SystemLifecycleUseCases,
+    UserLifecycleRepository, UserLifecycleService, UserLifecycleUseCases,
 };
 use pvlog_storage::{
     DatabaseMigrationStatus, DatabaseTarget, MigrationError, MigrationPlanItem, ProbeError,
@@ -192,6 +193,7 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
         target,
     )?));
     let rbac_api = compose_rbac_api(target)?;
+    let identity_api = compose_identity_api(target)?;
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
     let router = pvlog_api::with_request_authentication(
@@ -217,11 +219,55 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 audit_api,
                 request_authorizer.clone(),
             ))
-            .merge(pvlog_api::rbac_router(rbac_api, request_authorizer.clone())),
+            .merge(pvlog_api::rbac_router(rbac_api, request_authorizer.clone()))
+            .merge(pvlog_api::identities_router(identity_api)),
         request_authenticator,
     );
     axum::serve(listener, router).await?;
     Ok(())
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn compose_identity_api(
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn pvlog_api::IdentityApiUseCases>, StartupError> {
+    let repository: Arc<dyn ExternalIdentityLinkingRepository> = match target {
+        DatabaseTarget::Sqlite {
+            management_path, ..
+        } => {
+            #[cfg(feature = "sqlite")]
+            {
+                Arc::new(pvlog_storage::SqliteExternalIdentityRepository::new(
+                    management_path.clone(),
+                ))
+            }
+            #[cfg(not(feature = "sqlite"))]
+            {
+                let _ = management_path;
+                return Err(StartupError::AdapterDisabled("sqlite"));
+            }
+        }
+        DatabaseTarget::Postgres { url } => {
+            #[cfg(feature = "postgres")]
+            {
+                Arc::new(pvlog_storage::PostgresExternalIdentityRepository::new(
+                    url.clone(),
+                ))
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                let _ = url;
+                return Err(StartupError::AdapterDisabled("postgres"));
+            }
+        }
+    };
+    let service: Arc<dyn ExternalIdentityLinkingUseCases> =
+        Arc::new(ExternalIdentityLinkingService::new(
+            repository,
+            Arc::new(SystemClock),
+            ExternalLoginPolicy::default(),
+        ));
+    Ok(Arc::new(ManagementIdentityApi::new(service)))
 }
 
 #[allow(clippy::unnecessary_wraps)]

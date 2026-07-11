@@ -71,6 +71,14 @@ impl fmt::Debug for PostgresExternalIdentityRepository {
 #[cfg(feature = "sqlite")]
 #[async_trait]
 impl ExternalIdentityLinkingRepository for SqliteExternalIdentityRepository {
+    async fn list_for_user(&self, user_id: UserId) -> Result<Vec<LinkedIdentityRecord>, PortError> {
+        let mut connection = self.connection().await.map_err(port)?;
+        let rows = sqlx::query("SELECT id,connector_id,user_id,provider_subject,linked_at,last_authenticated_at FROM external_identities WHERE user_id=? ORDER BY linked_at,id")
+            .bind(blob(user_id.as_uuid())).fetch_all(&mut connection).await.map_err(port)?;
+        connection.close().await.map_err(port)?;
+        rows.iter().map(sqlite_identity).collect()
+    }
+
     async fn find_by_connector_subject(
         &self,
         connector_id: ConnectorId,
@@ -185,6 +193,13 @@ impl ExternalIdentityLinkingRepository for SqliteExternalIdentityRepository {
 #[cfg(feature = "postgres")]
 #[async_trait]
 impl ExternalIdentityLinkingRepository for PostgresExternalIdentityRepository {
+    async fn list_for_user(&self, user_id: UserId) -> Result<Vec<LinkedIdentityRecord>, PortError> {
+        let mut connection = self.connection().await.map_err(port)?;
+        let rows = sqlx::query("SELECT id,connector_id,user_id,provider_subject,linked_at,last_authenticated_at FROM management.external_identities WHERE user_id=$1 ORDER BY linked_at,id")
+            .bind(user_id.as_uuid()).fetch_all(&mut connection).await.map_err(port)?;
+        connection.close().await.map_err(port)?;
+        rows.iter().map(postgres_identity).collect()
+    }
     async fn find_by_connector_subject(
         &self,
         connector_id: ConnectorId,

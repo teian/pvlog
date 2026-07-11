@@ -133,6 +133,18 @@ impl FakeRepository {
 }
 #[async_trait]
 impl ExternalIdentityLinkingRepository for FakeRepository {
+    async fn list_for_user(&self, user_id: UserId) -> Result<Vec<LinkedIdentityRecord>, PortError> {
+        Ok(self
+            .state
+            .lock()
+            .map_err(|_| PortError::Unavailable)?
+            .identities
+            .values()
+            .filter(|identity| identity.user_id == user_id)
+            .cloned()
+            .collect())
+    }
+
     async fn find_by_connector_subject(
         &self,
         connector_id: ConnectorId,

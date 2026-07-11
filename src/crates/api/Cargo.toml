@@ -57,6 +57,10 @@ name = "rbac-endpoints"
 path = "../../../tests/rust/api/rbac_endpoints.rs"
 
 [[test]]
+name = "identity-endpoints"
+path = "../../../tests/rust/api/identity_endpoints.rs"
+
+[[test]]
 name = "system-endpoints"
 path = "../../../tests/rust/api/system_endpoints.rs"
 

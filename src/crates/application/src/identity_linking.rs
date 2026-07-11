@@ -53,6 +53,7 @@ pub struct UnlinkExternalIdentity {
 /// Persistence and audit boundary for external identity lifecycle operations.
 #[async_trait]
 pub trait ExternalIdentityLinkingRepository: Send + Sync {
+    async fn list_for_user(&self, user_id: UserId) -> Result<Vec<LinkedIdentityRecord>, PortError>;
     async fn find_by_connector_subject(
         &self,
         connector_id: ConnectorId,
@@ -88,6 +89,10 @@ pub trait ExternalIdentityLinkingRepository: Send + Sync {
 /// External identity use cases called after protocol validation, never by raw callback input.
 #[async_trait]
 pub trait ExternalIdentityLinkingUseCases: Send + Sync {
+    async fn list_external_identities(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<LinkedIdentityRecord>, ExternalIdentityLinkingError>;
     async fn resolve_external_login(
         &self,
         connector_id: ConnectorId,
@@ -136,6 +141,16 @@ impl ExternalIdentityLinkingService {
 
 #[async_trait]
 impl ExternalIdentityLinkingUseCases for ExternalIdentityLinkingService {
+    async fn list_external_identities(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<LinkedIdentityRecord>, ExternalIdentityLinkingError> {
+        self.repository
+            .list_for_user(user_id)
+            .await
+            .map_err(ExternalIdentityLinkingError::Repository)
+    }
+
     async fn resolve_external_login(
         &self,
         connector_id: ConnectorId,
