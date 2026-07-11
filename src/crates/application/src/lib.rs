@@ -11,6 +11,7 @@ mod batch_ingestion;
 mod browser_session;
 mod data_quality;
 mod equipment_catalog;
+mod equipment_configuration;
 mod identity_linking;
 mod import_export;
 mod ingestion_admission;
@@ -68,6 +69,10 @@ pub use data_quality::{
 };
 pub use equipment_catalog::{
     EquipmentCatalog, EquipmentCatalogError, EquipmentCatalogPage, EquipmentCatalogQuery,
+};
+pub use equipment_configuration::{
+    EquipmentConfigurationError, confirm_inverter_snapshot, confirm_module_snapshot,
+    confirm_string_composition,
 };
 pub use identity_linking::{
     ExternalIdentityLinkingError, ExternalIdentityLinkingRepository,

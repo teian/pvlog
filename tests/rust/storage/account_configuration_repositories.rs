@@ -3,7 +3,8 @@
 use std::error::Error;
 
 use pvlog_domain::{
-    AccountId, AuditEventId, ChannelId, EquipmentId, InverterId, StringId, SystemId, TariffId,
+    AccountId, AuditEventId, ChannelId, EquipmentId, EquipmentValueProvenance, InverterId,
+    StringId, SystemId, TariffId,
 };
 use pvlog_storage::{
     AccountAuditRecord, AccountConfigurationRepository, AccountRepositoryError,
@@ -205,6 +206,10 @@ fn inverter(system_id: SystemId, effective_from: i64, effective_to: Option<i64>)
         model: Some("INV-8K".to_owned()),
         serial_reference: None,
         rated_power_watts: Some(8_000),
+        catalog_entry_id: None,
+        catalog_revision: None,
+        value_provenance: EquipmentValueProvenance::Manual,
+        specification_snapshot: None,
         effective_from,
         effective_to,
         created_at: 1,
@@ -217,6 +222,12 @@ fn inverter(system_id: SystemId, effective_from: i64, effective_to: Option<i64>)
             panel_manufacturer: Some("Example".to_owned()),
             panel_model: Some("P400".to_owned()),
             rated_power_watts: 8_000,
+            module_catalog_entry_id: None,
+            module_catalog_revision: None,
+            value_provenance: EquipmentValueProvenance::Manual,
+            module_specification_snapshot: None,
+            module_peak_power_watts: None,
+            total_peak_power_watts: None,
             orientation_degrees: Some(180),
             tilt_degrees: Some(35),
             effective_from,

@@ -9,7 +9,7 @@
 ## 2. Persistence and Configuration Snapshots
 
 - [x] 2.1 Extend SQLite and PostgreSQL equipment schemas with nullable template catalog ID/revision, manual/copied/customized provenance, confirmed inverter/module specification snapshots, and per-string module count, manufacturer/model, per-module peak watts, and derived total peak watts while preserving existing manual equipment.
-- [ ] 2.2 Extend account configuration repositories and application commands to validate and atomically persist user-confirmed snapshots, derive total string power with overflow/bounds checks, and avoid enforcing equality to optional catalog-template values.
+- [x] 2.2 Extend account configuration repositories and application commands to validate and atomically persist user-confirmed snapshots, derive total string power with overflow/bounds checks, and avoid enforcing equality to optional catalog-template values.
 - [ ] 2.3 Implement explicit catalog-template reapplication and editable prefilling without silently changing configured equipment.
 - [ ] 2.4 Add cross-engine repository and migration tests for legacy/manual equipment, string module composition and derived capacity, contradictory totals, overflow/bounds errors, unchanged and edited prefills, optional provenance, and catalog upgrades.
 

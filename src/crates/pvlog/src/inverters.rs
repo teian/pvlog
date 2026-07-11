@@ -4,7 +4,7 @@ use async_trait::async_trait;
 use pvlog_api::{
     InverterApiError, InverterApiUseCases, InverterInput, InverterResponse, PvStringResponse,
 };
-use pvlog_domain::{AccountId, InverterId, StringId, SystemId, UserId};
+use pvlog_domain::{AccountId, EquipmentValueProvenance, InverterId, StringId, SystemId, UserId};
 use pvlog_storage::{
     AccountConfigurationRepository, DatabaseTarget, InverterRecord,
     PostgresAccountConfigurationRepository, PvStringRecord, SqliteAccountConfigurationRepository,
@@ -104,6 +104,10 @@ impl InverterApiUseCases for ManagementInverterApi {
             model: input.model,
             serial_reference: input.serial_reference,
             rated_power_watts: input.rated_power_watts,
+            catalog_entry_id: None,
+            catalog_revision: None,
+            value_provenance: EquipmentValueProvenance::Manual,
+            specification_snapshot: None,
             effective_from: input.effective_from,
             effective_to: input.effective_to,
             created_at: now,
@@ -119,6 +123,12 @@ impl InverterApiUseCases for ManagementInverterApi {
                     panel_manufacturer: string.panel_manufacturer,
                     panel_model: string.panel_model,
                     rated_power_watts: string.rated_power_watts,
+                    module_catalog_entry_id: None,
+                    module_catalog_revision: None,
+                    value_provenance: EquipmentValueProvenance::Manual,
+                    module_specification_snapshot: None,
+                    module_peak_power_watts: None,
+                    total_peak_power_watts: None,
                     orientation_degrees: string.orientation_degrees,
                     tilt_degrees: string.tilt_degrees,
                     effective_from: string.effective_from,
