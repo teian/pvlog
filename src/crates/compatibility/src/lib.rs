@@ -6,6 +6,7 @@ mod add_batch_status;
 mod add_output;
 mod add_status;
 mod community;
+mod legacy_teams;
 mod outputs;
 mod protocol;
 mod queries;
@@ -23,6 +24,7 @@ pub use community::{
     LegacyFavouriteSystem, LegacyLadderSummary, LegacySearchQuery, LegacySearchSystem,
     LegacySystemDetails, LegacySystemOptions, LegacySystemUpdate, legacy_community_router,
 };
+pub use legacy_teams::{LegacyTeam, LegacyTeamError, LegacyTeamUseCases, legacy_team_router};
 pub use outputs::{
     LegacyAggregate, LegacyDailyExtended, LegacyDailyOutputRecord, LegacyOutputQuery,
     LegacyOutputUseCases, LegacyOutputsError, legacy_outputs_router,

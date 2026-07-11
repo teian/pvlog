@@ -55,6 +55,10 @@ path = "../../../tests/e2e/uploader_convergence.rs"
 name = "legacy-community"
 path = "../../../tests/compatibility/legacy_community.rs"
 
+[[test]]
+name = "legacy-teams"
+path = "../../../tests/compatibility/legacy_teams.rs"
+
 [lib]
 path = "src/lib.rs"
 

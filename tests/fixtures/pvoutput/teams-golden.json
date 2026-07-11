@@ -1,0 +1,32 @@
+{
+  "get": {
+    "path": "/service/r2/getteam.jsp?key=write-key&sid=42&tid=7",
+    "status": 200,
+    "body": "PV Friends,108131,2845,38,402662180,46887,9014,Community,Sunny roofs,20100917"
+  },
+  "join": {
+    "path": "/service/r2/jointeam.jsp?key=write-key&sid=42&tid=7",
+    "status": 200,
+    "body": "You have joined team PV Friends"
+  },
+  "leave": {
+    "path": "/service/r2/leaveteam.jsp?key=write-key&sid=42&tid=7",
+    "status": 200,
+    "body": "You have left team PV Friends"
+  },
+  "membershipLimit": {
+    "path": "/service/r2/jointeam.jsp?key=write-key&sid=42&tid=10",
+    "status": 400,
+    "body": "Bad request 400: Your system cannot join more than 10 teams"
+  },
+  "ineligible": {
+    "path": "/service/r2/jointeam.jsp?key=write-key&sid=42&tid=5",
+    "status": 400,
+    "body": "Bad request 400: Your system must have at least 5 outputs to join a team"
+  },
+  "ownerLeave": {
+    "path": "/service/r2/leaveteam.jsp?key=write-key&sid=42&tid=42",
+    "status": 400,
+    "body": "Bad request 400: You cannot leave the team Owner Team which you started"
+  }
+}
