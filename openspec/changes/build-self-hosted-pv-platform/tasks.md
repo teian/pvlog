@@ -91,7 +91,7 @@
 - [x] 8.2 Implement multi-series raw and aggregate queries with explicit units, resolution, coverage, gaps, provenance, and bounded result validation.
 - [x] 8.3 Implement daily/monthly/yearly/lifetime statistics for generation, consumption, grid, efficiency, peaks, environment, battery, finance, and coverage.
 - [x] 8.4 Implement missing/suspect interval, source conflict, counter reset, rejected-ingestion, and aggregate-lag detection without fabricated raw points.
-- [ ] 8.5 Implement system/team comparison and ladder services using effective capacity, eligibility, privacy, coverage, normalization, and tie rules.
+- [x] 8.5 Implement system/team comparison and ladder services using effective capacity, eligibility, privacy, coverage, normalization, and tie rules.
 - [ ] 8.6 Implement modern time-series, statistics, missing-data, comparison, ladder, and synchronous/asynchronous CSV/JSON export endpoints.
 - [ ] 8.7 Complete OpenAPI query models and executable examples, including point budgets, timezone/DST, errors, jobs, CSV headers, and conditional caching.
 - [ ] 8.8 Add query-plan regression tests and performance harness assertions for 30-day and 25-year chart service objectives.

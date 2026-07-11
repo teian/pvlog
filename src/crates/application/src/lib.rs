@@ -6,6 +6,7 @@ mod api_token;
 mod authorization_boundary;
 mod batch_ingestion;
 mod browser_session;
+mod comparison;
 mod data_quality;
 mod identity_linking;
 mod import_export;
@@ -42,6 +43,10 @@ pub use batch_ingestion::{
 pub use browser_session::{
     BrowserSession, BrowserSessionError, BrowserSessionPolicy, BrowserSessionRecord,
     BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, SessionCookie,
+};
+pub use comparison::{
+    CapacityPerformanceSlice, ComparisonCandidate, ComparisonEntry, ComparisonError,
+    ComparisonMetric, ComparisonPolicy, build_ladder, compare_systems,
 };
 pub use data_quality::{
     DataQualityError, DataQualityIssue, DataQualityKind, DataQualityPolicy, QualitySample,
