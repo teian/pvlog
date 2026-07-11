@@ -49,7 +49,10 @@ pub use local_password::local_password_router;
 pub use managed_resources::managed_resources_router;
 pub use notifications::{NotificationApiError, NotificationApiUseCases, notifications_router};
 pub use problem::Problem;
-pub use rbac::{RbacApiError, RbacApiUseCases, RoleInput, RoleResponse, rbac_router};
+pub use rbac::{
+    AssignmentPrincipalType, RbacApiError, RbacApiUseCases, RoleAssignmentInput,
+    RoleAssignmentResponse, RoleInput, RoleResponse, rbac_router,
+};
 pub use sessions::{
     SessionApiError, SessionBootstrap, SessionBootstrapUseCases, SessionConnector, SessionUser,
     sessions_router,

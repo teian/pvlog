@@ -5,7 +5,7 @@ use std::{collections::BTreeSet, sync::Arc};
 use async_trait::async_trait;
 use pvlog_api::{RequestAuthenticationError, RequestAuthenticator, RequestPrincipal};
 use pvlog_application::{
-    AuthorizationBoundary, AuthorizationBoundaryError, AuthorizationBoundaryPorts,
+    AssignRole, AuthorizationBoundary, AuthorizationBoundaryError, AuthorizationBoundaryPorts,
     AuthorizedAccountRoute, Clock, CreateCustomRole, ProtectedAccountRequest,
     ProtectedSystemRequest, RbacManagementError, RbacRepository, RoleManagementService,
     UpdateCustomRole,
@@ -439,6 +439,52 @@ impl pvlog_api::RbacApiUseCases for ManagementRbacApi {
             .await
             .map_err(|error| map_rbac_error(&error))
     }
+
+    async fn assign_role(
+        &self,
+        actor: UserId,
+        account_id: pvlog_domain::AccountId,
+        input: pvlog_api::RoleAssignmentInput,
+    ) -> Result<pvlog_api::RoleAssignmentResponse, pvlog_api::RbacApiError> {
+        let assignment = self
+            .service
+            .assign_role(
+                actor,
+                AssignRole {
+                    principal: input.principal()?,
+                    role_id: input.role_id,
+                    scope: input.scope(account_id),
+                    expires_at: input.expires_at,
+                },
+            )
+            .await
+            .map_err(|error| map_rbac_error(&error))?;
+        assignment_response(&assignment)
+    }
+
+    async fn revoke_assignment(
+        &self,
+        actor: UserId,
+        account_id: pvlog_domain::AccountId,
+        assignment_id: pvlog_domain::RoleAssignmentId,
+        scope: pvlog_domain::RoleScope,
+    ) -> Result<(), pvlog_api::RbacApiError> {
+        let scope_account = match scope {
+            pvlog_domain::RoleScope::Account(scope_account)
+            | pvlog_domain::RoleScope::System {
+                account_id: scope_account,
+                ..
+            } => scope_account,
+            pvlog_domain::RoleScope::Instance => return Err(pvlog_api::RbacApiError::Invalid),
+        };
+        if scope_account != account_id {
+            return Err(pvlog_api::RbacApiError::NotFound);
+        }
+        self.service
+            .revoke_assignment(actor, assignment_id, scope)
+            .await
+            .map_err(|error| map_rbac_error(&error))
+    }
 }
 
 fn role_response(record: pvlog_application::RbacRoleRecord) -> pvlog_api::RoleResponse {
@@ -473,6 +519,36 @@ fn map_rbac_error(error: &RbacManagementError) -> pvlog_api::RbacApiError {
             pvlog_api::RbacApiError::Unavailable
         }
     }
+}
+
+fn assignment_response(
+    assignment: &pvlog_domain::RoleAssignment,
+) -> Result<pvlog_api::RoleAssignmentResponse, pvlog_api::RbacApiError> {
+    let (account_id, system_id) = match assignment.scope {
+        pvlog_domain::RoleScope::Account(account_id) => (account_id, None),
+        pvlog_domain::RoleScope::System {
+            account_id,
+            system_id,
+        } => (account_id, Some(system_id)),
+        pvlog_domain::RoleScope::Instance => return Err(pvlog_api::RbacApiError::Invalid),
+    };
+    let (principal_type, principal_id) = match assignment.principal {
+        PrincipalId::User(id) => ("user".to_owned(), id.as_uuid()),
+        PrincipalId::ApiCredential(id) => ("api_credential".to_owned(), id.as_uuid()),
+    };
+    Ok(pvlog_api::RoleAssignmentResponse {
+        id: assignment.id,
+        role_id: assignment.role_id,
+        principal_type,
+        principal_id,
+        account_id,
+        system_id,
+        expires_at: assignment
+            .expires_at
+            .map(|timestamp| i64::try_from(timestamp.epoch_millis()))
+            .transpose()
+            .map_err(|_| pvlog_api::RbacApiError::Invalid)?,
+    })
 }
 
 impl ManagementAuditApi {

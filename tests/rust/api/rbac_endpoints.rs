@@ -8,7 +8,8 @@ use axum::{
 };
 use pvlog_api::{
     AuthorizedRequest, ModernRequestAuthorizer, RbacApiError, RbacApiUseCases,
-    RequestAuthorizationError, RequestPrincipal, RoleInput, RoleResponse, rbac_router,
+    RequestAuthorizationError, RequestPrincipal, RoleAssignmentInput, RoleAssignmentResponse,
+    RoleInput, RoleResponse, rbac_router,
 };
 use pvlog_domain::{AccountId, Permission, PrincipalId, RoleId, SystemId, UserId};
 use tower::ServiceExt as _;
@@ -88,6 +89,23 @@ impl RbacApiUseCases for Roles {
         _actor: UserId,
         _account_id: AccountId,
         _role_id: RoleId,
+    ) -> Result<(), RbacApiError> {
+        Err(RbacApiError::Unavailable)
+    }
+    async fn assign_role(
+        &self,
+        _actor: UserId,
+        _account_id: AccountId,
+        _input: RoleAssignmentInput,
+    ) -> Result<RoleAssignmentResponse, RbacApiError> {
+        Err(RbacApiError::Unavailable)
+    }
+    async fn revoke_assignment(
+        &self,
+        _actor: UserId,
+        _account_id: AccountId,
+        _assignment_id: pvlog_domain::RoleAssignmentId,
+        _scope: pvlog_domain::RoleScope,
     ) -> Result<(), RbacApiError> {
         Err(RbacApiError::Unavailable)
     }

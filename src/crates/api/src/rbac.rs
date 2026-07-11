@@ -5,12 +5,15 @@ use std::{collections::BTreeSet, sync::Arc};
 use async_trait::async_trait;
 use axum::{
     Extension, Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, patch},
+    routing::{delete, get, patch, post},
 };
-use pvlog_domain::{AccountId, Permission, RoleId};
+use pvlog_domain::{
+    AccountId, ApiCredentialId, Permission, PrincipalId, RoleAssignmentId, RoleId, RoleScope,
+    SystemId, UserId,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -28,6 +31,18 @@ pub struct RoleResponse {
     pub version: i64,
     pub created_at: i64,
     pub updated_at: i64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoleAssignmentResponse {
+    pub id: RoleAssignmentId,
+    pub role_id: RoleId,
+    pub principal_type: String,
+    pub principal_id: uuid::Uuid,
+    pub account_id: AccountId,
+    pub system_id: Option<SystemId>,
+    pub expires_at: Option<i64>,
 }
 
 #[async_trait]
@@ -52,6 +67,19 @@ pub trait RbacApiUseCases: Send + Sync {
         account_id: AccountId,
         role_id: RoleId,
     ) -> Result<(), RbacApiError>;
+    async fn assign_role(
+        &self,
+        actor: UserId,
+        account_id: AccountId,
+        input: RoleAssignmentInput,
+    ) -> Result<RoleAssignmentResponse, RbacApiError>;
+    async fn revoke_assignment(
+        &self,
+        actor: UserId,
+        account_id: AccountId,
+        assignment_id: RoleAssignmentId,
+        scope: RoleScope,
+    ) -> Result<(), RbacApiError>;
 }
 
 #[derive(Clone)]
@@ -68,6 +96,14 @@ pub fn rbac_router(
         .route(
             "/api/v1/accounts/{account_id}/roles",
             get(roles).post(create_role),
+        )
+        .route(
+            "/api/v1/accounts/{account_id}/role-assignments",
+            post(assign_role),
+        )
+        .route(
+            "/api/v1/accounts/{account_id}/role-assignments/{assignment_id}",
+            delete(revoke_assignment),
         )
         .route(
             "/api/v1/accounts/{account_id}/roles/{role_id}",
@@ -104,6 +140,58 @@ pub struct RoleInput {
     pub permissions: BTreeSet<Permission>,
     #[serde(default)]
     pub parent_role_ids: BTreeSet<RoleId>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AssignmentPrincipalType {
+    User,
+    ApiCredential,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RoleAssignmentInput {
+    pub role_id: RoleId,
+    pub principal_type: AssignmentPrincipalType,
+    pub principal_id: uuid::Uuid,
+    pub system_id: Option<SystemId>,
+    pub expires_at: Option<i64>,
+}
+
+impl RoleAssignmentInput {
+    /// Converts the untrusted HTTP identifier into a typed RBAC principal.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RbacApiError::Invalid`] if the identifier is not a valid typed ID.
+    pub fn principal(&self) -> Result<PrincipalId, RbacApiError> {
+        match self.principal_type {
+            AssignmentPrincipalType::User => UserId::from_uuid(self.principal_id)
+                .map(PrincipalId::User)
+                .map_err(|_| RbacApiError::Invalid),
+            AssignmentPrincipalType::ApiCredential => ApiCredentialId::from_uuid(self.principal_id)
+                .map(PrincipalId::ApiCredential)
+                .map_err(|_| RbacApiError::Invalid),
+        }
+    }
+    /// Builds the account or system scope implied by the request path and body.
+    #[must_use]
+    pub fn scope(&self, account_id: AccountId) -> RoleScope {
+        self.system_id
+            .map_or(RoleScope::Account(account_id), |system_id| {
+                RoleScope::System {
+                    account_id,
+                    system_id,
+                }
+            })
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RevokeAssignmentQuery {
+    system_id: Option<SystemId>,
 }
 
 async fn create_role(
@@ -144,6 +232,42 @@ async fn delete_role(
     state
         .service
         .delete_role(actor, account_id, role_id)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn assign_role(
+    State(state): State<RbacState>,
+    Path(account_id): Path<AccountId>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Json(input): Json<RoleAssignmentInput>,
+) -> Result<Response, RbacApiError> {
+    let actor = authorize_actor(&state, principal, account_id, "role.assign").await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(state.service.assign_role(actor, account_id, input).await?),
+    )
+        .into_response())
+}
+
+async fn revoke_assignment(
+    State(state): State<RbacState>,
+    Path((account_id, assignment_id)): Path<(AccountId, RoleAssignmentId)>,
+    Query(query): Query<RevokeAssignmentQuery>,
+    principal: Option<Extension<RequestPrincipal>>,
+) -> Result<StatusCode, RbacApiError> {
+    let actor = authorize_actor(&state, principal, account_id, "role.revoke").await?;
+    let scope = query
+        .system_id
+        .map_or(RoleScope::Account(account_id), |system_id| {
+            RoleScope::System {
+                account_id,
+                system_id,
+            }
+        });
+    state
+        .service
+        .revoke_assignment(actor, account_id, assignment_id, scope)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
