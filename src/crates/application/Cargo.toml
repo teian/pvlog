@@ -56,6 +56,10 @@ name = "alert-rules"
 path = "../../../tests/rust/application/alert_rules.rs"
 
 [[test]]
+name = "alert-evaluator"
+path = "../../../tests/rust/application/alert_evaluator.rs"
+
+[[test]]
 name = "identity-linking"
 path = "../../../tests/rust/application/identity_linking.rs"
 

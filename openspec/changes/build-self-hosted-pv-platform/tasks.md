@@ -121,7 +121,7 @@
 ## 11. Alerts, Webhooks, and Notifications
 
 - [x] 11.1 Implement timezone-aware alert rule CRUD and evaluation for idle, generation, consumption, net power, standby cost, performance, battery, and extended-channel conditions.
-- [ ] 11.2 Implement debounce, cooldown, recovery, deduplication, transactionally queued alert events, and evaluator lag metrics with clock-controlled tests.
+- [x] 11.2 Implement debounce, cooldown, recovery, deduplication, transactionally queued alert events, and evaluator lag metrics with clock-controlled tests.
 - [ ] 11.3 Implement webhook subscription verification/lifecycle, event schemas, stable event IDs, keyed signatures, timestamp/replay guidance, and secret rotation.
 - [ ] 11.4 Implement SSRF-safe delivery with HTTPS defaults, DNS re-resolution, address blocking, redirect/body/time limits, explicit local-network policy, and security tests.
 - [ ] 11.5 Implement leased delivery attempts, exponential backoff/jitter, outcome history, dead-letter state, administrative replay, and observability.

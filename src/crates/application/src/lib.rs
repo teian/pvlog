@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+mod alert_evaluator;
 mod alert_rules;
 mod analytics_api;
 mod api_token;
@@ -36,6 +37,10 @@ mod system_lifecycle;
 mod teams;
 mod user_lifecycle;
 
+pub use alert_evaluator::{
+    AlertEvaluationState, AlertEvaluator, AlertEvaluatorError, AlertEvaluatorMetrics,
+    AlertEvaluatorRepository, AlertTransition,
+};
 pub use alert_rules::{
     AlertEvaluation, AlertMetrics, AlertRuleRepository, AlertRuleService, AlertRuleServiceError,
     CreateAlertRule, UpdateAlertRule, evaluate_alert,
