@@ -6,6 +6,7 @@ use std::{io, sync::Arc};
 
 use clap::{Parser, Subcommand};
 use pvlog::SystemClock;
+use pvlog::authentication::ManagementRequestAuthenticator;
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
 use pvlog_application::{
     Argon2CredentialConfig, Argon2CredentialService, CommonPasswordHook,
@@ -175,13 +176,59 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     probe_database(target).await?;
     let user_lifecycle = compose_user_lifecycle(config, target)?;
     let local_password = compose_local_password(config, target)?;
+    let request_authenticator = compose_request_authenticator(config, target)?;
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
-    let router = pvlog_api::router(env!("CARGO_PKG_VERSION"))
-        .merge(pvlog_api::user_lifecycle_router(user_lifecycle))
-        .merge(pvlog_api::local_password_router(local_password));
+    let router = pvlog_api::with_request_authentication(
+        pvlog_api::router(env!("CARGO_PKG_VERSION"))
+            .merge(pvlog_api::user_lifecycle_router(user_lifecycle))
+            .merge(pvlog_api::local_password_router(local_password)),
+        request_authenticator,
+    );
     axum::serve(listener, router).await?;
     Ok(())
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn compose_request_authenticator(
+    config: &RuntimeConfig,
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn pvlog_api::RequestAuthenticator>, StartupError> {
+    let repository: Arc<dyn pvlog_storage::ManagementRepository> = match target {
+        DatabaseTarget::Sqlite {
+            management_path, ..
+        } => {
+            #[cfg(feature = "sqlite")]
+            {
+                Arc::new(pvlog_storage::SqliteManagementRepository::new(
+                    management_path.clone(),
+                ))
+            }
+            #[cfg(not(feature = "sqlite"))]
+            {
+                let _ = management_path;
+                return Err(StartupError::AdapterDisabled("sqlite"));
+            }
+        }
+        DatabaseTarget::Postgres { url } => {
+            #[cfg(feature = "postgres")]
+            {
+                Arc::new(pvlog_storage::PostgresManagementRepository::new(
+                    url.clone(),
+                ))
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                let _ = url;
+                return Err(StartupError::AdapterDisabled("postgres"));
+            }
+        }
+    };
+    Ok(Arc::new(ManagementRequestAuthenticator::new(
+        repository,
+        Arc::new(SystemClock),
+        &config.security.session_secret,
+    )))
 }
 
 #[allow(clippy::unnecessary_wraps)]

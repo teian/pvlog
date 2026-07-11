@@ -2,6 +2,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod authentication;
 pub mod config;
 
 use pvlog_application::Clock;

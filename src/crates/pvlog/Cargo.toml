@@ -12,7 +12,9 @@ postgres = ["pvlog-storage/postgres", "pvlog-worker/postgres"]
 sqlite = ["pvlog-storage/sqlite", "pvlog-worker/sqlite"]
 
 [dependencies]
+async-trait.workspace = true
 axum.workspace = true
+blake3.workspace = true
 clap.workspace = true
 figment.workspace = true
 opentelemetry.workspace = true
