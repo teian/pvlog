@@ -49,7 +49,7 @@ export async function login(email: string, password: string): Promise<Session> {
 
 /** Starts local password recovery. @param email - Local account email. @returns Completion after the enumeration-safe request. */
 export async function requestRecovery(email: string): Promise<void> {
-  await jsonRequest("/api/v1/auth/local/recovery", {
+  await jsonRequest("/api/v1/auth/password-recovery", {
     method: "POST",
     body: JSON.stringify({ email }),
   });
