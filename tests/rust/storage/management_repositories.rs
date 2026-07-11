@@ -264,6 +264,15 @@ async fn verify_contract(
             .await?
             .is_none()
     );
+    assert_eq!(
+        repository
+            .active_accounts_for_user(fixture.user_id)
+            .await?
+            .into_iter()
+            .map(|account| account.id)
+            .collect::<Vec<_>>(),
+        vec![fixture.account_a]
+    );
     assert!(
         repository
             .active_session_by_digest(&fixture.session_digest, 50)
@@ -308,6 +317,10 @@ async fn verify_contract(
             .system_registry(fixture.system_b)
             .await?
             .is_none()
+    );
+    assert_eq!(
+        repository.systems_for_account(fixture.account_a).await?,
+        vec![fixture.system_a]
     );
     assert!(
         repository

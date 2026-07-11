@@ -167,6 +167,14 @@ pub trait ManagementRepository: Send + Sync {
         account_id: AccountId,
         user_id: UserId,
     ) -> Result<Option<MembershipRecord>, ManagementRepositoryError>;
+    async fn active_accounts_for_user(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<AccountRecord>, ManagementRepositoryError>;
+    async fn systems_for_account(
+        &self,
+        account_id: AccountId,
+    ) -> Result<Vec<SystemId>, ManagementRepositoryError>;
     async fn save_session(&self, record: &SessionRecord) -> Result<(), ManagementRepositoryError>;
     async fn active_session_by_digest(
         &self,
@@ -432,6 +440,40 @@ impl ManagementRepository for SqliteManagementRepository {
         .await?;
         connection.close().await?;
         row.map(|row| sqlite_membership(&row)).transpose()
+    }
+
+    async fn active_accounts_for_user(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<AccountRecord>, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "SELECT account.id,account.slug,account.display_name,account.status,account.created_by, \
+             account.created_at,account.updated_at FROM accounts account \
+             JOIN memberships membership ON membership.account_id=account.id \
+             WHERE membership.user_id=? AND membership.status='active' AND account.status='active' \
+             ORDER BY account.slug",
+        )
+        .bind(uuid_blob(user_id.as_uuid()))
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        rows.iter().map(sqlite_account).collect()
+    }
+
+    async fn systems_for_account(
+        &self,
+        account_id: AccountId,
+    ) -> Result<Vec<SystemId>, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query_scalar::<_, Vec<u8>>(
+            "SELECT system_id FROM system_registry WHERE account_id=? ORDER BY system_id",
+        )
+        .bind(uuid_blob(account_id.as_uuid()))
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        rows.into_iter().map(system_id_from_blob).collect()
     }
 
     async fn save_session(&self, record: &SessionRecord) -> Result<(), ManagementRepositoryError> {
@@ -881,6 +923,34 @@ impl ManagementRepository for PostgresManagementRepository {
         row.map(|row| postgres_membership(&row)).transpose()
     }
 
+    async fn active_accounts_for_user(
+        &self,
+        user_id: UserId,
+    ) -> Result<Vec<AccountRecord>, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query("SELECT account.id,account.slug,account.display_name,account.status,account.created_by,account.created_at,account.updated_at FROM management.accounts account JOIN management.memberships membership ON membership.account_id=account.id WHERE membership.user_id=$1 AND membership.status='active' AND account.status='active' ORDER BY account.slug")
+            .bind(user_id.as_uuid()).fetch_all(&mut connection).await?;
+        connection.close().await?;
+        rows.iter().map(postgres_account).collect()
+    }
+
+    async fn systems_for_account(
+        &self,
+        account_id: AccountId,
+    ) -> Result<Vec<SystemId>, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query_scalar::<_, Uuid>(
+            "SELECT system_id FROM management.system_registry WHERE account_id=$1 ORDER BY system_id",
+        )
+        .bind(account_id.as_uuid())
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        rows.into_iter()
+            .map(|id| pg_id(id, SystemId::from_uuid))
+            .collect()
+    }
+
     async fn save_session(&self, record: &SessionRecord) -> Result<(), ManagementRepositoryError> {
         validate_session(record)?;
         let mut connection = self.connection().await?;
@@ -1102,6 +1172,18 @@ impl ManagementRepository for SqliteManagementRepository {
     ) -> Result<Option<MembershipRecord>, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
     }
+    async fn active_accounts_for_user(
+        &self,
+        _: UserId,
+    ) -> Result<Vec<AccountRecord>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
+    }
+    async fn systems_for_account(
+        &self,
+        _: AccountId,
+    ) -> Result<Vec<SystemId>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
+    }
     async fn save_session(&self, _: &SessionRecord) -> Result<(), ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
     }
@@ -1225,6 +1307,18 @@ impl ManagementRepository for PostgresManagementRepository {
         _: AccountId,
         _: UserId,
     ) -> Result<Option<MembershipRecord>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("postgres"))
+    }
+    async fn active_accounts_for_user(
+        &self,
+        _: UserId,
+    ) -> Result<Vec<AccountRecord>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("postgres"))
+    }
+    async fn systems_for_account(
+        &self,
+        _: AccountId,
+    ) -> Result<Vec<SystemId>, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("postgres"))
     }
     async fn save_session(&self, _: &SessionRecord) -> Result<(), ManagementRepositoryError> {

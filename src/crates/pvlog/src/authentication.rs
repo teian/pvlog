@@ -273,14 +273,29 @@ impl pvlog_api::SessionBootstrapUseCases for ManagementSessionBootstrap {
             .await
             .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?
             .ok_or(pvlog_api::SessionApiError::Bootstrap)?;
+        let account = self
+            .repository
+            .active_accounts_for_user(user_id)
+            .await
+            .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?
+            .into_iter()
+            .next();
+        let system_ids = match account.as_ref() {
+            Some(account) => self
+                .repository
+                .systems_for_account(account.id)
+                .await
+                .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?,
+            None => Vec::new(),
+        };
         Ok(pvlog_api::SessionBootstrap {
             authenticated: true,
             user: Some(pvlog_api::SessionUser {
                 id: user.id,
                 display_name: user.display_name,
             }),
-            account_id: None,
-            system_ids: Vec::new(),
+            account_id: account.map(|account| account.id),
+            system_ids,
             permissions: Vec::new(),
             connectors: Vec::new(),
         })
