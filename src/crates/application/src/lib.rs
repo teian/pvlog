@@ -36,6 +36,7 @@ mod system_configuration;
 mod system_lifecycle;
 mod teams;
 mod user_lifecycle;
+mod webhooks;
 
 pub use alert_evaluator::{
     AlertEvaluationState, AlertEvaluator, AlertEvaluatorError, AlertEvaluatorMetrics,
@@ -173,4 +174,9 @@ pub use user_lifecycle::{
     LifecycleCreateOutcome, LifecycleUserRecord, LocalUserPolicy, PublicLifecycleOutcome,
     RegisterLocalUser, UserLifecycleError, UserLifecycleRepository, UserLifecycleService,
     UserLifecycleUseCases,
+};
+pub use webhooks::{
+    CreateWebhookSubscription, PendingWebhookVerification, RotateWebhookSecret, SignedWebhookEvent,
+    StoredWebhookSubscription, WebhookEventEnvelope, WebhookReplayPolicy, WebhookService,
+    WebhookServiceError, WebhookSubscriptionRepository, sign_webhook_event,
 };

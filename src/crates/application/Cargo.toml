@@ -60,6 +60,10 @@ name = "alert-evaluator"
 path = "../../../tests/rust/application/alert_evaluator.rs"
 
 [[test]]
+name = "webhooks"
+path = "../../../tests/rust/application/webhooks.rs"
+
+[[test]]
 name = "identity-linking"
 path = "../../../tests/rust/application/identity_linking.rs"
 
