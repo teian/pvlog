@@ -94,7 +94,7 @@
 - [x] 8.5 Implement system/team comparison and ladder services using effective capacity, eligibility, privacy, coverage, normalization, and tie rules.
 - [x] 8.6 Implement modern time-series, statistics, missing-data, comparison, ladder, and synchronous/asynchronous CSV/JSON export endpoints.
 - [x] 8.7 Complete OpenAPI query models and executable examples, including point budgets, timezone/DST, errors, jobs, CSV headers, and conditional caching.
-- [ ] 8.8 Add query-plan regression tests and performance harness assertions for 30-day and 25-year chart service objectives.
+- [x] 8.8 Add query-plan regression tests and performance harness assertions for 30-day and 25-year chart service objectives.
 
 ## 9. PVOutput Compatibility Contract and Core Services
 

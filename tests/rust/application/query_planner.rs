@@ -130,3 +130,18 @@ fn invalid_timezone_and_empty_fields_are_rejected() {
     empty.fields.clear();
     assert_eq!(plan_query(empty), Err(QueryPlanError::NoFields));
 }
+
+#[test]
+fn chart_objective_ranges_keep_stable_regression_plans() {
+    let mut thirty_days = request(30);
+    thirty_days.maximum_points = 2_000;
+    let thirty_day_plan = successful_plan(thirty_days);
+    assert_eq!(thirty_day_plan.actual_resolution, QueryResolution::Hourly);
+    assert!(thirty_day_plan.estimated_points <= 2_000);
+
+    let mut long_history = request(25 * 365);
+    long_history.maximum_points = 10_000;
+    let long_history = successful_plan(long_history);
+    assert_eq!(long_history.actual_resolution, QueryResolution::Daily);
+    assert!(long_history.estimated_points <= 10_000);
+}
