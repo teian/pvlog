@@ -16,6 +16,8 @@ use pvlog_domain::UserId;
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
+use crate::RequestPrincipal;
+
 #[derive(Clone)]
 struct PasswordApiState {
     service: Arc<dyn LocalPasswordUseCases>,
@@ -81,12 +83,15 @@ async fn set_initial_password(
 
 async fn change_password(
     State(state): State<PasswordApiState>,
-    user: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Json(body): Json<ChangePasswordBody>,
 ) -> Result<Response, PasswordApiError> {
-    let user_id = user
-        .map(|Extension(user_id)| user_id)
-        .ok_or(PasswordServiceError::Forbidden)?;
+    let user_id = match principal {
+        Some(Extension(RequestPrincipal::User(user_id))) => user_id,
+        Some(Extension(RequestPrincipal::ApiCredential { .. })) | None => {
+            return Err(PasswordServiceError::Forbidden.into());
+        }
+    };
     state
         .service
         .change_password(ChangePassword {

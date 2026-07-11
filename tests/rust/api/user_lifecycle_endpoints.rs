@@ -8,7 +8,7 @@ use axum::{
     body::Body,
     http::{Method, Request},
 };
-use pvlog_api::{local_password_router, user_lifecycle_router};
+use pvlog_api::{RequestPrincipal, local_password_router, user_lifecycle_router};
 use pvlog_application::{
     AdminUserActor, AuthenticatePassword, AuthenticationOutcome, ChangePassword, CreateLocalUser,
     InvitationResult, InviteLocalUser, LifecycleUserRecord, LocalPasswordUseCases,
@@ -101,7 +101,7 @@ async fn password_recovery_is_uniform_and_password_change_requires_a_user()
     )
     .await?;
     assert_eq!(denied.0, 403);
-    let authorized = app.layer(Extension(UserId::new()));
+    let authorized = app.layer(Extension(RequestPrincipal::User(UserId::new())));
     let changed = request_with_method(
         &authorized,
         Method::PUT,
