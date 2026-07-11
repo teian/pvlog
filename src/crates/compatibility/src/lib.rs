@@ -3,10 +3,15 @@
 #![forbid(unsafe_code)]
 
 mod add_output;
+mod add_status;
 mod protocol;
 
 pub use add_output::{
     AddOutputPolicy, AddOutputServiceError, AddOutputUseCases, DailyOutput, add_output_router,
+};
+pub use add_status::{
+    AddStatusPolicy, AddStatusServiceError, AddStatusUseCases, LegacyStatus, LegacyStatusEnergy,
+    add_status_router,
 };
 pub use protocol::{
     LegacyAuth, LegacyError, LegacyErrorKind, LegacyMethod, LegacyParameters, LegacyProtocolError,

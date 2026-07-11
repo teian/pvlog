@@ -30,6 +30,10 @@ path = "../../../tests/compatibility/legacy_protocol.rs"
 name = "add-output"
 path = "../../../tests/compatibility/add_output.rs"
 
+[[test]]
+name = "add-status"
+path = "../../../tests/compatibility/add_status.rs"
+
 [lib]
 path = "src/lib.rs"
 

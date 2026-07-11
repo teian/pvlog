@@ -1,0 +1,22 @@
+{
+  "energyOnly": {
+    "query": "key=write-key&sid=42&d=20241220&t=12%3A02&v1=1300&v3=700&v5=21.5&v6=239.2&c1=2&v7=42.25&m1=normal&b1=500&b2=75.5&b3=13000&b4=30000&b5=20000&b6=3",
+    "status": 200,
+    "body": "Added Status"
+  },
+  "netPost": {
+    "form": "d=20241220&t=12%3A05&v2=1200&v4=-200&n=1",
+    "status": 200,
+    "body": "Added Status"
+  },
+  "invalidNetCumulative": {
+    "query": "key=write-key&sid=42&d=20241220&t=12%3A05&v2=100&n=1&c1=1",
+    "status": 400,
+    "body": "Bad request 400: Invalid net and cumulative"
+  },
+  "moonPowered": {
+    "query": "key=write-key&sid=42&d=20241220&t=23%3A00&v2=100",
+    "status": 400,
+    "body": "Bad request 400: Moon Powered"
+  }
+}
