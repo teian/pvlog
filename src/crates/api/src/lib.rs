@@ -19,6 +19,7 @@ use tower_http::{
 use utoipa::ToSchema;
 
 mod analytics;
+mod authentication;
 mod community;
 mod local_password;
 mod managed_resources;
@@ -30,6 +31,9 @@ mod telemetry;
 mod user_lifecycle;
 
 pub use analytics::analytics_router;
+pub use authentication::{
+    RequestAuthenticationError, RequestAuthenticator, RequestPrincipal, with_request_authentication,
+};
 pub use community::community_router;
 pub use local_password::local_password_router;
 pub use managed_resources::managed_resources_router;

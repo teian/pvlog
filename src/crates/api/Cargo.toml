@@ -41,6 +41,10 @@ name = "http-foundation"
 path = "../../../tests/rust/api/http_foundation.rs"
 
 [[test]]
+name = "authentication"
+path = "../../../tests/rust/api/authentication.rs"
+
+[[test]]
 name = "system-endpoints"
 path = "../../../tests/rust/api/system_endpoints.rs"
 
