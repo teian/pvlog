@@ -68,6 +68,10 @@ name = "webhook-security"
 path = "../../../tests/rust/application/webhook_security.rs"
 
 [[test]]
+name = "webhook-delivery"
+path = "../../../tests/rust/application/webhook_delivery.rs"
+
+[[test]]
 name = "identity-linking"
 path = "../../../tests/rust/application/identity_linking.rs"
 
