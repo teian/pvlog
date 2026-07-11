@@ -53,6 +53,10 @@ name = "audit-endpoints"
 path = "../../../tests/rust/api/audit_endpoints.rs"
 
 [[test]]
+name = "rbac-endpoints"
+path = "../../../tests/rust/api/rbac_endpoints.rs"
+
+[[test]]
 name = "system-endpoints"
 path = "../../../tests/rust/api/system_endpoints.rs"
 

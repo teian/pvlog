@@ -8,7 +8,9 @@ use pvlog_application::{
     AuthorizationBoundary, AuthorizationBoundaryError, AuthorizationBoundaryPorts,
     AuthorizedAccountRoute, Clock, ProtectedAccountRequest, ProtectedSystemRequest,
 };
-use pvlog_domain::{ApiScope, AuditEventId, Permission, PrincipalId, RequestId, SystemId, UserId};
+use pvlog_domain::{
+    ApiScope, AuditEventId, Permission, PrincipalId, RequestId, RoleKind, SystemId, UserId,
+};
 use pvlog_storage::{AuditRecord, ManagementRepository, RoutingRecord};
 use secrecy::{ExposeSecret as _, SecretString};
 
@@ -313,6 +315,49 @@ pub struct ManagementSessionBootstrap {
 /// Read-only management adapter for account audit HTTP resources.
 pub struct ManagementAuditApi {
     repository: Arc<dyn ManagementRepository>,
+}
+
+/// Management-backed role catalog for the RBAC HTTP adapter.
+pub struct ManagementRbacApi {
+    repository: Arc<dyn pvlog_application::RbacRepository>,
+}
+
+impl ManagementRbacApi {
+    #[must_use]
+    pub fn new(repository: Arc<dyn pvlog_application::RbacRepository>) -> Self {
+        Self { repository }
+    }
+}
+
+#[async_trait]
+impl pvlog_api::RbacApiUseCases for ManagementRbacApi {
+    async fn roles(
+        &self,
+        account_id: pvlog_domain::AccountId,
+    ) -> Result<Vec<pvlog_api::RoleResponse>, pvlog_api::RbacApiError> {
+        self.repository
+            .roles(Some(account_id))
+            .await
+            .map(|records| {
+                records
+                    .into_iter()
+                    .map(|record| pvlog_api::RoleResponse {
+                        id: record.role.id,
+                        name: record.role.name,
+                        kind: match record.role.kind {
+                            RoleKind::BuiltIn(kind) => format!("built_in:{kind:?}"),
+                            RoleKind::Custom => "custom".to_owned(),
+                        },
+                        permissions: record.role.permissions,
+                        parent_role_ids: record.role.parent_role_ids,
+                        version: record.version,
+                        created_at: record.created_at,
+                        updated_at: record.updated_at,
+                    })
+                    .collect()
+            })
+            .map_err(|_| pvlog_api::RbacApiError::Unavailable)
+    }
 }
 
 impl ManagementAuditApi {
