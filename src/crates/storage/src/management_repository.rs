@@ -38,6 +38,18 @@ pub struct AccountRecord {
     pub updated_at: i64,
 }
 
+/// Global ownership index for a system stored in an account database.
+///
+/// The management plane uses this mapping to resolve an account and authorize a
+/// system request before opening account-owned storage.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SystemRegistryRecord {
+    pub system_id: SystemId,
+    pub account_id: AccountId,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 /// Account-scoped membership record.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MembershipRecord {
@@ -137,6 +149,14 @@ pub trait ManagementRepository: Send + Sync {
         &self,
         id: AccountId,
     ) -> Result<Option<AccountRecord>, ManagementRepositoryError>;
+    async fn save_system_registry(
+        &self,
+        record: &SystemRegistryRecord,
+    ) -> Result<(), ManagementRepositoryError>;
+    async fn system_registry(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Option<SystemRegistryRecord>, ManagementRepositoryError>;
     async fn save_membership(
         &self,
         record: &MembershipRecord,
@@ -307,6 +327,42 @@ impl ManagementRepository for SqliteManagementRepository {
         .await?;
         connection.close().await?;
         row.map(|row| sqlite_account(&row)).transpose()
+    }
+
+    async fn save_system_registry(
+        &self,
+        record: &SystemRegistryRecord,
+    ) -> Result<(), ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        sqlx::query(
+            "INSERT INTO system_registry (system_id, account_id, created_at, updated_at) \
+             VALUES (?, ?, ?, ?) ON CONFLICT(system_id) DO UPDATE SET \
+             account_id = excluded.account_id, updated_at = excluded.updated_at",
+        )
+        .bind(uuid_blob(record.system_id.as_uuid()))
+        .bind(uuid_blob(record.account_id.as_uuid()))
+        .bind(record.created_at)
+        .bind(record.updated_at)
+        .execute(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(())
+    }
+
+    async fn system_registry(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Option<SystemRegistryRecord>, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let row = sqlx::query(
+            "SELECT system_id, account_id, created_at, updated_at FROM system_registry \
+             WHERE system_id = ?",
+        )
+        .bind(uuid_blob(system_id.as_uuid()))
+        .fetch_optional(&mut connection)
+        .await?;
+        connection.close().await?;
+        row.map(|row| sqlite_system_registry(&row)).transpose()
     }
 
     async fn save_membership(
@@ -676,6 +732,28 @@ impl ManagementRepository for PostgresManagementRepository {
         row.map(|row| postgres_account(&row)).transpose()
     }
 
+    async fn save_system_registry(
+        &self,
+        record: &SystemRegistryRecord,
+    ) -> Result<(), ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        sqlx::query("INSERT INTO management.system_registry (system_id,account_id,created_at,updated_at) VALUES ($1,$2,$3,$4) ON CONFLICT(system_id) DO UPDATE SET account_id=excluded.account_id,updated_at=excluded.updated_at")
+            .bind(record.system_id.as_uuid()).bind(record.account_id.as_uuid()).bind(record.created_at).bind(record.updated_at).execute(&mut connection).await?;
+        connection.close().await?;
+        Ok(())
+    }
+
+    async fn system_registry(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Option<SystemRegistryRecord>, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let row = sqlx::query("SELECT system_id,account_id,created_at,updated_at FROM management.system_registry WHERE system_id=$1")
+            .bind(system_id.as_uuid()).fetch_optional(&mut connection).await?;
+        connection.close().await?;
+        row.map(|row| postgres_system_registry(&row)).transpose()
+    }
+
     async fn save_membership(
         &self,
         record: &MembershipRecord,
@@ -844,6 +922,18 @@ impl ManagementRepository for SqliteManagementRepository {
     ) -> Result<Option<AccountRecord>, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
     }
+    async fn save_system_registry(
+        &self,
+        _: &SystemRegistryRecord,
+    ) -> Result<(), ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
+    }
+    async fn system_registry(
+        &self,
+        _: SystemId,
+    ) -> Result<Option<SystemRegistryRecord>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
+    }
     async fn save_membership(&self, _: &MembershipRecord) -> Result<(), ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
     }
@@ -934,6 +1024,18 @@ impl ManagementRepository for PostgresManagementRepository {
         &self,
         _: AccountId,
     ) -> Result<Option<AccountRecord>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("postgres"))
+    }
+    async fn save_system_registry(
+        &self,
+        _: &SystemRegistryRecord,
+    ) -> Result<(), ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("postgres"))
+    }
+    async fn system_registry(
+        &self,
+        _: SystemId,
+    ) -> Result<Option<SystemRegistryRecord>, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("postgres"))
     }
     async fn save_membership(&self, _: &MembershipRecord) -> Result<(), ManagementRepositoryError> {
@@ -1104,6 +1206,11 @@ fn account_id_from_blob(bytes: Vec<u8>) -> Result<AccountId, ManagementRepositor
         .map_err(|_| ManagementRepositoryError::InvalidStoredIdentifier)
 }
 #[cfg(feature = "sqlite")]
+fn system_id_from_blob(bytes: Vec<u8>) -> Result<SystemId, ManagementRepositoryError> {
+    SystemId::from_uuid(blob_uuid(bytes)?)
+        .map_err(|_| ManagementRepositoryError::InvalidStoredIdentifier)
+}
+#[cfg(feature = "sqlite")]
 fn membership_id_from_blob(bytes: Vec<u8>) -> Result<MembershipId, ManagementRepositoryError> {
     MembershipId::from_uuid(blob_uuid(bytes)?)
         .map_err(|_| ManagementRepositoryError::InvalidStoredIdentifier)
@@ -1153,6 +1260,17 @@ fn sqlite_account(
             .get::<Option<Vec<u8>>, _>("created_by")
             .map(user_id_from_blob)
             .transpose()?,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+#[cfg(feature = "sqlite")]
+fn sqlite_system_registry(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<SystemRegistryRecord, ManagementRepositoryError> {
+    Ok(SystemRegistryRecord {
+        system_id: system_id_from_blob(row.get("system_id"))?,
+        account_id: account_id_from_blob(row.get("account_id"))?,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     })
@@ -1308,6 +1426,17 @@ fn postgres_account(
             .get::<Option<Uuid>, _>("created_by")
             .map(|id| pg_id(id, UserId::from_uuid))
             .transpose()?,
+        created_at: row.get("created_at"),
+        updated_at: row.get("updated_at"),
+    })
+}
+#[cfg(feature = "postgres")]
+fn postgres_system_registry(
+    row: &sqlx::postgres::PgRow,
+) -> Result<SystemRegistryRecord, ManagementRepositoryError> {
+    Ok(SystemRegistryRecord {
+        system_id: pg_id(row.get("system_id"), SystemId::from_uuid)?,
+        account_id: pg_id(row.get("account_id"), AccountId::from_uuid)?,
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
     })

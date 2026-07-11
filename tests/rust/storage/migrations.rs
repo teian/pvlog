@@ -24,7 +24,7 @@ async fn sqlite_management_and_accounts_plan_apply_and_verify_independently()
     assert_eq!(initial.len(), 3);
     assert_eq!(initial[0].kind, MigrationKind::SqliteManagement);
     assert!(initial.iter().all(|status| !status.compatible));
-    assert_eq!(migration_plan(&target).await?.len(), 15);
+    assert_eq!(migration_plan(&target).await?.len(), 16);
     assert!(ensure_schema_compatible(&target).await.is_err());
 
     let applied = apply_migrations(&target).await?;
@@ -77,6 +77,7 @@ async fn sqlite_management_schema_enforces_identity_security_routing_and_project
         "quota_policies",
         "global_configuration",
         "account_database_registry",
+        "system_registry",
         "account_provisioning_log",
         "global_audit_events",
         "account_projection_checkpoints",
@@ -180,6 +181,7 @@ async fn sqlite_management_identity_constraints_are_fail_closed() -> Result<(), 
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn sqlite_management_routing_rbac_and_projection_constraints_are_fail_closed()
 -> Result<(), Box<dyn Error>> {
     let (_directory, mut connection) = migrated_management_database().await?;
@@ -213,6 +215,36 @@ async fn sqlite_management_routing_rbac_and_projection_constraints_are_fail_clos
     .bind(&account_id)
     .execute(&mut connection)
     .await?;
+
+    assert!(
+        sqlx::query(
+            "INSERT INTO system_registry (system_id, account_id, created_at, updated_at) \
+             VALUES (?, ?, 1, 1)",
+        )
+        .bind(id())
+        .bind(id())
+        .execute(&mut connection)
+        .await
+        .is_err()
+    );
+    let system_id = id();
+    sqlx::query(
+        "INSERT INTO system_registry (system_id, account_id, created_at, updated_at) \
+         VALUES (?, ?, 1, 1)",
+    )
+    .bind(&system_id)
+    .bind(&account_id)
+    .execute(&mut connection)
+    .await?;
+    assert_eq!(
+        sqlx::query_scalar::<_, Vec<u8>>(
+            "SELECT account_id FROM system_registry WHERE system_id = ?",
+        )
+        .bind(&system_id)
+        .fetch_one(&mut connection)
+        .await?,
+        account_id
+    );
 
     let role_id = id();
     sqlx::query(

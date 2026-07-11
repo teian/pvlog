@@ -54,7 +54,7 @@ pub use job_dispatch::ManagementJobDispatcher;
 pub use management_repository::{
     AccountRecord, ApiCredentialRecord, AuditRecord, AuthorizationGrant, ManagementRepository,
     ManagementRepositoryError, MembershipRecord, PostgresManagementRepository, RoutingBackend,
-    RoutingRecord, SessionRecord, SqliteManagementRepository, UserRecord,
+    RoutingRecord, SessionRecord, SqliteManagementRepository, SystemRegistryRecord, UserRecord,
 };
 pub use merged_reader::{
     MergedReadError, RawObservation, RawObservationOrigin, merge_raw_observations,

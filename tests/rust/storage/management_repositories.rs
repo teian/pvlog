@@ -8,8 +8,8 @@ use pvlog_domain::{
 use pvlog_storage::{
     AccountRecord, ApiCredentialRecord, AuditRecord, AuthorizationGrant, DatabaseTarget,
     ManagementRepository, MembershipRecord, PostgresManagementRepository, RoutingBackend,
-    SessionRecord, SqliteAccountProvisioner, SqliteManagementRepository, UserRecord,
-    apply_migrations,
+    SessionRecord, SqliteAccountProvisioner, SqliteManagementRepository, SystemRegistryRecord,
+    UserRecord, apply_migrations,
 };
 use sqlx::{Connection as _, PgConnection};
 use tempfile::TempDir;
@@ -140,6 +140,14 @@ async fn seed_contract(
         .await?;
     let system_a = SystemId::new();
     let system_b = SystemId::new();
+    repository
+        .save_system_registry(&SystemRegistryRecord {
+            system_id: system_a,
+            account_id: account_a,
+            created_at: 1,
+            updated_at: 1,
+        })
+        .await?;
     for grant in [
         AuthorizationGrant {
             account_id: account_a,
@@ -230,6 +238,19 @@ async fn verify_contract(
     };
     assert_eq!(credential.account_id, fixture.account_a);
     assert_eq!(credential.scopes.len(), 2);
+    assert_eq!(
+        repository
+            .system_registry(fixture.system_a)
+            .await?
+            .map(|record| record.account_id),
+        Some(fixture.account_a)
+    );
+    assert!(
+        repository
+            .system_registry(fixture.system_b)
+            .await?
+            .is_none()
+    );
     assert!(
         repository
             .user_is_authorized(
