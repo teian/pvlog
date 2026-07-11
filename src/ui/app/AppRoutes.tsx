@@ -6,6 +6,7 @@ import {
   ForbiddenPage,
   HomePage,
   LoginPage,
+  OnboardingPage,
   RecoveryPage,
 } from "@/pages";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/components";
@@ -39,6 +40,14 @@ export function AppRoutes() {
           <Route element={<ActivationPage />} path="/activate" />
           <Route element={<AuthCallbackPage />} path="/auth/callback" />
           <Route element={<ForbiddenPage />} path="/forbidden" />
+          <Route
+            element={
+              <ProtectedRoute permission="systems:write">
+                <OnboardingPage />
+              </ProtectedRoute>
+            }
+            path="/onboarding"
+          />
           <Route
             element={
               <ProtectedRoute>

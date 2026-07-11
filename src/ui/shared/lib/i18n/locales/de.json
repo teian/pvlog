@@ -74,6 +74,24 @@
     "dashboard": "Übersicht",
     "system": "Anlage {{id}}"
   },
+  "onboarding": {
+    "awaitingVerification": "Sende einen Testmesswert, um die Erfassung zu prüfen.",
+    "back": "Zurück",
+    "capacity": "Installierte Leistung in Watt",
+    "create": "Anlage und Zugang erstellen",
+    "credential": "Name des Uploader-Zugangs",
+    "equipment": "Primärer Wechselrichter oder Gerät",
+    "instanceName": "Name der Installation",
+    "next": "Weiter",
+    "progress": "Schritt {{current}} von {{total}}",
+    "secretGuidance": "Kopiere diesen Zugang jetzt. Er wird nicht erneut angezeigt.",
+    "systemName": "Name der ersten Anlage",
+    "test": "Testdaten senden und prüfen",
+    "timezone": "IANA-Zeitzone",
+    "title": "PVLog einrichten",
+    "verified": "Die Testdaten wurden angenommen und bestätigt.",
+    "verifyTitle": "Datenerfassung prüfen"
+  },
   "shell": {
     "closeNavigation": "Navigation schließen",
     "openNavigation": "Navigation öffnen",

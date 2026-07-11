@@ -74,6 +74,24 @@
     "dashboard": "Dashboard",
     "system": "System {{id}}"
   },
+  "onboarding": {
+    "awaitingVerification": "Send a test observation to verify ingestion.",
+    "back": "Back",
+    "capacity": "Installed capacity in watts",
+    "create": "Create system and credential",
+    "credential": "Uploader credential name",
+    "equipment": "Primary inverter or equipment",
+    "instanceName": "Installation name",
+    "next": "Next",
+    "progress": "Step {{current}} of {{total}}",
+    "secretGuidance": "Copy this credential now. It will not be shown again.",
+    "systemName": "First system name",
+    "test": "Send and verify test data",
+    "timezone": "IANA timezone",
+    "title": "Set up PVLog",
+    "verified": "Test ingestion was accepted and verified.",
+    "verifyTitle": "Verify ingestion"
+  },
   "shell": {
     "closeNavigation": "Close navigation",
     "openNavigation": "Open navigation",
