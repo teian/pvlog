@@ -178,6 +178,48 @@
     "title": "Operational dashboard",
     "unavailable": "Unavailable"
   },
+  "dataQuality": {
+    "correction": {
+      "conflictDescription": "Someone else changed this observation first. Reload it and try again.",
+      "deleteToggle": "Delete this reading",
+      "description": "Correct or delete a single reading by its observation ID.",
+      "errorDescription": "The correction could not be submitted.",
+      "errorTitle": "Correction failed",
+      "expectedVersion": "Expected version",
+      "generationPowerWatts": "Replacement generation power (watts)",
+      "observationId": "Observation ID",
+      "reason": "Reason",
+      "submit": "Submit correction",
+      "successDescription": "The change is visible immediately; rollups and statistics will catch up shortly.",
+      "successTitle": "Correction accepted",
+      "title": "Correct or delete a reading"
+    },
+    "kind": {
+      "aggregate_lag": "Aggregate lag",
+      "counter_reset": "Counter reset",
+      "missing_interval": "Missing interval",
+      "rejected_ingestion": "Rejected ingestion",
+      "source_conflict": "Source conflict",
+      "suspect_observation": "Suspect observation"
+    },
+    "kindsLabel": "Issue kinds",
+    "loadErrorDescription": "The data-quality issues could not be loaded.",
+    "loadErrorTitle": "Data quality unavailable",
+    "noIssues": "No data-quality issues in this range.",
+    "rangeLabel": "Range",
+    "reconcilingDescription": "Rechecking for updated data-quality issues.",
+    "reconcilingTitle": "Reconciliation in progress",
+    "table": {
+      "kind": "Kind",
+      "noReason": "None reported",
+      "noSources": "None reported",
+      "range": "Range",
+      "rangeValue": "{{start}} – {{end}}",
+      "reason": "Reason",
+      "sources": "Sources"
+    },
+    "title": "Data quality"
+  },
   "errors": {
     "boundaryDescription": "Reload the page or return later.",
     "boundaryTitle": "This view could not be displayed",
@@ -215,5 +257,12 @@
     "skip": "Skip to main content",
     "theme": "Change colour theme",
     "title": "Photovoltaic operations"
+  },
+  "system": {
+    "tabs": {
+      "charts": "Charts",
+      "dataQuality": "Data quality"
+    },
+    "tabsLabel": "System sections"
   }
 }

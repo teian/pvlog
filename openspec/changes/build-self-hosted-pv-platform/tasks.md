@@ -135,7 +135,7 @@
 - [x] 12.3 Implement the operational dashboard with freshness-safe live status, KPIs, data coverage, recent alerts, ingestion health, and responsive light/dark layouts.
 - [x] 12.4 Implement accessible historical chart controls and rendering for generation, consumption, grid, battery, environment, finance, and extended channels with bounded point requests.
 - [x] 12.5 Add keyboard/screen-reader chart summaries and tables, localized time/unit formatting, non-color cues, reduced motion, zoom/comparison, and matching CSV/JSON export.
-- [ ] 12.6 Implement data-quality inspection, rejected-ingestion details, missing/suspect intervals, optimistic correction, deletion, and reconciliation progress.
+- [x] 12.6 Implement data-quality inspection, rejected-ingestion details, missing/suspect intervals, optimistic correction, deletion, and reconciliation progress.
 - [ ] 12.7 Implement local user/invitation, hierarchical role/permission, external identity, generic OIDC/OAuth2 connector and Google/GitHub/Facebook/X preset administration alongside system, equipment, tariff, channel, member, credential, privacy, lifecycle, session, and audit views.
 - [ ] 12.8 Implement search, favourites, teams, ladders, system comparisons, regional supply, and provider freshness/provenance views.
 - [ ] 12.9 Implement alert rules, webhook subscriptions/delivery history, import/export jobs, worker/dead-letter, storage integrity, backup, and instance administration views.

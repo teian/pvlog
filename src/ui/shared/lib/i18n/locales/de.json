@@ -178,6 +178,48 @@
     "title": "Betriebsübersicht",
     "unavailable": "Nicht verfügbar"
   },
+  "dataQuality": {
+    "correction": {
+      "conflictDescription": "Jemand anderes hat diesen Messwert zuerst geändert. Lade ihn neu und versuche es erneut.",
+      "deleteToggle": "Diesen Messwert löschen",
+      "description": "Korrigiere oder lösche einen einzelnen Messwert anhand seiner Beobachtungs-ID.",
+      "errorDescription": "Die Korrektur konnte nicht übermittelt werden.",
+      "errorTitle": "Korrektur fehlgeschlagen",
+      "expectedVersion": "Erwartete Version",
+      "generationPowerWatts": "Ersatzwert Erzeugungsleistung (Watt)",
+      "observationId": "Beobachtungs-ID",
+      "reason": "Begründung",
+      "submit": "Korrektur absenden",
+      "successDescription": "Die Änderung ist sofort sichtbar; Rollups und Statistiken folgen in Kürze.",
+      "successTitle": "Korrektur angenommen",
+      "title": "Messwert korrigieren oder löschen"
+    },
+    "kind": {
+      "aggregate_lag": "Aggregationsverzug",
+      "counter_reset": "Zählerrücksetzung",
+      "missing_interval": "Fehlendes Intervall",
+      "rejected_ingestion": "Abgelehnte Erfassung",
+      "source_conflict": "Quellenkonflikt",
+      "suspect_observation": "Verdächtiger Messwert"
+    },
+    "kindsLabel": "Problemarten",
+    "loadErrorDescription": "Die Datenqualitätsprobleme konnten nicht geladen werden.",
+    "loadErrorTitle": "Datenqualität nicht verfügbar",
+    "noIssues": "Keine Datenqualitätsprobleme in diesem Zeitraum.",
+    "rangeLabel": "Zeitraum",
+    "reconcilingDescription": "Datenqualitätsprobleme werden erneut geprüft.",
+    "reconcilingTitle": "Abgleich läuft",
+    "table": {
+      "kind": "Art",
+      "noReason": "Keine Angabe",
+      "noSources": "Keine Angabe",
+      "range": "Zeitraum",
+      "rangeValue": "{{start}} – {{end}}",
+      "reason": "Begründung",
+      "sources": "Quellen"
+    },
+    "title": "Datenqualität"
+  },
   "errors": {
     "boundaryDescription": "Lade die Seite neu oder kehre später zurück.",
     "boundaryTitle": "Diese Ansicht konnte nicht angezeigt werden",
@@ -215,5 +257,12 @@
     "skip": "Zum Hauptinhalt springen",
     "theme": "Farbschema ändern",
     "title": "Photovoltaik-Betrieb"
+  },
+  "system": {
+    "tabs": {
+      "charts": "Diagramme",
+      "dataQuality": "Datenqualität"
+    },
+    "tabsLabel": "Anlagenbereiche"
   }
 }

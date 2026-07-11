@@ -6,7 +6,7 @@ import {
   seriesUnitSymbol,
 } from "@/features/charts/utils/formatSeriesValue";
 import { formatTimestamp } from "@/features/charts/utils/formatTimestamp";
-import { RANGE_PRESETS } from "@/features/charts/utils/rangePresets";
+import { RANGE_PRESETS } from "@/shared/lib";
 
 describe("convertSeriesValue", () => {
   it("converts basis points to a percentage", () => {

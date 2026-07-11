@@ -1,4 +1,4 @@
-/** Predefined historical chart range lengths. */
+/** Predefined historical range lengths, shared across chart and data-quality views. */
 export type RangePresetKey =
   "day" | "week" | "month" | "year" | "fiveYears" | "all";
 
@@ -11,7 +11,7 @@ export interface RangePreset {
 
 const DAY_MILLIS = 86_400_000;
 
-/** Range presets offered by the chart controls, from one day to 25 years. */
+/** Range presets offered by range controls, from one day to 25 years. */
 export const RANGE_PRESETS: [RangePreset, ...RangePreset[]] = [
   { key: "day", durationMillis: DAY_MILLIS },
   { key: "week", durationMillis: DAY_MILLIS * 7 },

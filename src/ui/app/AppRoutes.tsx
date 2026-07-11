@@ -3,12 +3,14 @@ import { ProtectedRoute } from "@/features/auth";
 import {
   ActivationPage,
   AuthCallbackPage,
+  DataQualityPage,
   ForbiddenPage,
   HomePage,
   LoginPage,
   OnboardingPage,
   RecoveryPage,
   SystemChartsPage,
+  SystemLayoutPage,
 } from "@/pages";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/components";
 import { lazy, Suspense } from "react";
@@ -52,11 +54,14 @@ export function AppRoutes() {
           <Route
             element={
               <ProtectedRoute permission="analytics:read">
-                <SystemChartsPage />
+                <SystemLayoutPage />
               </ProtectedRoute>
             }
             path="/systems/:systemId"
-          />
+          >
+            <Route element={<SystemChartsPage />} index />
+            <Route element={<DataQualityPage />} path="data-quality" />
+          </Route>
           <Route
             element={
               <ProtectedRoute>

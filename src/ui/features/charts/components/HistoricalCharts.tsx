@@ -5,10 +5,7 @@ import {
   CHART_CATEGORIES,
   type ChartCategoryKey,
 } from "@/features/charts/utils/chartCategories";
-import {
-  RANGE_PRESETS,
-  type RangePresetKey,
-} from "@/features/charts/utils/rangePresets";
+import { RANGE_PRESETS, type RangePresetKey } from "@/shared/lib";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 

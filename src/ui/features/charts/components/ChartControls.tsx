@@ -1,10 +1,7 @@
 import type { ResolutionParam } from "@/features/charts/api/chartsApi";
 import type { ChartCategoryKey } from "@/features/charts/utils/chartCategories";
-import {
-  RANGE_PRESETS,
-  type RangePresetKey,
-} from "@/features/charts/utils/rangePresets";
 import { ToggleGroup, ToggleGroupItem } from "@/shared/components";
+import { RANGE_PRESETS, type RangePresetKey } from "@/shared/lib";
 import { useTranslation } from "react-i18next";
 
 const RESOLUTIONS: ResolutionParam[] = [
