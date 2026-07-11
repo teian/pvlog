@@ -99,7 +99,7 @@
 ## 9. PVOutput Compatibility Contract and Core Services
 
 - [x] 9.1 Capture a dated, machine-readable inventory of every official r2 route, method, parameter, condition, response field, error, restriction, and donation feature and generate the human compatibility matrix.
-- [ ] 9.2 Build reusable compatibility parsing/formatting for authentication, form/query inputs, legacy dates/times/booleans, CSV escaping/empty fields, success text, and legacy errors, with all golden inputs/outputs under `tests/compatibility/` and `tests/fixtures/`.
+- [x] 9.2 Build reusable compatibility parsing/formatting for authentication, form/query inputs, legacy dates/times/booleans, CSV escaping/empty fields, success text, and legacy errors, with all golden inputs/outputs under `tests/compatibility/` and `tests/fixtures/`.
 - [ ] 9.3 Implement and fixture-test `addoutput.jsp`, including single/CSV/batched daily outputs, all documented fields, calculations, restrictions, and errors.
 - [ ] 9.4 Implement and fixture-test `addstatus.jsp`, including cumulative energy, power calculation, net data, battery state, extended values, restrictions, and errors.
 - [ ] 9.5 Implement and fixture-test `addbatchstatus.jsp`, including documented batch formats, net fields, item status codes, limits, and retry behavior.

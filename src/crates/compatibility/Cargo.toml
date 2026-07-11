@@ -12,9 +12,14 @@ pvlog-application = { path = "../application" }
 pvlog-domain = { path = "../domain" }
 serde.workspace = true
 serde_json.workspace = true
+thiserror.workspace = true
 time.workspace = true
 tracing.workspace = true
 url.workspace = true
+
+[[test]]
+name = "legacy-protocol"
+path = "../../../tests/compatibility/legacy_protocol.rs"
 
 [lib]
 path = "src/lib.rs"

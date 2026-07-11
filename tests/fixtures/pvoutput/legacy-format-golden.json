@@ -1,0 +1,55 @@
+{
+  "dates": [
+    { "input": "20240229", "valid": true, "formatted": "20240229" },
+    { "input": "20230229", "valid": false },
+    { "input": "2024-02-29", "valid": false }
+  ],
+  "times": [
+    { "input": "00:00", "valid": true, "formatted": "00:00" },
+    { "input": "23:59", "valid": true, "formatted": "23:59" },
+    { "input": "24:00", "valid": false }
+  ],
+  "booleans": [
+    { "input": "1", "value": true },
+    { "input": "0", "value": false },
+    { "input": "true", "value": true },
+    { "input": "false", "value": false }
+  ],
+  "csv": [
+    {
+      "fields": ["plain", null, "with,comma", "with\"quote"],
+      "output": "plain,,\"with,comma\",\"with\"\"quote\""
+    }
+  ],
+  "success": {
+    "addedOutput": "Added Output",
+    "addedStatus": "Added Status",
+    "deletedStatus": "Deleted Status"
+  },
+  "errors": [
+    {
+      "kind": "bad_request",
+      "status": 400,
+      "detail": "Invalid date: 20230229",
+      "body": "Bad request 400: Invalid date: 20230229"
+    },
+    {
+      "kind": "unauthorized",
+      "status": 401,
+      "detail": "Invalid API Key",
+      "body": "Unauthorized 401: Invalid API Key"
+    },
+    {
+      "kind": "forbidden",
+      "status": 403,
+      "detail": "Read only key",
+      "body": "Forbidden 403: Read only key"
+    },
+    {
+      "kind": "method_not_allowed",
+      "status": 405,
+      "detail": "POST or GET only",
+      "body": "Method Not Allowed 405: POST or GET only"
+    }
+  ]
+}
