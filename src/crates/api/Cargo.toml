@@ -55,5 +55,9 @@ path = "../../../tests/rust/api/telemetry_endpoints.rs"
 name = "analytics-endpoints"
 path = "../../../tests/rust/api/analytics_endpoints.rs"
 
+[[test]]
+name = "community-endpoints"
+path = "../../../tests/rust/api/community_endpoints.rs"
+
 [lints]
 workspace = true

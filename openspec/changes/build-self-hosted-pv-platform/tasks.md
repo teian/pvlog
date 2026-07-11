@@ -109,7 +109,7 @@
 
 ## 10. Remaining PVOutput, Community, and Provider Services
 
-- [ ] 10.1 Implement privacy-safe account projection events and management-catalog system search, visibility, country/location filters, favourites, and modern API resources with freshness and privacy integration tests.
+- [x] 10.1 Implement privacy-safe account projection events and management-catalog system search, visibility, country/location filters, favourites, and modern API resources with freshness and privacy integration tests.
 - [ ] 10.2 Implement team lifecycle, membership transfer/join/leave, eligibility, projected aggregates, ladders, ranking coverage, and cross-account projection lag behavior with modern API tests.
 - [ ] 10.3 Implement and fixture-test `getsystem.jsp`, `postsystem.jsp`, `search.jsp`, `getfavourite.jsp`, and `getladder.jsp` against the compatibility inventory.
 - [ ] 10.4 Implement and fixture-test `getteam.jsp`, `jointeam.jsp`, and `leaveteam.jsp`, including ownership, membership limits, eligibility, and documented errors.

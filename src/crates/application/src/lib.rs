@@ -7,6 +7,7 @@ mod api_token;
 mod authorization_boundary;
 mod batch_ingestion;
 mod browser_session;
+mod community_catalog;
 mod comparison;
 mod data_quality;
 mod identity_linking;
@@ -48,6 +49,11 @@ pub use batch_ingestion::{
 pub use browser_session::{
     BrowserSession, BrowserSessionError, BrowserSessionPolicy, BrowserSessionRecord,
     BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, SessionCookie,
+};
+pub use community_catalog::{
+    CommunityActivity, CommunityCatalogError, CommunityCatalogPolicy, CommunityCatalogRepository,
+    CommunityCatalogService, CommunityCatalogUseCases, CommunityLocationPrecision,
+    CommunityProjection, CommunityProjectionEvent, CommunitySearchFilter, CommunitySystemResource,
 };
 pub use comparison::{
     CapacityPerformanceSlice, ComparisonCandidate, ComparisonEntry, ComparisonError,
