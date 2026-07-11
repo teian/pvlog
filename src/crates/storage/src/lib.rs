@@ -17,6 +17,7 @@ use thiserror::Error;
 mod account_repository;
 mod browser_session_repository;
 mod compaction;
+mod external_identity_repository;
 mod integrity_planner;
 mod job_dispatch;
 mod management_repository;
@@ -49,6 +50,10 @@ pub use account_repository::{
 pub use compaction::{
     CompactionError, CompactionKey, CompactionPhase, CompactionRepository, CompactionService,
 };
+#[cfg(feature = "postgres")]
+pub use external_identity_repository::PostgresExternalIdentityRepository;
+#[cfg(feature = "sqlite")]
+pub use external_identity_repository::SqliteExternalIdentityRepository;
 pub use integrity_planner::{
     IntegrityIssue, IntegrityReport, IntegritySnapshot, RepairAction, plan_integrity_repairs,
 };
