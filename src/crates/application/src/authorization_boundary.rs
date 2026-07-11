@@ -16,6 +16,16 @@ pub struct ProtectedAccountRequest {
     pub action: &'static str,
 }
 
+/// A protected request addressed by a globally unique system identifier.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProtectedSystemRequest {
+    pub principal: PrincipalId,
+    pub system_id: SystemId,
+    pub permission: Permission,
+    pub request_id: RequestId,
+    pub action: &'static str,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AuthorizedAccountRoute {
     pub account_id: AccountId,
@@ -29,6 +39,8 @@ pub trait AuthorizationBoundaryPorts: Send + Sync {
         &self,
         account_id: AccountId,
     ) -> Result<Option<AuthorizedAccountRoute>, PortError>;
+    /// Resolves a system owner from management storage without opening account storage.
+    async fn system_account(&self, system_id: SystemId) -> Result<Option<AccountId>, PortError>;
     async fn append_audit(
         &self,
         request: &ProtectedAccountRequest,
@@ -76,10 +88,38 @@ impl AuthorizationBoundary {
             .map_err(AuthorizationBoundaryError::Port)?;
         Ok(route)
     }
+
+    /// Resolves a system owner, authorizes it, and only then resolves its account route.
+    ///
+    /// # Errors
+    /// Returns an error for unknown systems, denial, unavailable routing, audit failure, or a
+    /// management-plane port failure.
+    pub async fn authorize_system_and_route(
+        &self,
+        request: &ProtectedSystemRequest,
+    ) -> Result<AuthorizedAccountRoute, AuthorizationBoundaryError> {
+        let account_id = self
+            .ports
+            .system_account(request.system_id)
+            .await
+            .map_err(AuthorizationBoundaryError::Port)?
+            .ok_or(AuthorizationBoundaryError::SystemNotFound)?;
+        self.authorize_and_route(&ProtectedAccountRequest {
+            principal: request.principal,
+            account_id,
+            system_id: Some(request.system_id),
+            permission: request.permission,
+            request_id: request.request_id,
+            action: request.action,
+        })
+        .await
+    }
 }
 
 #[derive(Debug, Error)]
 pub enum AuthorizationBoundaryError {
+    #[error("system was not found")]
+    SystemNotFound,
     #[error("access is forbidden")]
     Forbidden,
     #[error("authorized account storage is unavailable")]

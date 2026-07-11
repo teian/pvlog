@@ -55,7 +55,7 @@ pub use analytics_api::{
 pub use api_token::{ApiToken, ApiTokenError, ApiTokenRecord, ApiTokenRepository, ApiTokenService};
 pub use authorization_boundary::{
     AuthorizationBoundary, AuthorizationBoundaryError, AuthorizationBoundaryPorts,
-    AuthorizedAccountRoute, ProtectedAccountRequest,
+    AuthorizedAccountRoute, ProtectedAccountRequest, ProtectedSystemRequest,
 };
 pub use batch_ingestion::{
     BatchIngestionError, BatchIngestionMode, BatchIngestionRepository, BatchIngestionResult,
