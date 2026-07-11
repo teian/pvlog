@@ -200,7 +200,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 user_lifecycle,
                 request_authorizer.clone(),
             ))
-            .merge(pvlog_api::local_password_router(local_password))
+            .merge(pvlog_api::local_password_router(
+                local_password,
+                request_authorizer.clone(),
+            ))
             .merge(pvlog_api::systems_router(
                 system_lifecycle,
                 request_authorizer.clone(),

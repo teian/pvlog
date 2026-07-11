@@ -81,7 +81,7 @@ async fn administration_requires_an_authorized_actor() -> Result<(), Box<dyn Err
 #[tokio::test]
 async fn password_recovery_is_uniform_and_password_change_requires_a_user()
 -> Result<(), Box<dyn Error>> {
-    let app = local_password_router(Arc::new(StubPassword));
+    let app = local_password_router(Arc::new(StubPassword), Arc::new(DenyAuthorizer));
     let known = request(
         &app,
         "/api/v1/auth/password-recovery",
@@ -114,6 +114,20 @@ async fn password_recovery_is_uniform_and_password_change_requires_a_user()
     )
     .await?;
     assert_eq!(changed.0, 204);
+
+    let admin = UserId::new();
+    let initialize = local_password_router(
+        Arc::new(StubPassword),
+        Arc::new(AllowAuthorizer { actor: admin }),
+    )
+    .layer(Extension(RequestPrincipal::User(admin)));
+    let initialized = request(
+        &initialize,
+        "/api/v1/admin/users/00000000-0000-7000-8000-000000000001/password",
+        r#"{"password":"Changed-password-42"}"#,
+    )
+    .await?;
+    assert_eq!(initialized.0, 204);
     Ok(())
 }
 

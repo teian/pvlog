@@ -12,18 +12,24 @@ use axum::{
 use pvlog_application::{
     AdminUserActor, ChangePassword, LocalPasswordUseCases, PasswordServiceError, SetInitialPassword,
 };
-use pvlog_domain::UserId;
+use pvlog_domain::{Permission, UserId};
 use secrecy::SecretString;
 use serde::{Deserialize, Serialize};
 
-use crate::RequestPrincipal;
+use crate::{
+    ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal, principal_identity,
+};
 
 #[derive(Clone)]
 struct PasswordApiState {
     service: Arc<dyn LocalPasswordUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
 }
 
-pub fn local_password_router(service: Arc<dyn LocalPasswordUseCases>) -> Router {
+pub fn local_password_router(
+    service: Arc<dyn LocalPasswordUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
+) -> Router {
     Router::new()
         .route(
             "/api/v1/admin/users/{id}/password",
@@ -35,7 +41,10 @@ pub fn local_password_router(service: Arc<dyn LocalPasswordUseCases>) -> Router 
             "/api/v1/auth/password-recovery/complete",
             post(complete_recovery),
         )
-        .with_state(PasswordApiState { service })
+        .with_state(PasswordApiState {
+            service,
+            authorizer,
+        })
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,14 +73,14 @@ struct RecoveryCompleteBody {
 
 async fn set_initial_password(
     State(state): State<PasswordApiState>,
-    actor: Option<Extension<AdminUserActor>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(id): Path<UserId>,
     Json(body): Json<PasswordBody>,
 ) -> Result<Response, PasswordApiError> {
     state
         .service
         .set_initial_password(
-            admin(actor)?,
+            admin(&state, principal).await?,
             SetInitialPassword {
                 user_id: id,
                 password: body.password,
@@ -122,10 +131,23 @@ async fn complete_recovery(
     Ok(accepted())
 }
 
-fn admin(actor: Option<Extension<AdminUserActor>>) -> Result<AdminUserActor, PasswordApiError> {
-    actor
-        .map(|Extension(actor)| actor)
-        .ok_or(PasswordServiceError::Forbidden.into())
+async fn admin(
+    state: &PasswordApiState,
+    principal: Option<Extension<RequestPrincipal>>,
+) -> Result<AdminUserActor, PasswordApiError> {
+    let Extension(principal) = principal.ok_or(PasswordServiceError::Forbidden)?;
+    let user_id = state
+        .authorizer
+        .authorize_instance(
+            principal_identity(&principal),
+            Permission::InstanceManage,
+            "user.password.initialize",
+        )
+        .await?;
+    Ok(AdminUserActor {
+        user_id,
+        can_manage_users: true,
+    })
 }
 
 fn accepted() -> Response {
@@ -141,6 +163,16 @@ struct PasswordApiError(PasswordServiceError);
 impl From<PasswordServiceError> for PasswordApiError {
     fn from(value: PasswordServiceError) -> Self {
         Self(value)
+    }
+}
+impl From<RequestAuthorizationError> for PasswordApiError {
+    fn from(value: RequestAuthorizationError) -> Self {
+        match value {
+            RequestAuthorizationError::Forbidden | RequestAuthorizationError::NotFound => {
+                PasswordServiceError::Forbidden.into()
+            }
+            RequestAuthorizationError::Unavailable => PasswordServiceError::Persistence.into(),
+        }
     }
 }
 
