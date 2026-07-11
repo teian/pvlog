@@ -155,7 +155,7 @@
 ## 14. Packaging, Operations, and Recovery
 
 - [ ] 14.1 Implement unprivileged multi-stage images and `server`, `worker`, `migrate`, `doctor`, `export`, `import`, and `verify` commands with build/version metadata.
-- [ ] 14.2 Add SQLite and PostgreSQL Compose profiles, persistent data roots for `management.sqlite3` and opaque account files, health checks, `.env.example`, secret generation guidance, OIDC-neutral variables, and upgrade-safe image tags.
+- [x] 14.2 Add SQLite and PostgreSQL Compose profiles, persistent data roots for `management.sqlite3` and opaque account files, health checks, `.env.example`, secret generation guidance, OIDC-neutral variables, and upgrade-safe image tags.
 - [ ] 14.3 Implement distinct startup, liveness, readiness, dependency, job-lag, build/version, and storage-integrity endpoints with failure-mode tests.
 - [ ] 14.4 Implement structured secret-redacted logs, correlated request/job IDs, OpenTelemetry traces/metrics, browser trace ingestion guidance, and operational dashboards/alerts.
 - [ ] 14.5 Implement account-scoped versioned checksummed export bundles with segment/correction data, manifest compatibility, resumable import, dry run, account transfer, and SQLite-to-PostgreSQL verification.

@@ -1,0 +1,165 @@
+name: pvlog
+
+x-runtime-environment: &runtime-environment
+  PVLOG_ENVIRONMENT: production
+  PVLOG_HTTP__BIND: 0.0.0.0:8080
+  PVLOG_HTTP__PUBLIC_BASE_URL: ${PVLOG_PUBLIC_BASE_URL}
+  PVLOG_HTTP__SECURE_COOKIES: "true"
+  PVLOG_SECURITY__SESSION_SECRET: ${PVLOG_SESSION_SECRET}
+  PVLOG_SECURITY__CREDENTIAL_ENCRYPTION_KEY: ${PVLOG_CREDENTIAL_ENCRYPTION_KEY}
+  PVLOG_AUTH__LOCAL__ALLOW_SELF_REGISTRATION: "false"
+  PVLOG_AUTH__LOCAL__REQUIRE_VERIFIED_EMAIL: "true"
+
+x-common-service: &common-service
+  image: ${PVLOG_IMAGE}
+  restart: unless-stopped
+  environment: *runtime-environment
+
+services:
+  sqlite-init:
+    <<: *common-service
+    profiles: [sqlite]
+    user: "0:0"
+    restart: "no"
+    entrypoint:
+      [
+        "/bin/sh",
+        "-ec",
+        "mkdir -p /var/lib/pvlog/data/accounts && chown -R 10001:10001 /var/lib/pvlog/data",
+      ]
+    command: []
+    volumes:
+      - sqlite-data:/var/lib/pvlog/data
+
+  sqlite-migrate:
+    <<: *common-service
+    profiles: [sqlite]
+    restart: "no"
+    command: ["migrate", "apply"]
+    environment:
+      <<: *runtime-environment
+      PVLOG_DATABASE__BACKEND: sqlite
+      PVLOG_DATABASE__SQLITE__MANAGEMENT_PATH: /var/lib/pvlog/data/management.sqlite3
+      PVLOG_DATABASE__SQLITE__ACCOUNTS_DIR: /var/lib/pvlog/data/accounts
+    depends_on:
+      sqlite-init:
+        condition: service_completed_successfully
+    volumes:
+      - sqlite-data:/var/lib/pvlog/data
+
+  sqlite-server:
+    <<: *common-service
+    profiles: [sqlite]
+    command: ["server"]
+    ports:
+      - "${PVLOG_HTTP_PORT:-8080}:8080"
+    environment:
+      <<: *runtime-environment
+      PVLOG_DATABASE__BACKEND: sqlite
+      PVLOG_DATABASE__SQLITE__MANAGEMENT_PATH: /var/lib/pvlog/data/management.sqlite3
+      PVLOG_DATABASE__SQLITE__ACCOUNTS_DIR: /var/lib/pvlog/data/accounts
+    depends_on:
+      sqlite-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "pvlog", "doctor", "--json"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    volumes:
+      - sqlite-data:/var/lib/pvlog/data
+
+  sqlite-worker:
+    <<: *common-service
+    profiles: [sqlite]
+    command:
+      ["worker", "--interval-seconds", "${PVLOG_WORKER_INTERVAL_SECONDS:-30}"]
+    environment:
+      <<: *runtime-environment
+      PVLOG_DATABASE__BACKEND: sqlite
+      PVLOG_DATABASE__SQLITE__MANAGEMENT_PATH: /var/lib/pvlog/data/management.sqlite3
+      PVLOG_DATABASE__SQLITE__ACCOUNTS_DIR: /var/lib/pvlog/data/accounts
+    depends_on:
+      sqlite-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "pvlog", "doctor", "--json"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    volumes:
+      - sqlite-data:/var/lib/pvlog/data
+
+  postgres:
+    image: postgres:17.6-bookworm
+    profiles: [postgres]
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PVLOG_POSTGRES_DB}
+      POSTGRES_PASSWORD: ${PVLOG_POSTGRES_PASSWORD}
+      POSTGRES_USER: ${PVLOG_POSTGRES_USER:-pvlog}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  postgres-migrate:
+    <<: *common-service
+    profiles: [postgres]
+    restart: "no"
+    command: ["migrate", "apply"]
+    environment:
+      <<: *runtime-environment
+      PVLOG_DATABASE__BACKEND: postgres
+      PVLOG_DATABASE__POSTGRES__URL: postgres://${PVLOG_POSTGRES_USER:-pvlog}:${PVLOG_POSTGRES_PASSWORD}@postgres:5432/${PVLOG_POSTGRES_DB}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres-server:
+    <<: *common-service
+    profiles: [postgres]
+    command: ["server"]
+    ports:
+      - "${PVLOG_HTTP_PORT:-8080}:8080"
+    environment:
+      <<: *runtime-environment
+      PVLOG_DATABASE__BACKEND: postgres
+      PVLOG_DATABASE__POSTGRES__URL: postgres://${PVLOG_POSTGRES_USER:-pvlog}:${PVLOG_POSTGRES_PASSWORD}@postgres:5432/${PVLOG_POSTGRES_DB}
+    depends_on:
+      postgres-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "pvlog", "doctor", "--json"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  postgres-worker:
+    <<: *common-service
+    profiles: [postgres]
+    command:
+      ["worker", "--interval-seconds", "${PVLOG_WORKER_INTERVAL_SECONDS:-30}"]
+    environment:
+      <<: *runtime-environment
+      PVLOG_DATABASE__BACKEND: postgres
+      PVLOG_DATABASE__POSTGRES__URL: postgres://${PVLOG_POSTGRES_USER:-pvlog}:${PVLOG_POSTGRES_PASSWORD}@postgres:5432/${PVLOG_POSTGRES_DB}
+    depends_on:
+      postgres-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "pvlog", "doctor", "--json"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  postgres-data:
+  sqlite-data:
