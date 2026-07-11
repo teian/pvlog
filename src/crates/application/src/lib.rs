@@ -23,6 +23,7 @@ mod ports;
 mod query_planner;
 mod rate_limit;
 mod rbac_management;
+mod series_query;
 mod system_configuration;
 mod system_lifecycle;
 mod user_lifecycle;
@@ -106,6 +107,10 @@ pub use rate_limit::{
 pub use rbac_management::{
     AssignRole, CreateCustomRole, RbacManagementError, RbacRepository, RbacRoleRecord,
     RoleManagementService, UpdateCustomRole, built_in_account_roles,
+};
+pub use series_query::{
+    GapKind, PlannedSeries, SeriesGap, SeriesPoint, SeriesQueryError, SeriesQueryRepository,
+    SeriesQueryRepositoryError, SeriesQueryResult, SeriesQueryService, SeriesUnit,
 };
 pub use system_configuration::{
     SystemConfigurationError, SystemConfigurationRepository, SystemConfigurationService,

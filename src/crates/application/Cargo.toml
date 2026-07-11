@@ -106,5 +106,9 @@ path = "../../../tests/rust/application/ingestion_admission.rs"
 name = "query-planner"
 path = "../../../tests/rust/application/query_planner.rs"
 
+[[test]]
+name = "series-query"
+path = "../../../tests/rust/application/series_query.rs"
+
 [lints]
 workspace = true
