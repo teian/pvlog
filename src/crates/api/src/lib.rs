@@ -19,6 +19,7 @@ use tower_http::{
 use utoipa::ToSchema;
 
 mod analytics;
+mod audit;
 mod authentication;
 mod authorization;
 mod community;
@@ -33,6 +34,7 @@ mod telemetry;
 mod user_lifecycle;
 
 pub use analytics::analytics_router;
+pub use audit::{AuditApiError, AuditApiUseCases, AuditEventResponse, audit_router};
 pub use authentication::{
     RequestAuthenticationError, RequestAuthenticator, RequestPrincipal, session_cookie_token,
     with_request_authentication,

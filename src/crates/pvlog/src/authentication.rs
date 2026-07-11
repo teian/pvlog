@@ -310,6 +310,48 @@ pub struct ManagementSessionBootstrap {
     repository: Arc<dyn ManagementRepository>,
 }
 
+/// Read-only management adapter for account audit HTTP resources.
+pub struct ManagementAuditApi {
+    repository: Arc<dyn ManagementRepository>,
+}
+
+impl ManagementAuditApi {
+    #[must_use]
+    pub fn new(repository: Arc<dyn ManagementRepository>) -> Self {
+        Self { repository }
+    }
+}
+
+#[async_trait]
+impl pvlog_api::AuditApiUseCases for ManagementAuditApi {
+    async fn account_audit(
+        &self,
+        account_id: pvlog_domain::AccountId,
+        limit: u32,
+    ) -> Result<Vec<pvlog_api::AuditEventResponse>, pvlog_api::AuditApiError> {
+        self.repository
+            .account_audit(account_id, limit)
+            .await
+            .map(|records| {
+                records
+                    .into_iter()
+                    .map(|record| pvlog_api::AuditEventResponse {
+                        id: record.id,
+                        occurred_at: record.occurred_at,
+                        actor_type: record.actor_type,
+                        actor_id: record.actor_id,
+                        action: record.action,
+                        target_type: record.target_type,
+                        target_id: record.target_id,
+                        outcome: record.outcome,
+                        safe_metadata: record.safe_metadata,
+                    })
+                    .collect()
+            })
+            .map_err(|_| pvlog_api::AuditApiError::Unavailable)
+    }
+}
+
 impl ManagementSessionBootstrap {
     #[must_use]
     pub fn new(repository: Arc<dyn ManagementRepository>) -> Self {

@@ -7,8 +7,8 @@ use std::{io, sync::Arc};
 use clap::{Parser, Subcommand};
 use pvlog::SystemClock;
 use pvlog::authentication::{
-    ManagementRequestAuthenticator, ManagementRequestAuthorizer, ManagementSessionBootstrap,
-    session_digest_key,
+    ManagementAuditApi, ManagementRequestAuthenticator, ManagementRequestAuthorizer,
+    ManagementSessionBootstrap, session_digest_key,
 };
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
 use pvlog_application::{
@@ -188,6 +188,9 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     let session_bootstrap = Arc::new(ManagementSessionBootstrap::new(
         compose_management_repository(target)?,
     ));
+    let audit_api = Arc::new(ManagementAuditApi::new(compose_management_repository(
+        target,
+    )?));
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
     let router = pvlog_api::with_request_authentication(
@@ -199,12 +202,16 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
             .merge(pvlog_api::local_password_router(local_password))
             .merge(pvlog_api::systems_router(
                 system_lifecycle,
-                request_authorizer,
+                request_authorizer.clone(),
             ))
             .merge(pvlog_api::sessions_router(
                 compose_local_password(config, target)?,
                 browser_sessions,
                 session_bootstrap,
+            ))
+            .merge(pvlog_api::audit_router(
+                audit_api,
+                request_authorizer.clone(),
             )),
         request_authenticator,
     );
