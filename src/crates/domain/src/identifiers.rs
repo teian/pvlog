@@ -113,9 +113,6 @@ identifier!(TariffId, "Stable effective-dated tariff identifier.");
 identifier!(ChannelId, "Stable extended measurement channel identifier.");
 identifier!(CorrectionId, "Stable observation correction identifier.");
 identifier!(SegmentId, "Stable archived telemetry segment identifier.");
-identifier!(TeamId, "Stable community team identifier.");
-identifier!(TeamMembershipId, "Stable team membership identifier.");
-identifier!(FavouriteId, "Stable user favourite identifier.");
 identifier!(AlertRuleId, "Stable alert rule identifier.");
 identifier!(AlertEventId, "Stable emitted alert event identifier.");
 identifier!(

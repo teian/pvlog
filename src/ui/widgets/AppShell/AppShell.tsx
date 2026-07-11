@@ -68,12 +68,6 @@ export function AppShell({
           </NavLink>
           <NavLink
             className="rounded-md px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent"
-            to="/community"
-          >
-            {t("nav.community")}
-          </NavLink>
-          <NavLink
-            className="rounded-md px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent"
             to="/administration"
           >
             {t("nav.administration")}

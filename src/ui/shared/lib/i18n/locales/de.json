@@ -235,60 +235,8 @@
     "account": "Konto {{id}}",
     "administration": "Verwaltung",
     "alerts": "Warnungen",
-    "community": "Community",
     "dashboard": "Übersicht",
     "system": "Anlage {{id}}"
-  },
-  "community": {
-    "title": "Community",
-    "description": "Entdecke sichtbare Anlagen, verwalte Favoriten und vergleiche datenschutzsichere Energieranglisten.",
-    "unavailable": "Diese Community-Daten sind derzeit nicht verfügbar.",
-    "search": {
-      "title": "Anlagen finden",
-      "description": "Es werden nur Anlagen gesucht, deren Eigentümer die Auffindbarkeit erlaubt haben.",
-      "query": "Name",
-      "queryPlaceholder": "Nach Anlagenname suchen",
-      "country": "Ländercode",
-      "countryPlaceholder": "DE",
-      "empty": "Keine sichtbaren Anlagen entsprechen diesen Filtern.",
-      "unknown": "Nicht angegeben",
-      "details": "{{capacity}} W · {{country}} · {{location}}",
-      "stale": "Die Projektionsdaten können veraltet sein."
-    },
-    "favourites": {
-      "title": "Favoriten",
-      "description": "Favoriten gewähren keinen Zugriff auf private Anlagendaten.",
-      "empty": "Du hast keine sichtbaren Anlagen als Favoriten gespeichert.",
-      "capacity": "{{capacity}} W installierte Leistung",
-      "add": "Favorit hinzufügen",
-      "remove": "Favorit entfernen"
-    },
-    "comparison": {
-      "title": "Anlagen vergleichen",
-      "description": "Vergleiche die in deiner Sitzung verfügbaren Anlagen nach normierter Erzeugung.",
-      "compare": "Meine Anlagen vergleichen",
-      "requiresSystems": "Für einen Vergleich werden mindestens zwei Anlagen benötigt.",
-      "results": "Vergleichsergebnisse"
-    },
-    "ladder": {
-      "title": "Öffentliche Rangliste",
-      "empty": "Derzeit werden keine geeigneten öffentlichen Anlagen gelistet.",
-      "entry": "#{{rank}} · {{name}}",
-      "metrics": "{{generation}} Wh/kW · {{coverage}} % Abdeckung"
-    },
-    "teams": {
-      "title": "Teams und regionale Versorgung",
-      "description": "Erstelle ein Team für das aktive Konto, füge seine erste Anlage hinzu und prüfe konfigurierte regionale Datenanbieter.",
-      "name": "Teamname",
-      "createAndJoin": "Team erstellen und Anlage hinzufügen"
-    },
-    "providers": {
-      "title": "Regionale Versorgungsanbieter",
-      "unavailable": "Derzeit sind keine regionalen Anbieterdaten verfügbar.",
-      "metadata": "{{source}} · {{license}} · {{state}}",
-      "fresh": "aktuell",
-      "stale": "veraltet"
-    }
   },
   "administration": {
     "title": "Verwaltung",

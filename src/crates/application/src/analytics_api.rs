@@ -1,11 +1,10 @@
 //! Modern analytics API boundary shared by HTTP adapters and implementations.
 
 use crate::{
-    ComparisonEntry, ComparisonMetric, DataQualityIssue, EnergyStatistics, QueryPlanRequest,
-    SeriesQueryResult, StatisticsPeriod,
+    DataQualityIssue, EnergyStatistics, QueryPlanRequest, SeriesQueryResult, StatisticsPeriod,
 };
 use async_trait::async_trait;
-use pvlog_domain::{JobId, SystemId, TeamId, UserId};
+use pvlog_domain::{JobId, SystemId, UserId};
 use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -56,18 +55,6 @@ pub trait ModernAnalyticsUseCases: Send + Sync {
         start_epoch_millis: i64,
         end_epoch_millis: i64,
     ) -> Result<Vec<DataQualityIssue>, ModernAnalyticsError>;
-    async fn compare(
-        &self,
-        actor: UserId,
-        system_ids: Vec<SystemId>,
-        metric: ComparisonMetric,
-    ) -> Result<Vec<ComparisonEntry>, ModernAnalyticsError>;
-    async fn ladder(
-        &self,
-        actor: UserId,
-        team_id: Option<TeamId>,
-        metric: ComparisonMetric,
-    ) -> Result<Vec<ComparisonEntry>, ModernAnalyticsError>;
     async fn export(
         &self,
         request: AnalysisExportRequest,

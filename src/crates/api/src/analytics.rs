@@ -7,11 +7,11 @@ use axum::{
     routing::{get, post},
 };
 use pvlog_application::{
-    AnalysisExportFormat, AnalysisExportRequest, AnalysisExportResult, ComparisonMetric,
-    ModernAnalyticsError, ModernAnalyticsUseCases, QueryPlanRequest, QueryResolution,
-    RequestedResolution, SeriesField, StatisticsPeriod,
+    AnalysisExportFormat, AnalysisExportRequest, AnalysisExportResult, ModernAnalyticsError,
+    ModernAnalyticsUseCases, QueryPlanRequest, QueryResolution, RequestedResolution, SeriesField,
+    StatisticsPeriod,
 };
-use pvlog_domain::{SystemId, TeamId, UserId};
+use pvlog_domain::{SystemId, UserId};
 use serde::Deserialize;
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -28,8 +28,6 @@ pub fn analytics_router(service: Arc<dyn ModernAnalyticsUseCases>) -> Router {
             "/api/v1/systems/{system_id}/data-quality",
             get(data_quality),
         )
-        .route("/api/v1/comparisons", post(compare))
-        .route("/api/v1/ladders", get(ladder))
         .route("/api/v1/systems/{system_id}/analysis-exports", post(export))
         .with_state(AnalyticsState { service })
 }
@@ -57,20 +55,6 @@ struct StatisticsParameters {
 struct RangeParameters {
     start_epoch_millis: i64,
     end_epoch_millis: i64,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ComparisonBody {
-    system_ids: Vec<SystemId>,
-    metric: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct LadderParameters {
-    team_id: Option<TeamId>,
-    metric: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -136,45 +120,6 @@ async fn data_quality(
                 parameters.start_epoch_millis,
                 parameters.end_epoch_millis,
             )
-            .await?,
-    )
-    .into_response())
-}
-
-async fn compare(
-    State(state): State<AnalyticsState>,
-    actor: Option<Extension<UserId>>,
-    Json(body): Json<ComparisonBody>,
-) -> Result<Response, AnalyticsApiError> {
-    if body.system_ids.len() < 2 || body.system_ids.len() > 20 {
-        return Err(AnalyticsApiError::Invalid);
-    }
-    Ok(Json(
-        state
-            .service
-            .compare(
-                actor_id(actor)?,
-                body.system_ids,
-                parse_metric(&body.metric)?,
-            )
-            .await?,
-    )
-    .into_response())
-}
-
-async fn ladder(
-    State(state): State<AnalyticsState>,
-    actor: Option<Extension<UserId>>,
-    Query(parameters): Query<LadderParameters>,
-) -> Result<Response, AnalyticsApiError> {
-    let metric = parameters
-        .metric
-        .as_deref()
-        .map_or(Ok(ComparisonMetric::NormalizedGeneration), parse_metric)?;
-    Ok(Json(
-        state
-            .service
-            .ladder(actor_id(actor)?, parameters.team_id, metric)
             .await?,
     )
     .into_response())
@@ -290,14 +235,6 @@ fn parse_period(value: &str) -> Result<StatisticsPeriod, AnalyticsApiError> {
         "month" => Ok(StatisticsPeriod::Monthly),
         "year" => Ok(StatisticsPeriod::Yearly),
         "lifetime" => Ok(StatisticsPeriod::Lifetime),
-        _ => Err(AnalyticsApiError::Invalid),
-    }
-}
-
-fn parse_metric(value: &str) -> Result<ComparisonMetric, AnalyticsApiError> {
-    match value {
-        "total_generation" => Ok(ComparisonMetric::TotalGeneration),
-        "normalized_generation" => Ok(ComparisonMetric::NormalizedGeneration),
         _ => Err(AnalyticsApiError::Invalid),
     }
 }

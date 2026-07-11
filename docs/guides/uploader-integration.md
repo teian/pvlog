@@ -12,7 +12,6 @@ never retry schema or authorization failures unchanged.
 | Single/batch telemetry and correction     | Yes              | Yes           | Canonical units only     |
 | Raw, rollup, statistics, quality          | Yes              | Yes           | Gaps are not fabricated  |
 | Local/OIDC/OAuth2 authentication and RBAC | Yes              | Yes           | Provider-neutral backend |
-| Community, teams, ladders                 | Yes              | Yes           | Privacy-safe projections |
 | Alerts and signed webhooks                | Yes              | Admin summary | SSRF-safe delivery       |
 | Import/export and backup                  | Operator command | Admin summary | Checksummed manifests    |
 

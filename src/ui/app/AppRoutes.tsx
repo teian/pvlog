@@ -4,7 +4,6 @@ import {
   ActivationPage,
   AdministrationPage,
   AuthCallbackPage,
-  CommunityPage,
   DataQualityPage,
   ForbiddenPage,
   HomePage,
@@ -52,14 +51,6 @@ export function AppRoutes() {
               </ProtectedRoute>
             }
             path="/administration"
-          />
-          <Route
-            element={
-              <ProtectedRoute permission="analytics:read">
-                <CommunityPage />
-              </ProtectedRoute>
-            }
-            path="/community"
           />
           <Route
             element={

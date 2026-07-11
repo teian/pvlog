@@ -1,18 +1,15 @@
-//! Shared rollup, summary, community, integration, and job repository contracts.
+//! Shared rollup, summary, integration, and job repository contracts.
 
 use std::{error::Error, time::SystemTime};
 
-use pvlog_domain::{
-    AccountId, AlertRuleId, JobId, ProviderId, SystemId, TeamId, UserId, WebhookSubscriptionId,
-};
+use pvlog_domain::{AccountId, AlertRuleId, JobId, ProviderId, SystemId, WebhookSubscriptionId};
 use pvlog_storage::{
     AccountConfigurationRepository, AlertRuleRecord, DailySummaryRecord, DatabaseTarget, JobRecord,
     JobRetryDisposition, LifetimeSummaryRecord, OperationalRepository, OperationalRepositoryError,
     PostgresAccountConfigurationRepository, PostgresOperationalRepository, ProviderRecord,
     RollupRecord, SqliteAccountConfigurationRepository, SqliteAccountPoolConfig,
     SqliteAccountPoolRouter, SqliteAccountProvisioner, SqliteOperationalRepository,
-    SystemConfigurationRecord, TeamRecord, TeamRollupRecord, WebhookSubscriptionRecord,
-    apply_migrations,
+    SystemConfigurationRecord, WebhookSubscriptionRecord, apply_migrations,
 };
 use sqlx::{Connection as _, PgConnection, SqliteConnection, sqlite::SqliteConnectOptions};
 use tempfile::TempDir;
@@ -27,7 +24,6 @@ async fn sqlite_operational_repository_contract() -> Result<(), Box<dyn Error>> 
         accounts_dir: accounts.clone(),
     })
     .await?;
-    let owner = create_sqlite_user(&management).await?;
     let account_a = create_sqlite_account(&management, &accounts, "a").await?;
     let account_b = create_sqlite_account(&management, &accounts, "b").await?;
     let router = SqliteAccountPoolRouter::new(
@@ -39,7 +35,7 @@ async fn sqlite_operational_repository_contract() -> Result<(), Box<dyn Error>> 
     let repository_a = SqliteOperationalRepository::new(management.clone(), routed_a.clone());
     let repository_b = SqliteOperationalRepository::new(management, router.route(account_b).await?);
     let configuration = SqliteAccountConfigurationRepository::new(routed_a);
-    verify_contract(&repository_a, &repository_b, &configuration, owner).await
+    verify_contract(&repository_a, &repository_b, &configuration).await
 }
 
 #[tokio::test]
@@ -48,13 +44,12 @@ async fn postgres_operational_repository_contract_when_configured() -> Result<()
         return Ok(());
     };
     apply_migrations(&DatabaseTarget::Postgres { url: url.clone() }).await?;
-    let owner = create_postgres_user(&url).await?;
     let account_a = create_postgres_account(&url, "a").await?;
     let account_b = create_postgres_account(&url, "b").await?;
     let repository_a = PostgresOperationalRepository::new(url.clone(), account_a);
     let repository_b = PostgresOperationalRepository::new(url.clone(), account_b);
     let configuration = PostgresAccountConfigurationRepository::new(url, account_a);
-    verify_contract(&repository_a, &repository_b, &configuration, owner).await
+    verify_contract(&repository_a, &repository_b, &configuration).await
 }
 
 #[allow(clippy::too_many_lines)]
@@ -62,7 +57,6 @@ async fn verify_contract(
     repository: &dyn OperationalRepository,
     other_account: &dyn OperationalRepository,
     configuration: &dyn AccountConfigurationRepository,
-    owner: UserId,
 ) -> Result<(), Box<dyn Error>> {
     assert_ne!(repository.account_id(), other_account.account_id());
     let system_id = SystemId::new();
@@ -136,35 +130,6 @@ async fn verify_contract(
         Some(lifetime)
     );
     assert!(other_account.lifetime_summary(system_id).await?.is_none());
-
-    let team = TeamRecord {
-        id: TeamId::new(),
-        account_id: repository.account_id(),
-        name: format!("Contract team {base}"),
-        visibility: "public".to_owned(),
-        owner_user_id: owner,
-        created_at: base,
-        updated_at: base,
-    };
-    repository.save_team(&team).await?;
-    assert_eq!(repository.team(team.id).await?, Some(team.clone()));
-    assert!(other_account.team(team.id).await?.is_none());
-    let team_rollup = TeamRollupRecord {
-        team_id: team.id,
-        team_account_id: repository.account_id(),
-        period_start: base,
-        period_end: base + 86_400_000,
-        generation_energy_wh: 12_000,
-        normalized_generation_wh_per_kw: Some(1_500),
-        coverage_basis_points: 9_700,
-        source_sequence: 1,
-        projected_at: base + 3,
-    };
-    repository.save_team_rollup(&team_rollup).await?;
-    assert_eq!(
-        repository.team_rollups(team.id, base, base + 1).await?,
-        vec![team_rollup]
-    );
 
     let alert = AlertRuleRecord {
         id: AlertRuleId::new(),
@@ -363,19 +328,6 @@ fn epoch_millis() -> Result<i64, Box<dyn Error>> {
     )?)
 }
 
-async fn create_sqlite_user(path: &std::path::Path) -> Result<UserId, Box<dyn Error>> {
-    let id = UserId::new();
-    let mut connection = sqlite_connection(path).await?;
-    sqlx::query("INSERT INTO users (id,email,display_name,status,created_at,updated_at) VALUES (?,?,?,'active',1,1)")
-        .bind(id.as_uuid().as_bytes().as_slice())
-        .bind(format!("owner-{id}@example.invalid"))
-        .bind("Contract owner")
-        .execute(&mut connection)
-        .await?;
-    connection.close().await?;
-    Ok(id)
-}
-
 async fn create_sqlite_account(
     management: &std::path::Path,
     accounts: &std::path::Path,
@@ -404,19 +356,6 @@ async fn sqlite_connection(path: &std::path::Path) -> Result<SqliteConnection, s
             .foreign_keys(true),
     )
     .await
-}
-
-async fn create_postgres_user(url: &str) -> Result<UserId, Box<dyn Error>> {
-    let id = UserId::new();
-    let mut connection = PgConnection::connect(url).await?;
-    sqlx::query("INSERT INTO management.users (id,email,display_name,status,created_at,updated_at) VALUES ($1,$2,$3,'active',1,1)")
-        .bind(id.as_uuid())
-        .bind(format!("owner-{id}@example.invalid"))
-        .bind("Contract owner")
-        .execute(&mut connection)
-        .await?;
-    connection.close().await?;
-    Ok(id)
 }
 
 async fn create_postgres_account(url: &str, label: &str) -> Result<AccountId, Box<dyn Error>> {

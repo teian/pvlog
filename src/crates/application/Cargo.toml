@@ -143,17 +143,5 @@ path = "../../../tests/rust/application/statistics.rs"
 name = "data-quality"
 path = "../../../tests/rust/application/data_quality.rs"
 
-[[test]]
-name = "comparison"
-path = "../../../tests/rust/application/comparison.rs"
-
-[[test]]
-name = "community-catalog"
-path = "../../../tests/rust/application/community_catalog.rs"
-
-[[test]]
-name = "teams"
-path = "../../../tests/rust/application/teams.rs"
-
 [lints]
 workspace = true

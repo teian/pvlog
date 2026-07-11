@@ -23,8 +23,7 @@ corrected, and missing data.
 | --------------------------------- | ---------------------------------------- |
 | `systems:read`, `systems:write`   | Aggregate configuration                  |
 | `telemetry:write`                 | Observation ingestion/correction         |
-| `analytics:read`                  | Series, statistics, quality, comparisons |
-| `community:read`                  | Search, teams, ladders                   |
+| `analytics:read`                  | Series, statistics, and quality          |
 | `alerts:read`, `alerts:write`     | Rules and events                         |
 | `webhooks:read`, `webhooks:write` | Subscriptions and delivery               |
 | `roles:manage`, `audit:read`      | Delegation and audit                     |

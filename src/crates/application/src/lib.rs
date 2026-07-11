@@ -9,8 +9,6 @@ mod api_token;
 mod authorization_boundary;
 mod batch_ingestion;
 mod browser_session;
-mod community_catalog;
-mod comparison;
 mod data_quality;
 mod identity_linking;
 mod import_export;
@@ -33,7 +31,6 @@ mod series_query;
 mod statistics;
 mod system_configuration;
 mod system_lifecycle;
-mod teams;
 mod user_lifecycle;
 mod webhook_delivery;
 mod webhook_security;
@@ -63,15 +60,6 @@ pub use batch_ingestion::{
 pub use browser_session::{
     BrowserSession, BrowserSessionError, BrowserSessionPolicy, BrowserSessionRecord,
     BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, SessionCookie,
-};
-pub use community_catalog::{
-    CommunityActivity, CommunityCatalogError, CommunityCatalogPolicy, CommunityCatalogRepository,
-    CommunityCatalogService, CommunityCatalogUseCases, CommunityLocationPrecision,
-    CommunityProjection, CommunityProjectionEvent, CommunitySearchFilter, CommunitySystemResource,
-};
-pub use comparison::{
-    CapacityPerformanceSlice, ComparisonCandidate, ComparisonEntry, ComparisonError,
-    ComparisonMetric, ComparisonPolicy, build_ladder, compare_systems,
 };
 pub use data_quality::{
     DataQualityError, DataQualityIssue, DataQualityKind, DataQualityPolicy, QualitySample,
@@ -160,11 +148,6 @@ pub use system_configuration::{
 pub use system_lifecycle::{
     CreateSystem, SystemLifecycleError, SystemLifecycleRecord, SystemLifecycleRepository,
     SystemLifecycleService, SystemLifecycleUseCases, UpdateSystem,
-};
-pub use teams::{
-    CreateTeam, JoinTeam, TeamAccess, TeamAggregateResource, TeamEligibility,
-    TeamMembershipResource, TeamPolicy, TeamRepository, TeamResource, TeamService,
-    TeamServiceError, TeamUseCases,
 };
 pub use user_lifecycle::{
     AcceptInvitation, AdminUserActor, CreateLocalUser, InvitationRecord, InvitationResult,

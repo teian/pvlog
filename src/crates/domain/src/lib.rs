@@ -15,10 +15,10 @@ mod validation;
 
 pub use identifiers::{
     AccountId, AlertEventId, AlertRuleId, ApiCredentialId, AuditEventId, ChannelId, ConnectorId,
-    CorrectionId, EquipmentId, ExportId, ExternalIdentityId, FavouriteId, IdentifierError,
-    ImportId, InverterId, JobId, MembershipId, ObservationId, PasswordRecoveryId, ProviderId,
-    RequestId, RoleAssignmentId, RoleId, SegmentId, SessionId, StringId, SystemId, TariffId,
-    TeamId, TeamMembershipId, UserId, UserInvitationId, WebhookDeliveryId, WebhookSubscriptionId,
+    CorrectionId, EquipmentId, ExportId, ExternalIdentityId, IdentifierError, ImportId, InverterId,
+    JobId, MembershipId, ObservationId, PasswordRecoveryId, ProviderId, RequestId,
+    RoleAssignmentId, RoleId, SegmentId, SessionId, StringId, SystemId, TariffId, UserId,
+    UserInvitationId, WebhookDeliveryId, WebhookSubscriptionId,
 };
 pub use identity::{
     Account, AccountStatus, ApiCredential, ApiScope, AuditEvent, AuditOutcome, BuiltInRole,
@@ -31,9 +31,8 @@ pub use measurements::{
 };
 pub use operations::{
     AlertEvent, AlertEventState, AlertKind, AlertRule, AlertSchedule, DeliveryAttempt,
-    ExportFormat, ExportRequest, ExportState, Favourite, ImportRequest, ImportState, Job, JobKind,
-    JobState, Provider, ProviderCapability, ProviderState, RankingEligibility, RankingState, Team,
-    TeamMembership, TeamMembershipState, TeamVisibility, WebhookDelivery, WebhookDeliveryState,
+    ExportFormat, ExportRequest, ExportState, ImportRequest, ImportState, Job, JobKind, JobState,
+    Provider, ProviderCapability, ProviderState, WebhookDelivery, WebhookDeliveryState,
     WebhookEventType, WebhookSubscription, WebhookSubscriptionState,
 };
 pub use rbac::{AccessDecision, AccessDenial, AccessRequest, RbacEvaluator, built_in_permissions};

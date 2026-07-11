@@ -75,8 +75,6 @@ const required = [
   ["get", "/api/v1/systems/{system_id}/series", "getSystemSeries"],
   ["get", "/api/v1/systems/{system_id}/statistics", "getSystemStatistics"],
   ["get", "/api/v1/systems/{system_id}/data-quality", "getSystemDataQuality"],
-  ["post", "/api/v1/comparisons", "compareSystems"],
-  ["get", "/api/v1/ladders", "getLadder"],
   [
     "post",
     "/api/v1/systems/{system_id}/analysis-exports",

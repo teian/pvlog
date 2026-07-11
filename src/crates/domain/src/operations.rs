@@ -4,80 +4,10 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 use crate::{
-    AccountId, AlertEventId, AlertRuleId, BasisPoints, ExportId, FavouriteId, IanaTimezone,
-    ImportId, JobId, ProviderId, SystemId, TeamId, TeamMembershipId, UserId, UtcTimestamp,
-    WattHours, Watts, WebhookDeliveryId, WebhookSubscriptionId,
+    AccountId, AlertEventId, AlertRuleId, BasisPoints, ExportId, IanaTimezone, ImportId, JobId,
+    ProviderId, SystemId, UserId, UtcTimestamp, WattHours, Watts, WebhookDeliveryId,
+    WebhookSubscriptionId,
 };
-
-/// Community team with explicit discovery policy.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct Team {
-    pub id: TeamId,
-    pub account_id: AccountId,
-    pub name: String,
-    pub description: Option<String>,
-    pub visibility: TeamVisibility,
-    pub created_at: UtcTimestamp,
-}
-
-/// Team discovery and joining policy.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TeamVisibility {
-    Private,
-    Unlisted,
-    Public,
-}
-
-/// Membership of a PV system in a community team.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct TeamMembership {
-    pub id: TeamMembershipId,
-    pub team_id: TeamId,
-    pub system_id: SystemId,
-    pub state: TeamMembershipState,
-    pub requested_by: UserId,
-    pub joined_at: Option<UtcTimestamp>,
-}
-
-/// Team join lifecycle.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum TeamMembershipState {
-    Pending,
-    Active,
-    Rejected,
-    Left,
-}
-
-/// User bookmark of an authorized system.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-pub struct Favourite {
-    pub id: FavouriteId,
-    pub user_id: UserId,
-    pub system_id: SystemId,
-    pub created_at: UtcTimestamp,
-}
-
-/// Eligibility snapshot for public and team rankings.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-pub struct RankingEligibility {
-    pub system_id: SystemId,
-    pub state: RankingState,
-    pub reason_codes: BTreeSet<String>,
-    pub evaluated_at: UtcTimestamp,
-    pub data_complete_through: Option<UtcTimestamp>,
-}
-
-/// Ranking admission state.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RankingState {
-    Eligible,
-    Ineligible,
-    PendingData,
-    AdministrativelyExcluded,
-}
 
 /// Timezone-aware alert rule with debounce and cooldown.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]

@@ -1,4 +1,4 @@
-//! Rollup, community, integration, and job repositories shared by storage engines.
+//! Rollup, integration, and job repositories shared by storage engines.
 
 #[cfg(feature = "postgres")]
 use std::fmt;
@@ -6,15 +6,11 @@ use std::fmt;
 use std::path::PathBuf;
 
 use async_trait::async_trait;
-use pvlog_domain::{
-    AccountId, AlertRuleId, JobId, ProviderId, SystemId, TeamId, UserId, WebhookSubscriptionId,
-};
+use pvlog_domain::{AccountId, AlertRuleId, JobId, ProviderId, SystemId, WebhookSubscriptionId};
 use serde_json::Value;
 #[cfg(feature = "postgres")]
 use sqlx::PgConnection;
 use sqlx::{Connection as _, Row as _};
-#[cfg(feature = "sqlite")]
-use sqlx::{SqliteConnection, sqlite::SqliteConnectOptions};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -58,28 +54,6 @@ pub struct LifetimeSummaryRecord {
     pub consumption_energy_wh: Option<i64>,
     pub coverage_basis_points: i32,
     pub calculated_at: i64,
-}
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TeamRecord {
-    pub id: TeamId,
-    pub account_id: AccountId,
-    pub name: String,
-    pub visibility: String,
-    pub owner_user_id: UserId,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TeamRollupRecord {
-    pub team_id: TeamId,
-    pub team_account_id: AccountId,
-    pub period_start: i64,
-    pub period_end: i64,
-    pub generation_energy_wh: i64,
-    pub normalized_generation_wh_per_kw: Option<i64>,
-    pub coverage_basis_points: i32,
-    pub source_sequence: i64,
-    pub projected_at: i64,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AlertRuleRecord {
@@ -176,18 +150,6 @@ pub trait OperationalRepository: Send + Sync {
         &self,
         system_id: SystemId,
     ) -> Result<Option<LifetimeSummaryRecord>, OperationalRepositoryError>;
-    async fn save_team(&self, r: &TeamRecord) -> Result<(), OperationalRepositoryError>;
-    async fn team(&self, id: TeamId) -> Result<Option<TeamRecord>, OperationalRepositoryError>;
-    async fn save_team_rollup(
-        &self,
-        r: &TeamRollupRecord,
-    ) -> Result<(), OperationalRepositoryError>;
-    async fn team_rollups(
-        &self,
-        id: TeamId,
-        start: i64,
-        end: i64,
-    ) -> Result<Vec<TeamRollupRecord>, OperationalRepositoryError>;
     async fn save_alert(&self, r: &AlertRuleRecord) -> Result<(), OperationalRepositoryError>;
     async fn alert(
         &self,
@@ -245,26 +207,13 @@ pub trait OperationalRepository: Send + Sync {
 #[cfg(feature = "sqlite")]
 #[derive(Clone, Debug)]
 pub struct SqliteOperationalRepository {
-    management_path: PathBuf,
     account: RoutedSqliteAccount,
 }
 #[cfg(feature = "sqlite")]
 impl SqliteOperationalRepository {
     #[must_use]
-    pub fn new(management_path: PathBuf, account: RoutedSqliteAccount) -> Self {
-        Self {
-            management_path,
-            account,
-        }
-    }
-    async fn management(&self) -> Result<SqliteConnection, sqlx::Error> {
-        SqliteConnection::connect_with(
-            &SqliteConnectOptions::new()
-                .filename(&self.management_path)
-                .create_if_missing(false)
-                .foreign_keys(true),
-        )
-        .await
+    pub fn new(_management_path: PathBuf, account: RoutedSqliteAccount) -> Self {
+        Self { account }
     }
 }
 
@@ -362,46 +311,6 @@ impl OperationalRepository for SqliteOperationalRepository {
             .fetch_optional(&mut *c)
             .await?;
         row.map(|r| sqlite_lifetime(&r)).transpose()
-    }
-    async fn save_team(&self, r: &TeamRecord) -> Result<(), OperationalRepositoryError> {
-        if r.account_id != self.account_id() {
-            return Err(OperationalRepositoryError::AccountMismatch);
-        }
-        let mut c = self.management().await?;
-        sqlx::query("INSERT INTO teams (id,account_id,name,visibility,owner_user_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,visibility=excluded.visibility,owner_user_id=excluded.owner_user_id,updated_at=excluded.updated_at").bind(blob(r.id.as_uuid())).bind(blob(r.account_id.as_uuid())).bind(&r.name).bind(&r.visibility).bind(blob(r.owner_user_id.as_uuid())).bind(r.created_at).bind(r.updated_at).execute(&mut c).await?;
-        c.close().await?;
-        Ok(())
-    }
-    async fn team(&self, id: TeamId) -> Result<Option<TeamRecord>, OperationalRepositoryError> {
-        let mut c = self.management().await?;
-        let row=sqlx::query("SELECT id,account_id,name,visibility,owner_user_id,created_at,updated_at FROM teams WHERE id=? AND account_id=?").bind(blob(id.as_uuid())).bind(blob(self.account_id().as_uuid())).fetch_optional(&mut c).await?;
-        c.close().await?;
-        row.map(|r| sqlite_team(&r)).transpose()
-    }
-    async fn save_team_rollup(
-        &self,
-        r: &TeamRollupRecord,
-    ) -> Result<(), OperationalRepositoryError> {
-        if r.team_account_id != self.account_id() {
-            return Err(OperationalRepositoryError::AccountMismatch);
-        }
-        validate_period(r.period_start, r.period_end)?;
-        let mut c = self.management().await?;
-        sqlx::query("INSERT INTO team_rollup_projections (team_account_id,team_id,period_start,period_end,generation_energy_wh,normalized_generation_wh_per_kw,coverage_basis_points,source_sequence,projected_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(team_account_id,team_id,period_start) DO UPDATE SET period_end=excluded.period_end,generation_energy_wh=excluded.generation_energy_wh,normalized_generation_wh_per_kw=excluded.normalized_generation_wh_per_kw,coverage_basis_points=excluded.coverage_basis_points,source_sequence=excluded.source_sequence,projected_at=excluded.projected_at").bind(blob(r.team_account_id.as_uuid())).bind(blob(r.team_id.as_uuid())).bind(r.period_start).bind(r.period_end).bind(r.generation_energy_wh).bind(r.normalized_generation_wh_per_kw).bind(r.coverage_basis_points).bind(r.source_sequence).bind(r.projected_at).execute(&mut c).await?;
-        c.close().await?;
-        Ok(())
-    }
-    async fn team_rollups(
-        &self,
-        id: TeamId,
-        start: i64,
-        end: i64,
-    ) -> Result<Vec<TeamRollupRecord>, OperationalRepositoryError> {
-        validate_period(start, end)?;
-        let mut c = self.management().await?;
-        let rows=sqlx::query("SELECT team_account_id,team_id,period_start,period_end,generation_energy_wh,normalized_generation_wh_per_kw,coverage_basis_points,source_sequence,projected_at FROM team_rollup_projections WHERE team_account_id=? AND team_id=? AND period_start>=? AND period_start<? ORDER BY period_start").bind(blob(self.account_id().as_uuid())).bind(blob(id.as_uuid())).bind(start).bind(end).fetch_all(&mut c).await?;
-        c.close().await?;
-        rows.iter().map(sqlite_team_rollup).collect()
     }
     async fn save_alert(&self, r: &AlertRuleRecord) -> Result<(), OperationalRepositoryError> {
         let mut w = self.account.acquire_writer().await?;
@@ -598,46 +507,6 @@ impl OperationalRepository for PostgresOperationalRepository {
         let row=sqlx::query("SELECT system_id,generation,first_observation_at,last_observation_at,generation_energy_wh,consumption_energy_wh,coverage_basis_points,calculated_at FROM telemetry.lifetime_summaries WHERE account_id=$1 AND system_id=$2").bind(self.account_id.as_uuid()).bind(s.as_uuid()).fetch_optional(&mut c).await?;
         c.close().await?;
         row.map(|r| pg_lifetime(&r)).transpose()
-    }
-    async fn save_team(&self, r: &TeamRecord) -> Result<(), OperationalRepositoryError> {
-        if r.account_id != self.account_id {
-            return Err(OperationalRepositoryError::AccountMismatch);
-        }
-        let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO community.teams (account_id,id,name,visibility,owner_user_id,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,visibility=excluded.visibility,owner_user_id=excluded.owner_user_id,updated_at=excluded.updated_at").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(&r.name).bind(&r.visibility).bind(r.owner_user_id.as_uuid()).bind(r.created_at).bind(r.updated_at).execute(&mut c).await?;
-        c.close().await?;
-        Ok(())
-    }
-    async fn team(&self, id: TeamId) -> Result<Option<TeamRecord>, OperationalRepositoryError> {
-        let mut c = self.connection().await?;
-        let row=sqlx::query("SELECT id,account_id,name,visibility,owner_user_id,created_at,updated_at FROM community.teams WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut c).await?;
-        c.close().await?;
-        row.map(|r| pg_team(&r)).transpose()
-    }
-    async fn save_team_rollup(
-        &self,
-        r: &TeamRollupRecord,
-    ) -> Result<(), OperationalRepositoryError> {
-        if r.team_account_id != self.account_id {
-            return Err(OperationalRepositoryError::AccountMismatch);
-        }
-        validate_period(r.period_start, r.period_end)?;
-        let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO community.team_rollup_projections (account_id,team_id,period_start,period_end,generation_energy_wh,normalized_generation_wh_per_kw,coverage_basis_points,source_sequence,projected_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(account_id,team_id,period_start) DO UPDATE SET period_end=excluded.period_end,generation_energy_wh=excluded.generation_energy_wh,normalized_generation_wh_per_kw=excluded.normalized_generation_wh_per_kw,coverage_basis_points=excluded.coverage_basis_points,source_sequence=excluded.source_sequence,projected_at=excluded.projected_at").bind(self.account_id.as_uuid()).bind(r.team_id.as_uuid()).bind(r.period_start).bind(r.period_end).bind(r.generation_energy_wh).bind(r.normalized_generation_wh_per_kw).bind(r.coverage_basis_points).bind(r.source_sequence).bind(r.projected_at).execute(&mut c).await?;
-        c.close().await?;
-        Ok(())
-    }
-    async fn team_rollups(
-        &self,
-        id: TeamId,
-        start: i64,
-        end: i64,
-    ) -> Result<Vec<TeamRollupRecord>, OperationalRepositoryError> {
-        validate_period(start, end)?;
-        let mut c = self.connection().await?;
-        let rows=sqlx::query("SELECT account_id,team_id,period_start,period_end,generation_energy_wh,normalized_generation_wh_per_kw,coverage_basis_points,source_sequence,projected_at FROM community.team_rollup_projections WHERE account_id=$1 AND team_id=$2 AND period_start>=$3 AND period_start<$4 ORDER BY period_start").bind(self.account_id.as_uuid()).bind(id.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
-        c.close().await?;
-        rows.iter().map(pg_team_rollup).collect()
     }
     async fn save_alert(&self, r: &AlertRuleRecord) -> Result<(), OperationalRepositoryError> {
         let mut c = self.connection().await?;
@@ -890,36 +759,6 @@ fn pg_lifetime(
 }
 
 #[cfg(feature = "postgres")]
-fn pg_team(r: &sqlx::postgres::PgRow) -> Result<TeamRecord, OperationalRepositoryError> {
-    Ok(TeamRecord {
-        id: pid(r.get("id"), TeamId::from_uuid)?,
-        account_id: pid(r.get("account_id"), AccountId::from_uuid)?,
-        name: r.get("name"),
-        visibility: r.get("visibility"),
-        owner_user_id: pid(r.get("owner_user_id"), UserId::from_uuid)?,
-        created_at: r.get("created_at"),
-        updated_at: r.get("updated_at"),
-    })
-}
-
-#[cfg(feature = "postgres")]
-fn pg_team_rollup(
-    r: &sqlx::postgres::PgRow,
-) -> Result<TeamRollupRecord, OperationalRepositoryError> {
-    Ok(TeamRollupRecord {
-        team_id: pid(r.get("team_id"), TeamId::from_uuid)?,
-        team_account_id: pid(r.get("account_id"), AccountId::from_uuid)?,
-        period_start: r.get("period_start"),
-        period_end: r.get("period_end"),
-        generation_energy_wh: r.get("generation_energy_wh"),
-        normalized_generation_wh_per_kw: r.get("normalized_generation_wh_per_kw"),
-        coverage_basis_points: r.get("coverage_basis_points"),
-        source_sequence: r.get("source_sequence"),
-        projected_at: r.get("projected_at"),
-    })
-}
-
-#[cfg(feature = "postgres")]
 fn pg_alert(r: &sqlx::postgres::PgRow) -> Result<AlertRuleRecord, OperationalRepositoryError> {
     Ok(AlertRuleRecord {
         id: pid(r.get("id"), AlertRuleId::from_uuid)?,
@@ -1046,34 +885,6 @@ fn sqlite_lifetime(
         consumption_energy_wh: r.get("consumption_energy_wh"),
         coverage_basis_points: r.get("coverage_basis_points"),
         calculated_at: r.get("calculated_at"),
-    })
-}
-#[cfg(feature = "sqlite")]
-fn sqlite_team(r: &sqlx::sqlite::SqliteRow) -> Result<TeamRecord, OperationalRepositoryError> {
-    Ok(TeamRecord {
-        id: sid(r.get("id"), TeamId::from_uuid)?,
-        account_id: sid(r.get("account_id"), AccountId::from_uuid)?,
-        name: r.get("name"),
-        visibility: r.get("visibility"),
-        owner_user_id: sid(r.get("owner_user_id"), UserId::from_uuid)?,
-        created_at: r.get("created_at"),
-        updated_at: r.get("updated_at"),
-    })
-}
-#[cfg(feature = "sqlite")]
-fn sqlite_team_rollup(
-    r: &sqlx::sqlite::SqliteRow,
-) -> Result<TeamRollupRecord, OperationalRepositoryError> {
-    Ok(TeamRollupRecord {
-        team_id: sid(r.get("team_id"), TeamId::from_uuid)?,
-        team_account_id: sid(r.get("team_account_id"), AccountId::from_uuid)?,
-        period_start: r.get("period_start"),
-        period_end: r.get("period_end"),
-        generation_energy_wh: r.get("generation_energy_wh"),
-        normalized_generation_wh_per_kw: r.get("normalized_generation_wh_per_kw"),
-        coverage_basis_points: r.get("coverage_basis_points"),
-        source_sequence: r.get("source_sequence"),
-        projected_at: r.get("projected_at"),
     })
 }
 #[cfg(feature = "sqlite")]

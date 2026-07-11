@@ -235,60 +235,8 @@
     "account": "Account {{id}}",
     "administration": "Administration",
     "alerts": "Alerts",
-    "community": "Community",
     "dashboard": "Dashboard",
     "system": "System {{id}}"
-  },
-  "community": {
-    "title": "Community",
-    "description": "Discover visible systems, manage favourites, and compare privacy-safe energy rankings.",
-    "unavailable": "This community data is unavailable right now.",
-    "search": {
-      "title": "Find systems",
-      "description": "Search only systems whose owners have allowed discovery.",
-      "query": "Name",
-      "queryPlaceholder": "Search by system name",
-      "country": "Country code",
-      "countryPlaceholder": "DE",
-      "empty": "No visible systems match these filters.",
-      "unknown": "Not specified",
-      "details": "{{capacity}} W · {{country}} · {{location}}",
-      "stale": "Projection data may be out of date."
-    },
-    "favourites": {
-      "title": "Favourites",
-      "description": "Favourites do not grant access to private system data.",
-      "empty": "You have not favourited any visible systems.",
-      "capacity": "{{capacity}} W installed capacity",
-      "add": "Add favourite",
-      "remove": "Remove favourite"
-    },
-    "comparison": {
-      "title": "Compare systems",
-      "description": "Compare the systems currently available in your session by normalized generation.",
-      "compare": "Compare my systems",
-      "requiresSystems": "At least two systems are required for a comparison.",
-      "results": "Comparison results"
-    },
-    "ladder": {
-      "title": "Public ladder",
-      "empty": "No eligible public systems are currently ranked.",
-      "entry": "#{{rank}} · {{name}}",
-      "metrics": "{{generation}} Wh/kW · {{coverage}}% coverage"
-    },
-    "teams": {
-      "title": "Teams and regional supply",
-      "description": "Create a team for the active account, join its first system, and inspect configured regional data providers.",
-      "name": "Team name",
-      "createAndJoin": "Create team and join system"
-    },
-    "providers": {
-      "title": "Regional supply providers",
-      "unavailable": "No regional provider data is currently available.",
-      "metadata": "{{source}} · {{license}} · {{state}}",
-      "fresh": "fresh",
-      "stale": "stale"
-    }
   },
   "administration": {
     "title": "Administration",

@@ -3,7 +3,7 @@
 ## 0.1.0 - Unreleased
 
 - Introduce the self-hosted PVLog API, web application, SQLite/PostgreSQL
-  storage profiles, canonical telemetry, analytics, community, alerts, and
+  storage profiles, canonical telemetry, analytics, alerts, and
   operations foundation.
 
 Deprecations are announced here and in OpenAPI with replacement and removal

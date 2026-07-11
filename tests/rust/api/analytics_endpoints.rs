@@ -6,17 +6,16 @@ use axum::{
 };
 use pvlog_api::analytics_router;
 use pvlog_application::{
-    AnalysisExportRequest, AnalysisExportResult, ComparisonEntry, ComparisonMetric,
-    DataQualityIssue, EnergyStatistics, ModernAnalyticsError, ModernAnalyticsUseCases,
-    QueryResolution, SeriesQueryResult, StatisticsPeriod,
+    AnalysisExportRequest, AnalysisExportResult, DataQualityIssue, EnergyStatistics,
+    ModernAnalyticsError, ModernAnalyticsUseCases, QueryResolution, SeriesQueryResult,
+    StatisticsPeriod,
 };
-use pvlog_domain::{JobId, SystemId, TeamId, UserId};
+use pvlog_domain::{JobId, SystemId, UserId};
 use std::{error::Error, sync::Arc};
 use tower::ServiceExt as _;
 
 #[tokio::test]
-async fn analytics_routes_cover_queries_rankings_and_both_export_modes()
--> Result<(), Box<dyn Error>> {
+async fn analytics_routes_cover_queries_and_both_export_modes() -> Result<(), Box<dyn Error>> {
     let system = SystemId::new();
     let actor = UserId::new();
     let app = analytics_router(Arc::new(Stub)).layer(Extension(actor));
@@ -26,7 +25,6 @@ async fn analytics_routes_cover_queries_rankings_and_both_export_modes()
         ),
         format!("/api/v1/systems/{system}/statistics?period=day"),
         format!("/api/v1/systems/{system}/data-quality?startEpochMillis=0&endEpochMillis=3600000"),
-        "/api/v1/ladders?metric=normalized_generation".to_owned(),
     ] {
         let response = app
             .clone()
@@ -34,21 +32,6 @@ async fn analytics_routes_cover_queries_rankings_and_both_export_modes()
             .await?;
         assert_eq!(response.status(), StatusCode::OK);
     }
-
-    let comparison = app
-        .clone()
-        .oneshot(
-            Request::builder()
-                .method(Method::POST)
-                .uri("/api/v1/comparisons")
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(Body::from(format!(
-                    r#"{{"systemIds":["{system}","{}"],"metric":"total_generation"}}"#,
-                    SystemId::new()
-                )))?,
-        )
-        .await?;
-    assert_eq!(comparison.status(), StatusCode::OK);
 
     let synchronous = app.clone().oneshot(export_request(system, false)?).await?;
     assert_eq!(synchronous.status(), StatusCode::OK);
@@ -166,24 +149,6 @@ impl ModernAnalyticsUseCases for Stub {
         _start_epoch_millis: i64,
         _end_epoch_millis: i64,
     ) -> Result<Vec<DataQualityIssue>, ModernAnalyticsError> {
-        Ok(Vec::new())
-    }
-
-    async fn compare(
-        &self,
-        _actor: UserId,
-        _system_ids: Vec<SystemId>,
-        _metric: ComparisonMetric,
-    ) -> Result<Vec<ComparisonEntry>, ModernAnalyticsError> {
-        Ok(Vec::new())
-    }
-
-    async fn ladder(
-        &self,
-        _actor: UserId,
-        _team_id: Option<TeamId>,
-        _metric: ComparisonMetric,
-    ) -> Result<Vec<ComparisonEntry>, ModernAnalyticsError> {
         Ok(Vec::new())
     }
 

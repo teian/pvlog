@@ -78,7 +78,7 @@ pub use operational_repository::SqliteOperationalRepository;
 pub use operational_repository::{
     AlertRuleRecord, DailySummaryRecord, JobLease, JobRecord, JobRetryDisposition,
     LifetimeSummaryRecord, OperationalRepository, OperationalRepositoryError, ProviderRecord,
-    RollupRecord, TeamRecord, TeamRollupRecord, WebhookSubscriptionRecord,
+    RollupRecord, WebhookSubscriptionRecord,
 };
 pub use overlay_folding::{
     OverlayFoldError, OverlayFoldKey, OverlayFoldPhase, OverlayFoldRepository, OverlayFoldService,
