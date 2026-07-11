@@ -7,7 +7,7 @@ use pvlog_domain::{
 };
 use pvlog_storage::{
     AccountConfigurationRepository, AlertRuleRecord, DailySummaryRecord, DatabaseTarget, JobRecord,
-    LifetimeSummaryRecord, OperationalRepository, OperationalRepositoryError,
+    JobRetryDisposition, LifetimeSummaryRecord, OperationalRepository, OperationalRepositoryError,
     PostgresAccountConfigurationRepository, PostgresOperationalRepository, ProviderRecord,
     RollupRecord, SqliteAccountConfigurationRepository, SqliteAccountPoolConfig,
     SqliteAccountPoolRouter, SqliteAccountProvisioner, SqliteOperationalRepository,
@@ -234,6 +234,103 @@ async fn verify_contract(
     repository.save_job(&job).await?;
     assert_eq!(repository.job(job.id).await?, Some(job.clone()));
     assert!(other_account.job(job.id).await?.is_none());
+
+    let lease_a = repository
+        .lease_job("worker-a", base, base + 100)
+        .await?
+        .ok_or("expected first lease")?;
+    assert_eq!(lease_a.job.id, job.id);
+    assert!(
+        repository
+            .heartbeat_job(job.id, "worker-a", base + 10, base + 200)
+            .await?
+    );
+    assert!(
+        repository
+            .lease_job("worker-b", base + 199, base + 300)
+            .await?
+            .is_none()
+    );
+    let lease_b = repository
+        .lease_job("worker-b", base + 201, base + 400)
+        .await?
+        .ok_or("expired lease must recover after worker restart")?;
+    assert_eq!(lease_b.job.attempt_count, 2);
+    assert!(
+        repository
+            .complete_job(job.id, "worker-b", base + 210)
+            .await?
+    );
+    assert!(
+        repository
+            .complete_job(job.id, "worker-b", base + 211)
+            .await?,
+        "handler completion is idempotent"
+    );
+
+    let dead = JobRecord {
+        id: JobId::new(),
+        job_kind: "always_fails".to_owned(),
+        state: "pending".to_owned(),
+        payload: serde_json::json!({}),
+        idempotency_key: Some(format!("dead-{base}")),
+        priority: 1,
+        attempt_count: 0,
+        max_attempts: 2,
+        available_at: base,
+        created_at: base,
+        updated_at: base,
+    };
+    repository.save_job(&dead).await?;
+    let dead_lease = repository
+        .lease_job("worker-c", base + 300, base + 400)
+        .await?
+        .ok_or("expected failing job lease")?;
+    assert_eq!(dead_lease.job.id, dead.id);
+    let JobRetryDisposition::RetryAt(retry_at) = repository
+        .retry_job(
+            dead.id,
+            "worker-c",
+            base + 310,
+            100,
+            10_000,
+            "fixture_failure",
+        )
+        .await?
+    else {
+        return Err("first bounded retry unexpectedly dead-lettered".into());
+    };
+    assert!((base + 410..=base + 435).contains(&retry_at));
+    assert!(
+        repository
+            .lease_job("worker-d", retry_at - 1, retry_at + 100)
+            .await?
+            .is_none()
+    );
+    repository
+        .lease_job("worker-d", retry_at, retry_at + 100)
+        .await?
+        .ok_or("retry did not become available")?;
+    assert_eq!(
+        repository
+            .retry_job(
+                dead.id,
+                "worker-d",
+                retry_at + 1,
+                100,
+                10_000,
+                "fixture_failure"
+            )
+            .await?,
+        JobRetryDisposition::DeadLetter
+    );
+    assert!(
+        repository
+            .dead_letter_jobs(10)
+            .await?
+            .iter()
+            .any(|item| item.id == dead.id)
+    );
 
     assert!(matches!(
         repository.rollups(system_id, base, base).await,

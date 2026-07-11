@@ -2,14 +2,16 @@
 
 use std::{error::Error, time::SystemTime};
 
-use pvlog_domain::{AccountId, CorrectionId, ObservationId, SystemId};
+use pvlog_domain::{
+    AccountId, AuditEventId, CorrectionId, ObservationId, RequestId, SystemId, UserId,
+};
 use pvlog_storage::{
     AccountConfigurationRepository, CorrectionRecord, DatabaseTarget, IdempotencyOutcome,
     IdempotencyRecord, ObservationInsertOutcome, PostgresAccountConfigurationRepository,
     PostgresTelemetryRepository, SqliteAccountConfigurationRepository, SqliteAccountPoolConfig,
     SqliteAccountPoolRouter, SqliteAccountProvisioner, SqliteTelemetryRepository,
     StoredObservation, SystemConfigurationRecord, TelemetryRepository, TelemetryRepositoryError,
-    apply_migrations,
+    TransactionalObservation, apply_migrations,
 };
 use sqlx::{Connection as _, PgConnection, SqliteConnection, sqlite::SqliteConnectOptions};
 use tempfile::TempDir;
@@ -89,6 +91,20 @@ async fn verify_contract(
         repository.insert_observation(&second).await?,
         ObservationInsertOutcome::Inserted
     );
+    let transactional = observation(system_id, base + 20, "source-transaction", [7_u8; 32]);
+    assert_eq!(
+        repository
+            .insert_observation_transactional(&TransactionalObservation {
+                observation: transactional,
+                invalidation_id: Uuid::now_v7(),
+                audit_id: AuditEventId::new(),
+                actor_id: UserId::new(),
+                request_id: RequestId::new(),
+                event_hash: [8_u8; 32],
+            })
+            .await?,
+        ObservationInsertOutcome::Inserted
+    );
     let mut conflicting = first.clone();
     conflicting.id = ObservationId::new();
     conflicting.canonical_hash = [9_u8; 32];
@@ -127,12 +143,37 @@ async fn verify_contract(
         repository.store_idempotency(&idempotency).await?,
         IdempotencyOutcome::Replay(_)
     ));
-    let mut idempotency_conflict = idempotency;
+    let mut idempotency_conflict = idempotency.clone();
     idempotency_conflict.request_hash = [4_u8; 32];
     assert!(matches!(
         repository.store_idempotency(&idempotency_conflict).await,
         Err(TelemetryRepositoryError::IdempotencyConflict)
     ));
+    let concurrent = IdempotencyRecord {
+        id: Uuid::now_v7(),
+        key: format!("concurrent-{}", Uuid::now_v7()),
+        ..idempotency.clone()
+    };
+    let (left, right) = tokio::join!(
+        repository.store_idempotency(&concurrent),
+        repository.store_idempotency(&concurrent)
+    );
+    assert!(matches!(
+        (left?, right?),
+        (IdempotencyOutcome::Stored, IdempotencyOutcome::Replay(_))
+            | (IdempotencyOutcome::Replay(_), IdempotencyOutcome::Stored)
+    ));
+    let expired_reuse = IdempotencyRecord {
+        id: Uuid::now_v7(),
+        request_hash: [5_u8; 32],
+        created_at: idempotency.expires_at,
+        expires_at: idempotency.expires_at + 60_000,
+        ..idempotency
+    };
+    assert_eq!(
+        repository.store_idempotency(&expired_reuse).await?,
+        IdempotencyOutcome::Stored
+    );
 
     let correction = CorrectionRecord {
         id: CorrectionId::new(),

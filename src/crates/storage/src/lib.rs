@@ -15,16 +15,24 @@ use sqlx::{
 use thiserror::Error;
 
 mod account_repository;
+mod compaction;
+mod integrity_planner;
+mod job_dispatch;
 mod management_repository;
+mod merged_reader;
 mod migrations;
 mod operational_repository;
+mod overlay_folding;
 #[cfg(feature = "sqlite")]
 mod provisioning;
 mod rbac_repository;
+mod rollup_builder;
+mod segment_codec;
 #[cfg(feature = "sqlite")]
 mod sqlite_projection;
 #[cfg(feature = "sqlite")]
 mod sqlite_router;
+mod summary_rebuild;
 mod telemetry_repository;
 mod user_lifecycle_repository;
 
@@ -36,10 +44,20 @@ pub use account_repository::{
     AccountAuditRecord, AccountConfigurationRepository, AccountRepositoryError,
     ChannelDefinitionRecord, EquipmentRecord, SystemConfigurationRecord, TariffRecord,
 };
+pub use compaction::{
+    CompactionError, CompactionKey, CompactionPhase, CompactionRepository, CompactionService,
+};
+pub use integrity_planner::{
+    IntegrityIssue, IntegrityReport, IntegritySnapshot, RepairAction, plan_integrity_repairs,
+};
+pub use job_dispatch::ManagementJobDispatcher;
 pub use management_repository::{
     AccountRecord, ApiCredentialRecord, AuditRecord, AuthorizationGrant, ManagementRepository,
     ManagementRepositoryError, MembershipRecord, PostgresManagementRepository, RoutingBackend,
     RoutingRecord, SessionRecord, SqliteManagementRepository, UserRecord,
+};
+pub use merged_reader::{
+    MergedReadError, RawObservation, RawObservationOrigin, merge_raw_observations,
 };
 pub use migrations::{
     DatabaseMigrationStatus, MigrationError, MigrationKind, MigrationPlanItem, MigrationState,
@@ -50,9 +68,13 @@ pub use operational_repository::PostgresOperationalRepository;
 #[cfg(feature = "sqlite")]
 pub use operational_repository::SqliteOperationalRepository;
 pub use operational_repository::{
-    AlertRuleRecord, DailySummaryRecord, JobRecord, LifetimeSummaryRecord, OperationalRepository,
-    OperationalRepositoryError, ProviderRecord, RollupRecord, TeamRecord, TeamRollupRecord,
-    WebhookSubscriptionRecord,
+    AlertRuleRecord, DailySummaryRecord, JobLease, JobRecord, JobRetryDisposition,
+    LifetimeSummaryRecord, OperationalRepository, OperationalRepositoryError, ProviderRecord,
+    RollupRecord, TeamRecord, TeamRollupRecord, WebhookSubscriptionRecord,
+};
+pub use overlay_folding::{
+    OverlayFoldError, OverlayFoldKey, OverlayFoldPhase, OverlayFoldRepository, OverlayFoldService,
+    OverlayFoldState,
 };
 #[cfg(feature = "sqlite")]
 pub use provisioning::{
@@ -63,6 +85,12 @@ pub use provisioning::{
 pub use rbac_repository::PostgresRbacRepository;
 #[cfg(feature = "sqlite")]
 pub use rbac_repository::SqliteRbacRepository;
+pub use rollup_builder::{
+    RollupBuildError, RollupGranularity, RollupSample, RollupWindow, TelemetryRollup, build_rollups,
+};
+pub use segment_codec::{
+    ArchivedSegmentBytes, SegmentCodecError, SegmentPoint, decode_segment_v1, encode_segment_v1,
+};
 #[cfg(feature = "sqlite")]
 pub use sqlite_projection::{
     ProjectionActivityState, ProjectionError, ProjectionInvalidationReason,
@@ -75,13 +103,14 @@ pub use sqlite_router::{
     RoutedSqliteAccount, SerializedSqliteWriter, SqliteAccountPoolConfig, SqliteAccountPoolRouter,
     SqliteCheckpointMode, SqliteCheckpointReport, SqliteRoutingError,
 };
+pub use summary_rebuild::{DailyAggregate, LifetimeAggregate, SummaryDay, SummaryProjection};
 #[cfg(feature = "postgres")]
 pub use telemetry_repository::PostgresTelemetryRepository;
 #[cfg(feature = "sqlite")]
 pub use telemetry_repository::SqliteTelemetryRepository;
 pub use telemetry_repository::{
     CorrectionRecord, IdempotencyOutcome, IdempotencyRecord, ObservationInsertOutcome,
-    StoredObservation, TelemetryRepository, TelemetryRepositoryError,
+    StoredObservation, TelemetryRepository, TelemetryRepositoryError, TransactionalObservation,
 };
 #[cfg(feature = "postgres")]
 pub use user_lifecycle_repository::PostgresUserLifecycleRepository;

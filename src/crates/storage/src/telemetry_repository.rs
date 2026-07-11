@@ -4,7 +4,9 @@
 use std::fmt;
 
 use async_trait::async_trait;
-use pvlog_domain::{AccountId, CorrectionId, ObservationId, SystemId};
+use pvlog_domain::{
+    AccountId, AuditEventId, CorrectionId, ObservationId, RequestId, SystemId, UserId,
+};
 use serde_json::Value;
 use sqlx::Row as _;
 #[cfg(feature = "postgres")]
@@ -75,12 +77,26 @@ pub enum IdempotencyOutcome {
     Replay(IdempotencyRecord),
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TransactionalObservation {
+    pub observation: StoredObservation,
+    pub invalidation_id: Uuid,
+    pub audit_id: AuditEventId,
+    pub actor_id: UserId,
+    pub request_id: RequestId,
+    pub event_hash: [u8; 32],
+}
+
 #[async_trait]
 pub trait TelemetryRepository: Send + Sync {
     fn account_id(&self) -> AccountId;
     async fn insert_observation(
         &self,
         observation: &StoredObservation,
+    ) -> Result<ObservationInsertOutcome, TelemetryRepositoryError>;
+    async fn insert_observation_transactional(
+        &self,
+        commit: &TransactionalObservation,
     ) -> Result<ObservationInsertOutcome, TelemetryRepositoryError>;
     async fn observations(
         &self,
@@ -169,6 +185,33 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             None => Err(TelemetryRepositoryError::ConstraintConflict),
         }
     }
+    async fn insert_observation_transactional(
+        &self,
+        commit: &TransactionalObservation,
+    ) -> Result<ObservationInsertOutcome, TelemetryRepositoryError> {
+        let o = &commit.observation;
+        validate_observation(o)?;
+        let range_end = o
+            .measured_at
+            .checked_add(1)
+            .ok_or(TelemetryRepositoryError::InvalidRecord("observation"))?;
+        let mut writer = self.account.acquire_writer().await?;
+        let mut transaction = writer.connection().begin().await?;
+        let result=sqlx::query("INSERT OR IGNORE INTO telemetry_hot (observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(blob(o.id.as_uuid())).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(serde_json::to_string(&o.provenance)?).bind(o.canonical_hash.as_slice()).bind(o.version).execute(&mut *transaction).await?;
+        if result.rows_affected() == 0 {
+            let existing = sqlite_existing_observation(&mut transaction, o).await?;
+            transaction.rollback().await?;
+            return match existing {
+                Some(hash) if hash == o.canonical_hash => Ok(ObservationInsertOutcome::Duplicate),
+                Some(_) => Err(TelemetryRepositoryError::UniquenessConflict),
+                None => Err(TelemetryRepositoryError::ConstraintConflict),
+            };
+        }
+        sqlx::query("INSERT INTO aggregation_invalidations (id,system_id,range_start,range_end,reason,required_generation,state,created_at) VALUES (?,?,?,?,'ingestion',1,'pending',?)").bind(blob(commit.invalidation_id)).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(range_end).bind(o.received_at).execute(&mut *transaction).await?;
+        sqlx::query("INSERT INTO account_audit_events (id,occurred_at,request_id,actor_type,actor_id,action,target_type,target_id,outcome,event_hash,safe_metadata_json) VALUES (?,?,?,'user',?,'telemetry.ingested','observation',?,'succeeded',?,'{}')").bind(blob(commit.audit_id.as_uuid())).bind(o.received_at).bind(blob(commit.request_id.as_uuid())).bind(blob(commit.actor_id.as_uuid())).bind(blob(o.id.as_uuid())).bind(commit.event_hash.as_slice()).execute(&mut *transaction).await?;
+        transaction.commit().await?;
+        Ok(ObservationInsertOutcome::Inserted)
+    }
     async fn observations(
         &self,
         s: SystemId,
@@ -186,6 +229,10 @@ impl TelemetryRepository for SqliteTelemetryRepository {
     ) -> Result<IdempotencyOutcome, TelemetryRepositoryError> {
         validate_idempotency(r)?;
         let mut writer = self.account.acquire_writer().await?;
+        sqlx::query("DELETE FROM idempotency_records WHERE expires_at<=?")
+            .bind(r.created_at)
+            .execute(writer.connection())
+            .await?;
         let existing = sqlite_idempotency(writer.connection(), r).await?;
         if let Some(existing) = existing {
             return idempotency_outcome(existing, r);
@@ -243,6 +290,33 @@ impl TelemetryRepository for PostgresTelemetryRepository {
             None => Err(TelemetryRepositoryError::ConstraintConflict),
         }
     }
+    async fn insert_observation_transactional(
+        &self,
+        commit: &TransactionalObservation,
+    ) -> Result<ObservationInsertOutcome, TelemetryRepositoryError> {
+        let o = &commit.observation;
+        validate_observation(o)?;
+        let range_end = o
+            .measured_at
+            .checked_add(1)
+            .ok_or(TelemetryRepositoryError::InvalidRecord("observation"))?;
+        let mut connection = self.connection().await?;
+        let mut transaction = connection.begin().await?;
+        let result=sqlx::query("INSERT INTO telemetry.hot_observations (account_id,observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING").bind(self.account_id.as_uuid()).bind(o.id.as_uuid()).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(&o.provenance).bind(o.canonical_hash.as_slice()).bind(o.version).execute(&mut *transaction).await?;
+        if result.rows_affected() == 0 {
+            let existing = pg_existing_observation(&mut transaction, self.account_id, o).await?;
+            transaction.rollback().await?;
+            return match existing {
+                Some(hash) if hash == o.canonical_hash => Ok(ObservationInsertOutcome::Duplicate),
+                Some(_) => Err(TelemetryRepositoryError::UniquenessConflict),
+                None => Err(TelemetryRepositoryError::ConstraintConflict),
+            };
+        }
+        sqlx::query("INSERT INTO telemetry.aggregation_invalidations (account_id,id,system_id,range_start,range_end,reason,required_generation,state,created_at) VALUES ($1,$2,$3,$4,$5,'ingestion',1,'pending',$6)").bind(self.account_id.as_uuid()).bind(commit.invalidation_id).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(range_end).bind(o.received_at).execute(&mut *transaction).await?;
+        sqlx::query("INSERT INTO account_data.audit_events (account_id,id,occurred_at,request_id,actor_type,actor_id,action,target_type,target_id,outcome,event_hash,safe_metadata) VALUES ($1,$2,$3,$4,'user',$5,'telemetry.ingested','observation',$6,'succeeded',$7,'{}'::jsonb)").bind(self.account_id.as_uuid()).bind(commit.audit_id.as_uuid()).bind(o.received_at).bind(commit.request_id.as_uuid()).bind(commit.actor_id.as_uuid()).bind(o.id.as_uuid()).bind(commit.event_hash.as_slice()).execute(&mut *transaction).await?;
+        transaction.commit().await?;
+        Ok(ObservationInsertOutcome::Inserted)
+    }
     async fn observations(
         &self,
         s: SystemId,
@@ -261,6 +335,13 @@ impl TelemetryRepository for PostgresTelemetryRepository {
     ) -> Result<IdempotencyOutcome, TelemetryRepositoryError> {
         validate_idempotency(r)?;
         let mut c = self.connection().await?;
+        sqlx::query(
+            "DELETE FROM telemetry.idempotency_records WHERE account_id=$1 AND expires_at<=$2",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(r.created_at)
+        .execute(&mut c)
+        .await?;
         if let Some(existing) = pg_idempotency(&mut c, self.account_id, r).await? {
             c.close().await?;
             return idempotency_outcome(existing, r);

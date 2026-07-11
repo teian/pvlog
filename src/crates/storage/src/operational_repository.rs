@@ -136,6 +136,19 @@ pub struct JobRecord {
     pub updated_at: i64,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct JobLease {
+    pub job: JobRecord,
+    pub owner: String,
+    pub expires_at: i64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum JobRetryDisposition {
+    RetryAt(i64),
+    DeadLetter,
+}
+
 #[async_trait]
 pub trait OperationalRepository: Send + Sync {
     fn account_id(&self) -> AccountId;
@@ -195,6 +208,38 @@ pub trait OperationalRepository: Send + Sync {
     ) -> Result<Option<ProviderRecord>, OperationalRepositoryError>;
     async fn save_job(&self, r: &JobRecord) -> Result<(), OperationalRepositoryError>;
     async fn job(&self, id: JobId) -> Result<Option<JobRecord>, OperationalRepositoryError>;
+    async fn lease_job(
+        &self,
+        owner: &str,
+        now: i64,
+        lease_expires_at: i64,
+    ) -> Result<Option<JobLease>, OperationalRepositoryError>;
+    async fn heartbeat_job(
+        &self,
+        id: JobId,
+        owner: &str,
+        now: i64,
+        lease_expires_at: i64,
+    ) -> Result<bool, OperationalRepositoryError>;
+    async fn complete_job(
+        &self,
+        id: JobId,
+        owner: &str,
+        now: i64,
+    ) -> Result<bool, OperationalRepositoryError>;
+    async fn retry_job(
+        &self,
+        id: JobId,
+        owner: &str,
+        now: i64,
+        base_delay_millis: i64,
+        max_delay_millis: i64,
+        safe_error_code: &str,
+    ) -> Result<JobRetryDisposition, OperationalRepositoryError>;
+    async fn dead_letter_jobs(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<JobRecord>, OperationalRepositoryError>;
 }
 
 #[cfg(feature = "sqlite")]
@@ -410,6 +455,86 @@ impl OperationalRepository for SqliteOperationalRepository {
         let row=sqlx::query("SELECT id,job_kind,state,payload_json,idempotency_key,priority,attempt_count,max_attempts,available_at,created_at,updated_at FROM account_jobs WHERE id=?").bind(blob(id.as_uuid())).fetch_optional(&mut *c).await?;
         row.map(|r| sqlite_job(&r)).transpose()
     }
+    async fn lease_job(
+        &self,
+        owner: &str,
+        now: i64,
+        lease_expires_at: i64,
+    ) -> Result<Option<JobLease>, OperationalRepositoryError> {
+        validate_lease(owner, now, lease_expires_at)?;
+        let mut w = self.account.acquire_writer().await?;
+        let row = sqlx::query("UPDATE account_jobs SET state='leased',lease_owner=?,lease_expires_at=?,last_heartbeat_at=?,attempt_count=attempt_count+1,updated_at=? WHERE id=(SELECT id FROM account_jobs WHERE available_at<=? AND (state IN ('pending','retry_wait') OR (state='leased' AND lease_expires_at<=?)) ORDER BY priority DESC,available_at,id LIMIT 1) RETURNING id,job_kind,state,payload_json,idempotency_key,priority,attempt_count,max_attempts,available_at,created_at,updated_at")
+            .bind(owner).bind(lease_expires_at).bind(now).bind(now).bind(now).bind(now)
+            .fetch_optional(w.connection()).await?;
+        row.map(|row| {
+            sqlite_job(&row).map(|job| JobLease {
+                job,
+                owner: owner.to_owned(),
+                expires_at: lease_expires_at,
+            })
+        })
+        .transpose()
+    }
+    async fn heartbeat_job(
+        &self,
+        id: JobId,
+        owner: &str,
+        now: i64,
+        lease_expires_at: i64,
+    ) -> Result<bool, OperationalRepositoryError> {
+        validate_lease(owner, now, lease_expires_at)?;
+        let mut w = self.account.acquire_writer().await?;
+        let result = sqlx::query("UPDATE account_jobs SET lease_expires_at=?,last_heartbeat_at=?,updated_at=? WHERE id=? AND state='leased' AND lease_owner=? AND lease_expires_at>?")
+            .bind(lease_expires_at).bind(now).bind(now).bind(blob(id.as_uuid())).bind(owner).bind(now).execute(w.connection()).await?;
+        Ok(result.rows_affected() == 1)
+    }
+    async fn complete_job(
+        &self,
+        id: JobId,
+        owner: &str,
+        now: i64,
+    ) -> Result<bool, OperationalRepositoryError> {
+        let mut w = self.account.acquire_writer().await?;
+        let result = sqlx::query("UPDATE account_jobs SET state='completed',lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,completed_at=?,updated_at=? WHERE id=? AND ((state='leased' AND lease_owner=?) OR state='completed')")
+            .bind(now).bind(now).bind(blob(id.as_uuid())).bind(owner).execute(w.connection()).await?;
+        Ok(result.rows_affected() == 1)
+    }
+    async fn retry_job(
+        &self,
+        id: JobId,
+        owner: &str,
+        now: i64,
+        base_delay_millis: i64,
+        max_delay_millis: i64,
+        safe_error_code: &str,
+    ) -> Result<JobRetryDisposition, OperationalRepositoryError> {
+        let job = self
+            .job(id)
+            .await?
+            .ok_or(OperationalRepositoryError::JobNotFound)?;
+        let disposition = retry_disposition(&job, now, base_delay_millis, max_delay_millis)?;
+        let (state, available_at) = match disposition {
+            JobRetryDisposition::RetryAt(at) => ("retry_wait", at),
+            JobRetryDisposition::DeadLetter => ("dead_letter", now),
+        };
+        let mut w = self.account.acquire_writer().await?;
+        let result = sqlx::query("UPDATE account_jobs SET state=?,available_at=?,lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,safe_error_code=?,updated_at=? WHERE id=? AND state='leased' AND lease_owner=?")
+            .bind(state).bind(available_at).bind(safe_error_code).bind(now).bind(blob(id.as_uuid())).bind(owner).execute(w.connection()).await?;
+        if result.rows_affected() == 1 {
+            Ok(disposition)
+        } else {
+            Err(OperationalRepositoryError::LeaseLost)
+        }
+    }
+    async fn dead_letter_jobs(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<JobRecord>, OperationalRepositoryError> {
+        let mut c = self.account.acquire().await?;
+        let rows = sqlx::query("SELECT id,job_kind,state,payload_json,idempotency_key,priority,attempt_count,max_attempts,available_at,created_at,updated_at FROM account_jobs WHERE state='dead_letter' ORDER BY updated_at DESC,id LIMIT ?")
+            .bind(i64::from(limit.min(1_000))).fetch_all(&mut *c).await?;
+        rows.iter().map(sqlite_job).collect()
+    }
 }
 
 #[cfg(feature = "postgres")]
@@ -574,6 +699,129 @@ impl OperationalRepository for PostgresOperationalRepository {
         c.close().await?;
         row.map(|r| pg_job(&r)).transpose()
     }
+    async fn lease_job(
+        &self,
+        owner: &str,
+        now: i64,
+        lease_expires_at: i64,
+    ) -> Result<Option<JobLease>, OperationalRepositoryError> {
+        validate_lease(owner, now, lease_expires_at)?;
+        let mut c = self.connection().await?;
+        let row = sqlx::query("WITH candidate AS (SELECT id FROM jobs.account_jobs WHERE account_id=$1 AND available_at<=$2 AND (state IN ('pending','retry_wait') OR (state='leased' AND lease_expires_at<=$2)) ORDER BY priority DESC,available_at,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE jobs.account_jobs j SET state='leased',lease_owner=$3,lease_expires_at=$4,last_heartbeat_at=$2,attempt_count=j.attempt_count+1,updated_at=$2 FROM candidate WHERE j.account_id=$1 AND j.id=candidate.id RETURNING j.id,j.job_kind,j.state,j.payload,j.idempotency_key,j.priority,j.attempt_count,j.max_attempts,j.available_at,j.created_at,j.updated_at")
+            .bind(self.account_id.as_uuid()).bind(now).bind(owner).bind(lease_expires_at).fetch_optional(&mut c).await?;
+        c.close().await?;
+        row.map(|row| {
+            pg_job(&row).map(|job| JobLease {
+                job,
+                owner: owner.to_owned(),
+                expires_at: lease_expires_at,
+            })
+        })
+        .transpose()
+    }
+    async fn heartbeat_job(
+        &self,
+        id: JobId,
+        owner: &str,
+        now: i64,
+        lease_expires_at: i64,
+    ) -> Result<bool, OperationalRepositoryError> {
+        validate_lease(owner, now, lease_expires_at)?;
+        let mut c = self.connection().await?;
+        let result = sqlx::query("UPDATE jobs.account_jobs SET lease_expires_at=$1,last_heartbeat_at=$2,updated_at=$2 WHERE account_id=$3 AND id=$4 AND state='leased' AND lease_owner=$5 AND lease_expires_at>$2")
+            .bind(lease_expires_at).bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).bind(owner).execute(&mut c).await?;
+        c.close().await?;
+        Ok(result.rows_affected() == 1)
+    }
+    async fn complete_job(
+        &self,
+        id: JobId,
+        owner: &str,
+        now: i64,
+    ) -> Result<bool, OperationalRepositoryError> {
+        let mut c = self.connection().await?;
+        let result = sqlx::query("UPDATE jobs.account_jobs SET state='completed',lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,completed_at=$1,updated_at=$1 WHERE account_id=$2 AND id=$3 AND ((state='leased' AND lease_owner=$4) OR state='completed')")
+            .bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).bind(owner).execute(&mut c).await?;
+        c.close().await?;
+        Ok(result.rows_affected() == 1)
+    }
+    async fn retry_job(
+        &self,
+        id: JobId,
+        owner: &str,
+        now: i64,
+        base_delay_millis: i64,
+        max_delay_millis: i64,
+        safe_error_code: &str,
+    ) -> Result<JobRetryDisposition, OperationalRepositoryError> {
+        let job = self
+            .job(id)
+            .await?
+            .ok_or(OperationalRepositoryError::JobNotFound)?;
+        let disposition = retry_disposition(&job, now, base_delay_millis, max_delay_millis)?;
+        let (state, available_at) = match disposition {
+            JobRetryDisposition::RetryAt(at) => ("retry_wait", at),
+            JobRetryDisposition::DeadLetter => ("dead_letter", now),
+        };
+        let mut c = self.connection().await?;
+        let result = sqlx::query("UPDATE jobs.account_jobs SET state=$1,available_at=$2,lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,safe_error_code=$3,updated_at=$4 WHERE account_id=$5 AND id=$6 AND state='leased' AND lease_owner=$7")
+            .bind(state).bind(available_at).bind(safe_error_code).bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).bind(owner).execute(&mut c).await?;
+        c.close().await?;
+        if result.rows_affected() == 1 {
+            Ok(disposition)
+        } else {
+            Err(OperationalRepositoryError::LeaseLost)
+        }
+    }
+    async fn dead_letter_jobs(
+        &self,
+        limit: u32,
+    ) -> Result<Vec<JobRecord>, OperationalRepositoryError> {
+        let mut c = self.connection().await?;
+        let rows = sqlx::query("SELECT id,job_kind,state,payload,idempotency_key,priority,attempt_count,max_attempts,available_at,created_at,updated_at FROM jobs.account_jobs WHERE account_id=$1 AND state='dead_letter' ORDER BY updated_at DESC,id LIMIT $2")
+            .bind(self.account_id.as_uuid()).bind(i64::from(limit.min(1_000))).fetch_all(&mut c).await?;
+        c.close().await?;
+        rows.iter().map(pg_job).collect()
+    }
+}
+
+fn validate_lease(
+    owner: &str,
+    now: i64,
+    expires_at: i64,
+) -> Result<(), OperationalRepositoryError> {
+    if owner.trim().is_empty() || expires_at <= now {
+        Err(OperationalRepositoryError::InvalidLease)
+    } else {
+        Ok(())
+    }
+}
+
+fn retry_disposition(
+    job: &JobRecord,
+    now: i64,
+    base: i64,
+    maximum: i64,
+) -> Result<JobRetryDisposition, OperationalRepositoryError> {
+    if base <= 0 || maximum < base {
+        return Err(OperationalRepositoryError::InvalidRetryPolicy);
+    }
+    if job.attempt_count >= job.max_attempts {
+        return Ok(JobRetryDisposition::DeadLetter);
+    }
+    let exponent = u32::try_from(job.attempt_count.saturating_sub(1))
+        .unwrap_or(62)
+        .min(20);
+    let exponential = base.saturating_mul(1_i64 << exponent).min(maximum);
+    let job_uuid = job.id.as_uuid();
+    let bytes = job_uuid.as_bytes();
+    let seed = i64::from(u16::from_be_bytes([bytes[14], bytes[15]]));
+    let jitter = seed % (exponential / 4 + 1);
+    let available_at = now
+        .checked_add(exponential)
+        .and_then(|value| value.checked_add(jitter))
+        .ok_or(OperationalRepositoryError::InvalidRetryPolicy)?;
+    Ok(JobRetryDisposition::RetryAt(available_at))
 }
 
 fn validate_period(start: i64, end: i64) -> Result<(), OperationalRepositoryError> {
@@ -912,4 +1160,12 @@ pub enum OperationalRepositoryError {
     AccountMismatch,
     #[error("operational storage contains an invalid value")]
     InvalidStoredValue,
+    #[error("job lease owner or expiry is invalid")]
+    InvalidLease,
+    #[error("job retry policy is invalid")]
+    InvalidRetryPolicy,
+    #[error("job was not found")]
+    JobNotFound,
+    #[error("job lease is no longer owned by this worker")]
+    LeaseLost,
 }

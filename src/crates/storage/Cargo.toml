@@ -88,6 +88,34 @@ name = "local-password"
 path = "../../../tests/rust/storage/local_password.rs"
 
 [[test]]
+name = "segment-codec"
+path = "../../../tests/rust/storage/segment_codec.rs"
+
+[[test]]
+name = "compaction"
+path = "../../../tests/rust/storage/compaction.rs"
+
+[[test]]
+name = "merged-reader"
+path = "../../../tests/rust/storage/merged_reader.rs"
+
+[[test]]
+name = "overlay-folding"
+path = "../../../tests/rust/storage/overlay_folding.rs"
+
+[[test]]
+name = "rollup-builder"
+path = "../../../tests/rust/storage/rollup_builder.rs"
+
+[[test]]
+name = "summary-rebuild"
+path = "../../../tests/rust/storage/summary_rebuild.rs"
+
+[[test]]
+name = "integrity-planner"
+path = "../../../tests/rust/storage/integrity_planner.rs"
+
+[[test]]
 name = "rbac-repositories"
 path = "../../../tests/rust/storage/rbac_repositories.rs"
 

@@ -1,0 +1,64 @@
+syntax = "proto3";
+
+package pvlog.telemetry.segment.v1;
+
+// Deterministic system-day payload. Writers emit columns and extended_channels
+// in ascending field/channel order and reject unknown schema versions.
+message SegmentEnvelope {
+  uint32 schema_version = 1; // Always 1 for this message.
+  bytes system_id_uuid = 2; // Exactly 16 canonical UUID bytes.
+  sint64 range_start_epoch_millis = 3;
+  sint64 range_end_epoch_millis = 4;
+  uint32 row_count = 5;
+  sint64 base_timestamp_epoch_millis = 6;
+  repeated sint64 timestamp_delta_millis = 7 [packed = true];
+  repeated IntegerColumn columns = 8;
+  repeated ExtendedColumn extended_channels = 9;
+  repeated Provenance provenance_dictionary = 10;
+  repeated uint32 provenance_index = 11 [packed = true];
+  repeated uint32 quality_flags = 12 [packed = true];
+}
+
+message IntegerColumn {
+  Field field = 1;
+  bytes presence_bitmap = 2; // LSB-first; trailing unused bits are zero.
+  sint32 decimal_scale = 3; // Base-unit columns use zero.
+  repeated sint64 delta_values = 4 [packed = true];
+}
+
+message ExtendedColumn {
+  bytes channel_id_uuid = 1;
+  ValueType value_type = 2;
+  bytes presence_bitmap = 3;
+  sint32 decimal_scale = 4;
+  repeated sint64 delta_values = 5 [packed = true];
+  bytes boolean_values_bitmap = 6;
+}
+
+message Provenance {
+  string source_kind = 1;
+  string source_reference = 2;
+  sint64 received_at_delta_millis = 3;
+}
+
+enum Field {
+  FIELD_UNSPECIFIED = 0;
+  GENERATION_POWER_WATTS = 1;
+  GENERATION_ENERGY_WATT_HOURS = 2;
+  CONSUMPTION_POWER_WATTS = 3;
+  CONSUMPTION_ENERGY_WATT_HOURS = 4;
+  GRID_IMPORT_POWER_WATTS = 5;
+  GRID_EXPORT_POWER_WATTS = 6;
+  VOLTAGE_MILLIVOLTS = 7;
+  TEMPERATURE_MILLIDEGREES_CELSIUS = 8;
+  BATTERY_ENERGY_WATT_HOURS = 9;
+  BATTERY_POWER_WATTS = 10;
+  BATTERY_STATE_OF_CHARGE_BASIS_POINTS = 11;
+}
+
+enum ValueType {
+  VALUE_TYPE_UNSPECIFIED = 0;
+  INTEGER = 1;
+  DECIMAL_SCALED = 2;
+  BOOLEAN = 3;
+}
