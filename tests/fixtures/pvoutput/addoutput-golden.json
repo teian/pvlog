@@ -1,0 +1,22 @@
+{
+  "minimumGet": {
+    "query": "key=write-key&sid=42&d=20240229&g=12000",
+    "status": 200,
+    "body": "Added Output"
+  },
+  "csvBatchPost": {
+    "form": "data=20240228%2C10000%2C2000%2C5000%2C13%3A15%2CFine%2C10.2%2C21.2%2C%22clear%2C+bright%22%2C%2C%2C%2C%2C8000%2C1000%2C500%2C250%2C250%3B20240229%2C11000%2C3000",
+    "status": 200,
+    "body": "Added Output"
+  },
+  "futureDate": {
+    "query": "key=write-key&sid=42&d=20250101&g=1000",
+    "status": 400,
+    "body": "Bad request 400: Date 20250101 too new"
+  },
+  "invalidTemperaturePair": {
+    "query": "key=write-key&sid=42&d=20240229&g=1000&tm=10.0",
+    "status": 400,
+    "body": "Bad request 400: Min/Max temp missing or invalid"
+  }
+}

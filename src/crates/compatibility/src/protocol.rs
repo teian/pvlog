@@ -179,6 +179,47 @@ pub fn csv_record<'a>(fields: impl IntoIterator<Item = Option<&'a str>>) -> Stri
         .join(",")
 }
 
+/// Parses one RFC 4180-style record while retaining empty fields.
+/// # Errors
+/// Returns an error for unterminated quotes or characters following a closing quote.
+pub fn parse_csv_record(value: &str) -> Result<Vec<String>, LegacyProtocolError> {
+    let mut fields = Vec::new();
+    let mut field = String::new();
+    let mut characters = value.chars().peekable();
+    let mut quoted = false;
+    let mut closed_quote = false;
+    while let Some(character) = characters.next() {
+        if quoted {
+            if character == '"' {
+                if characters.peek() == Some(&'"') {
+                    field.push('"');
+                    let _ = characters.next();
+                } else {
+                    quoted = false;
+                    closed_quote = true;
+                }
+            } else {
+                field.push(character);
+            }
+        } else {
+            match character {
+                '"' if field.is_empty() && !closed_quote => quoted = true,
+                ',' => {
+                    fields.push(std::mem::take(&mut field));
+                    closed_quote = false;
+                }
+                _ if closed_quote => return Err(LegacyProtocolError::InvalidCsv),
+                _ => field.push(character),
+            }
+        }
+    }
+    if quoted {
+        return Err(LegacyProtocolError::InvalidCsv);
+    }
+    fields.push(field);
+    Ok(fields)
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LegacySuccess {
     AddedOutput,
@@ -266,4 +307,6 @@ pub enum LegacyProtocolError {
     InvalidTime,
     #[error("legacy boolean is invalid")]
     InvalidBoolean,
+    #[error("legacy CSV record is invalid")]
+    InvalidCsv,
 }

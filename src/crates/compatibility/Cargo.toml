@@ -7,6 +7,7 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+async-trait.workspace = true
 axum.workspace = true
 pvlog-application = { path = "../application" }
 pvlog-domain = { path = "../domain" }
@@ -17,9 +18,17 @@ time.workspace = true
 tracing.workspace = true
 url.workspace = true
 
+[dev-dependencies]
+tokio.workspace = true
+tower.workspace = true
+
 [[test]]
 name = "legacy-protocol"
 path = "../../../tests/compatibility/legacy_protocol.rs"
+
+[[test]]
+name = "add-output"
+path = "../../../tests/compatibility/add_output.rs"
 
 [lib]
 path = "src/lib.rs"

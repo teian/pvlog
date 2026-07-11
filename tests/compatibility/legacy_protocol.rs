@@ -1,8 +1,8 @@
 use axum::http::{HeaderMap, HeaderValue};
 use pvlog_compatibility::{
     LegacyError, LegacyErrorKind, LegacyMethod, LegacyParameters, LegacyProtocolError,
-    LegacySuccess, csv_record, format_legacy_date, format_legacy_time, parse_legacy_auth,
-    parse_legacy_bool, parse_legacy_date, parse_legacy_time,
+    LegacySuccess, csv_record, format_legacy_date, format_legacy_time, parse_csv_record,
+    parse_legacy_auth, parse_legacy_bool, parse_legacy_date, parse_legacy_time,
 };
 use serde::Deserialize;
 use std::error::Error;
@@ -113,9 +113,14 @@ fn golden_dates_times_booleans_and_csv_are_stable() -> Result<(), Box<dyn Error>
         assert_eq!(parse_legacy_bool(&case.input)?, case.value);
     }
     for case in golden.csv {
+        let output = csv_record(case.fields.iter().map(|field| field.as_deref()));
+        assert_eq!(output, case.output);
         assert_eq!(
-            csv_record(case.fields.iter().map(|field| field.as_deref())),
-            case.output
+            parse_csv_record(&output)?,
+            case.fields
+                .into_iter()
+                .map(Option::unwrap_or_default)
+                .collect::<Vec<_>>()
         );
     }
     Ok(())
