@@ -72,7 +72,7 @@ pub use equipment_catalog::{
 };
 pub use equipment_configuration::{
     EquipmentConfigurationError, confirm_inverter_snapshot, confirm_module_snapshot,
-    confirm_string_composition,
+    confirm_string_composition, prefill_inverter_from_catalog, prefill_module_from_catalog,
 };
 pub use identity_linking::{
     ExternalIdentityLinkingError, ExternalIdentityLinkingRepository,

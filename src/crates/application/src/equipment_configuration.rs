@@ -1,8 +1,8 @@
 //! Validation and confirmation of editable catalog-prefilled equipment values.
 
 use pvlog_domain::{
-    EquipmentValueProvenance, InverterSpecificationSnapshot, PvStringModuleComposition,
-    SolarModuleSpecificationSnapshot,
+    CatalogEntryId, EquipmentTemplateReference, EquipmentValueProvenance,
+    InverterSpecificationSnapshot, PvStringModuleComposition, SolarModuleSpecificationSnapshot,
 };
 use thiserror::Error;
 
@@ -11,6 +11,57 @@ use crate::EquipmentCatalog;
 const MAXIMUM_MODULE_COUNT: u32 = 10_000;
 const MAXIMUM_MODULE_POWER_WATTS: u32 = 10_000;
 const MAXIMUM_STRING_POWER_WATTS: u64 = 100_000_000;
+
+/// Copies the currently bundled inverter template into an editable, unsaved draft.
+///
+/// Calling this function is the explicit reapplication action. It does not receive a repository
+/// and therefore cannot mutate an already configured inverter.
+///
+/// # Errors
+/// Returns an error when the selected catalog entry does not exist.
+pub fn prefill_inverter_from_catalog(
+    catalog: &EquipmentCatalog,
+    entry_id: &CatalogEntryId,
+) -> Result<InverterSpecificationSnapshot, EquipmentConfigurationError> {
+    let entry = catalog
+        .inverter(entry_id)
+        .ok_or(EquipmentConfigurationError::UnknownTemplate)?;
+    Ok(InverterSpecificationSnapshot {
+        manufacturer: entry.manufacturer.clone(),
+        model: entry.model.clone(),
+        dc: entry.dc.clone(),
+        ac: entry.ac.clone(),
+        operational: entry.operational.clone(),
+        template: Some(EquipmentTemplateReference {
+            entry_id: entry.id.clone(),
+            revision: entry.revision.clone(),
+            value_provenance: EquipmentValueProvenance::CatalogCopied,
+        }),
+    })
+}
+
+/// Copies the currently bundled solar-module template into an editable, unsaved draft.
+///
+/// # Errors
+/// Returns an error when the selected catalog entry does not exist.
+pub fn prefill_module_from_catalog(
+    catalog: &EquipmentCatalog,
+    entry_id: &CatalogEntryId,
+) -> Result<SolarModuleSpecificationSnapshot, EquipmentConfigurationError> {
+    let entry = catalog
+        .solar_module(entry_id)
+        .ok_or(EquipmentConfigurationError::UnknownTemplate)?;
+    Ok(SolarModuleSpecificationSnapshot {
+        manufacturer: entry.manufacturer.clone(),
+        model: entry.model.clone(),
+        specification: entry.specification.clone(),
+        template: Some(EquipmentTemplateReference {
+            entry_id: entry.id.clone(),
+            revision: entry.revision.clone(),
+            value_provenance: EquipmentValueProvenance::CatalogCopied,
+        }),
+    })
+}
 
 /// Validates confirmed inverter values and classifies optional catalog provenance.
 ///
