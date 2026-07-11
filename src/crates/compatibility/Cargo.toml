@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 async-trait.workspace = true
 axum.workspace = true
+chrono-tz.workspace = true
 pvlog-application = { path = "../application" }
 pvlog-domain = { path = "../domain" }
 serde.workspace = true
@@ -58,6 +59,10 @@ path = "../../../tests/compatibility/legacy_community.rs"
 [[test]]
 name = "legacy-teams"
 path = "../../../tests/compatibility/legacy_teams.rs"
+
+[[test]]
+name = "legacy-providers"
+path = "../../../tests/compatibility/legacy_providers.rs"
 
 [lib]
 path = "src/lib.rs"
