@@ -227,6 +227,12 @@ pub trait ManagementRepository: Send + Sync {
         permission: Permission,
         now: i64,
     ) -> Result<bool, ManagementRepositoryError>;
+    async fn user_is_instance_authorized(
+        &self,
+        user_id: UserId,
+        permission: Permission,
+        now: i64,
+    ) -> Result<bool, ManagementRepositoryError>;
     async fn routing(
         &self,
         account_id: AccountId,
@@ -766,6 +772,34 @@ impl ManagementRepository for SqliteManagementRepository {
         Ok(allowed)
     }
 
+    async fn user_is_instance_authorized(
+        &self,
+        user_id: UserId,
+        permission: Permission,
+        now: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let allowed = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM rbac_role_assignments assignment \
+             JOIN rbac_roles role ON role.id=assignment.role_id AND role.account_id IS NULL \
+             JOIN rbac_role_permissions role_permission ON role_permission.role_id=role.id \
+             JOIN users user_record ON user_record.id=assignment.principal_id \
+                  AND user_record.status='active' \
+             WHERE assignment.principal_type='user' AND assignment.principal_id=? \
+               AND assignment.scope_type='instance' AND assignment.account_id IS NULL \
+               AND assignment.system_id IS NULL AND assignment.revoked_at IS NULL \
+               AND (assignment.expires_at IS NULL OR assignment.expires_at>?) \
+               AND role_permission.permission=?)",
+        )
+        .bind(uuid_blob(user_id.as_uuid()))
+        .bind(now)
+        .bind(permission_name(permission))
+        .fetch_one(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(allowed)
+    }
+
     async fn routing(
         &self,
         account_id: AccountId,
@@ -1094,6 +1128,19 @@ impl ManagementRepository for PostgresManagementRepository {
         Ok(allowed)
     }
 
+    async fn user_is_instance_authorized(
+        &self,
+        user_id: UserId,
+        permission: Permission,
+        now: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let allowed = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM management.rbac_role_assignments assignment JOIN management.rbac_roles role ON role.account_id IS NULL AND role.id=assignment.role_id JOIN management.rbac_role_permissions role_permission ON role_permission.account_id IS NULL AND role_permission.role_id=role.id JOIN management.users user_record ON user_record.id=assignment.principal_id AND user_record.status='active' WHERE assignment.principal_type='user' AND assignment.principal_id=$1 AND assignment.scope_type='instance' AND assignment.account_id IS NULL AND assignment.system_id IS NULL AND assignment.revoked_at IS NULL AND (assignment.expires_at IS NULL OR assignment.expires_at>$2) AND role_permission.permission=$3)")
+            .bind(user_id.as_uuid()).bind(now).bind(permission_name(permission)).fetch_one(&mut connection).await?;
+        connection.close().await?;
+        Ok(allowed)
+    }
+
     async fn routing(
         &self,
         account_id: AccountId,
@@ -1251,6 +1298,14 @@ impl ManagementRepository for SqliteManagementRepository {
     ) -> Result<bool, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
     }
+    async fn user_is_instance_authorized(
+        &self,
+        _: UserId,
+        _: Permission,
+        _: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
+    }
     async fn routing(
         &self,
         _: AccountId,
@@ -1383,6 +1438,14 @@ impl ManagementRepository for PostgresManagementRepository {
         _: PrincipalId,
         _: AccountId,
         _: Option<SystemId>,
+        _: Permission,
+        _: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("postgres"))
+    }
+    async fn user_is_instance_authorized(
+        &self,
+        _: UserId,
         _: Permission,
         _: i64,
     ) -> Result<bool, ManagementRepositoryError> {

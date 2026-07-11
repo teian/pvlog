@@ -65,6 +65,15 @@ struct AllowAuthorizer {
 
 #[async_trait]
 impl ModernRequestAuthorizer for AllowAuthorizer {
+    async fn authorize_instance(
+        &self,
+        _principal: PrincipalId,
+        _permission: Permission,
+        _action: &'static str,
+    ) -> Result<UserId, RequestAuthorizationError> {
+        Ok(self.actor)
+    }
+
     async fn authorize_account(
         &self,
         _principal: PrincipalId,

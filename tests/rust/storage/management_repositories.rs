@@ -15,7 +15,7 @@ use pvlog_storage::{
     SessionRecord, SqliteAccountProvisioner, SqliteManagementRepository, SystemRegistryRecord,
     UserRecord, apply_migrations,
 };
-use sqlx::{Connection as _, PgConnection};
+use sqlx::{Connection as _, PgConnection, SqliteConnection, sqlite::SqliteConnectOptions};
 use tempfile::TempDir;
 use uuid::Uuid;
 
@@ -108,6 +108,75 @@ async fn sqlite_browser_sessions_are_revocable_and_limited() -> Result<(), Box<d
             .authenticate(&second.session_cookie.value, None, false)
             .await
             .is_err()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_instance_rbac_authorizes_only_explicit_active_user_roles()
+-> Result<(), Box<dyn Error>> {
+    let directory = TempDir::new()?;
+    let management_path = directory.path().join("management.sqlite3");
+    apply_migrations(&DatabaseTarget::Sqlite {
+        management_path: management_path.clone(),
+        accounts_dir: directory.path().join("accounts"),
+    })
+    .await?;
+    let repository = SqliteManagementRepository::new(management_path.clone());
+    let user_id = UserId::new();
+    repository
+        .save_user(&UserRecord {
+            id: user_id,
+            email: "instance-admin@example.test".to_owned(),
+            display_name: "Instance admin".to_owned(),
+            status: "active".to_owned(),
+            created_at: 1,
+            updated_at: 1,
+        })
+        .await?;
+    let mut connection = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(&management_path)
+            .create_if_missing(false)
+            .foreign_keys(true),
+    )
+    .await?;
+    let role_id = Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO rbac_roles (id,account_id,name,role_kind,created_by,created_at,updated_at) \
+         VALUES (?,NULL,'instance-admin','custom',?,1,1)",
+    )
+    .bind(role_id.as_bytes().as_slice())
+    .bind(user_id.as_uuid().as_bytes().as_slice())
+    .execute(&mut connection)
+    .await?;
+    sqlx::query(
+        "INSERT INTO rbac_role_permissions (role_id,permission) VALUES (?,'instance_manage')",
+    )
+    .bind(role_id.as_bytes().as_slice())
+    .execute(&mut connection)
+    .await?;
+    sqlx::query(
+        "INSERT INTO rbac_role_assignments \
+         (id,role_id,principal_type,principal_id,scope_type,account_id,system_id,delegated_by,created_at) \
+         VALUES (?,?,'user',?,'instance',NULL,NULL,?,1)",
+    )
+    .bind(Uuid::now_v7().as_bytes().as_slice())
+    .bind(role_id.as_bytes().as_slice())
+    .bind(user_id.as_uuid().as_bytes().as_slice())
+    .bind(user_id.as_uuid().as_bytes().as_slice())
+    .execute(&mut connection)
+    .await?;
+    connection.close().await?;
+    assert!(
+        repository
+            .user_is_instance_authorized(user_id, Permission::InstanceManage, 50)
+            .await?
+    );
+    assert!(
+        !repository
+            .user_is_instance_authorized(UserId::new(), Permission::InstanceManage, 50)
+            .await?
     );
     Ok(())
 }
@@ -353,6 +422,11 @@ async fn verify_contract(
                 Permission::TelemetryWrite,
                 50,
             )
+            .await?
+    );
+    assert!(
+        !repository
+            .user_is_instance_authorized(fixture.user_id, Permission::InstanceManage, 50)
             .await?
     );
     assert!(

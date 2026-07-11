@@ -32,6 +32,7 @@ pub fn session_digest_key(session_secret: &SecretString) -> [u8; 32] {
 pub struct ManagementRequestAuthorizer {
     repository: Arc<dyn ManagementRepository>,
     boundary: AuthorizationBoundary,
+    clock: Arc<dyn Clock>,
 }
 
 impl ManagementRequestAuthorizer {
@@ -39,11 +40,12 @@ impl ManagementRequestAuthorizer {
     pub fn new(repository: Arc<dyn ManagementRepository>, clock: Arc<dyn Clock>) -> Self {
         let ports = Arc::new(ManagementAuthorizationPorts {
             repository: repository.clone(),
-            clock,
+            clock: clock.clone(),
         });
         Self {
             repository,
             boundary: AuthorizationBoundary::new(ports),
+            clock,
         }
     }
 
@@ -67,6 +69,30 @@ impl ManagementRequestAuthorizer {
 
 #[async_trait]
 impl pvlog_api::ModernRequestAuthorizer for ManagementRequestAuthorizer {
+    async fn authorize_instance(
+        &self,
+        principal: PrincipalId,
+        permission: Permission,
+        action: &'static str,
+    ) -> Result<UserId, pvlog_api::RequestAuthorizationError> {
+        let PrincipalId::User(user_id) = principal else {
+            return Err(pvlog_api::RequestAuthorizationError::Forbidden);
+        };
+        let now = i64::try_from(self.clock.now().epoch_millis())
+            .map_err(|_| pvlog_api::RequestAuthorizationError::Unavailable)?;
+        let authorized = self
+            .repository
+            .user_is_instance_authorized(user_id, permission, now)
+            .await
+            .map_err(|_| pvlog_api::RequestAuthorizationError::Unavailable)?;
+        append_instance_audit(&*self.repository, user_id, action, authorized, now)
+            .await
+            .map_err(|_| pvlog_api::RequestAuthorizationError::Unavailable)?;
+        authorized
+            .then_some(user_id)
+            .ok_or(pvlog_api::RequestAuthorizationError::Forbidden)
+    }
+
     async fn authorize_account(
         &self,
         principal: PrincipalId,
@@ -115,6 +141,36 @@ impl pvlog_api::ModernRequestAuthorizer for ManagementRequestAuthorizer {
             account_id: route.account_id,
         })
     }
+}
+
+async fn append_instance_audit(
+    repository: &dyn ManagementRepository,
+    actor: UserId,
+    action: &'static str,
+    authorized: bool,
+    now: i64,
+) -> Result<(), pvlog_storage::ManagementRepositoryError> {
+    let id = AuditEventId::new();
+    let mut event_hash = [0_u8; 32];
+    event_hash[..16].copy_from_slice(id.as_uuid().as_bytes());
+    event_hash[16..].copy_from_slice(id.as_uuid().as_bytes());
+    repository
+        .append_audit(&AuditRecord {
+            id,
+            occurred_at: now,
+            request_id: None,
+            actor_type: "user".to_owned(),
+            actor_id: Some(actor.as_uuid()),
+            account_id: None,
+            action: action.to_owned(),
+            target_type: "instance".to_owned(),
+            target_id: None,
+            outcome: if authorized { "succeeded" } else { "denied" }.to_owned(),
+            previous_event_hash: None,
+            event_hash,
+            safe_metadata: serde_json::json!({}),
+        })
+        .await
 }
 
 struct ManagementAuthorizationPorts {

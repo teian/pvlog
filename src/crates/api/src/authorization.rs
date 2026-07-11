@@ -15,6 +15,12 @@ pub struct AuthorizedRequest {
 /// Runtime authorization service for account- and system-addressed API requests.
 #[async_trait]
 pub trait ModernRequestAuthorizer: Send + Sync {
+    async fn authorize_instance(
+        &self,
+        principal: PrincipalId,
+        permission: Permission,
+        action: &'static str,
+    ) -> Result<UserId, RequestAuthorizationError>;
     async fn authorize_account(
         &self,
         principal: PrincipalId,

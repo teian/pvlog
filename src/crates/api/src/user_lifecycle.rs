@@ -13,17 +13,25 @@ use pvlog_application::{
     AdminUserActor, CreateLocalUser, InviteLocalUser, RegisterLocalUser, UserLifecycleError,
     UserLifecycleUseCases,
 };
-use pvlog_domain::UserId;
+use pvlog_domain::{Permission, UserId};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Serialize};
+
+use crate::{
+    ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal, principal_identity,
+};
 
 #[derive(Clone)]
 struct LifecycleApiState {
     service: Arc<dyn UserLifecycleUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
 }
 
 /// Creates the local-user administration and public activation routes.
-pub fn user_lifecycle_router(service: Arc<dyn UserLifecycleUseCases>) -> Router {
+pub fn user_lifecycle_router(
+    service: Arc<dyn UserLifecycleUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
+) -> Router {
     Router::new()
         .route("/api/v1/admin/users", post(create_user))
         .route("/api/v1/admin/user-invitations", post(invite_user))
@@ -33,7 +41,10 @@ pub fn user_lifecycle_router(service: Arc<dyn UserLifecycleUseCases>) -> Router 
         .route("/api/v1/admin/users/{id}", delete(delete_user))
         .route("/api/v1/auth/register", post(register))
         .route("/api/v1/auth/invitations/accept", post(accept_invitation))
-        .with_state(LifecycleApiState { service })
+        .with_state(LifecycleApiState {
+            service,
+            authorizer,
+        })
 }
 
 #[derive(Debug, Deserialize)]
@@ -86,13 +97,13 @@ struct AcceptedResponse {
 
 async fn create_user(
     State(state): State<LifecycleApiState>,
-    actor: Option<Extension<AdminUserActor>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Json(body): Json<CreateUserBody>,
 ) -> Result<Response, LifecycleApiError> {
     let user = state
         .service
         .create_user(
-            admin(actor)?,
+            admin(&state, principal, "user.create").await?,
             CreateLocalUser {
                 email: body.email,
                 display_name: body.display_name,
@@ -105,12 +116,15 @@ async fn create_user(
 
 async fn invite_user(
     State(state): State<LifecycleApiState>,
-    actor: Option<Extension<AdminUserActor>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Json(body): Json<InviteUserBody>,
 ) -> Result<Response, LifecycleApiError> {
     let result = state
         .service
-        .invite_user(admin(actor)?, InviteLocalUser { email: body.email })
+        .invite_user(
+            admin(&state, principal, "user.invite").await?,
+            InviteLocalUser { email: body.email },
+        )
         .await?;
     Ok((
         StatusCode::CREATED,
@@ -150,48 +164,75 @@ async fn accept_invitation(
 
 async fn activate_user(
     State(state): State<LifecycleApiState>,
-    actor: Option<Extension<AdminUserActor>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(id): Path<UserId>,
     Json(body): Json<ActivationBody>,
 ) -> Result<Response, LifecycleApiError> {
     let user = state
         .service
-        .activate(admin(actor)?, id, body.email_verified)
+        .activate(
+            admin(&state, principal, "user.activate").await?,
+            id,
+            body.email_verified,
+        )
         .await?;
     Ok(Json(user).into_response())
 }
 
 async fn disable_user(
     State(state): State<LifecycleApiState>,
-    actor: Option<Extension<AdminUserActor>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(id): Path<UserId>,
 ) -> Result<Response, LifecycleApiError> {
-    let user = state.service.disable(admin(actor)?, id).await?;
+    let user = state
+        .service
+        .disable(admin(&state, principal, "user.disable").await?, id)
+        .await?;
     Ok(Json(user).into_response())
 }
 
 async fn unlock_user(
     State(state): State<LifecycleApiState>,
-    actor: Option<Extension<AdminUserActor>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(id): Path<UserId>,
 ) -> Result<Response, LifecycleApiError> {
-    let user = state.service.unlock(admin(actor)?, id).await?;
+    let user = state
+        .service
+        .unlock(admin(&state, principal, "user.unlock").await?, id)
+        .await?;
     Ok(Json(user).into_response())
 }
 
 async fn delete_user(
     State(state): State<LifecycleApiState>,
-    actor: Option<Extension<AdminUserActor>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(id): Path<UserId>,
 ) -> Result<Response, LifecycleApiError> {
-    state.service.delete(admin(actor)?, id).await?;
+    state
+        .service
+        .delete(admin(&state, principal, "user.delete").await?, id)
+        .await?;
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
-fn admin(actor: Option<Extension<AdminUserActor>>) -> Result<AdminUserActor, LifecycleApiError> {
-    actor
-        .map(|Extension(actor)| actor)
-        .ok_or(UserLifecycleError::Forbidden.into())
+async fn admin(
+    state: &LifecycleApiState,
+    principal: Option<Extension<RequestPrincipal>>,
+    action: &'static str,
+) -> Result<AdminUserActor, LifecycleApiError> {
+    let Extension(principal) = principal.ok_or(UserLifecycleError::Forbidden)?;
+    let user_id = state
+        .authorizer
+        .authorize_instance(
+            principal_identity(&principal),
+            Permission::InstanceManage,
+            action,
+        )
+        .await?;
+    Ok(AdminUserActor {
+        user_id,
+        can_manage_users: true,
+    })
 }
 
 fn accepted() -> Response {
@@ -207,6 +248,16 @@ struct LifecycleApiError(UserLifecycleError);
 impl From<UserLifecycleError> for LifecycleApiError {
     fn from(value: UserLifecycleError) -> Self {
         Self(value)
+    }
+}
+impl From<RequestAuthorizationError> for LifecycleApiError {
+    fn from(value: RequestAuthorizationError) -> Self {
+        match value {
+            RequestAuthorizationError::Forbidden | RequestAuthorizationError::NotFound => {
+                UserLifecycleError::Forbidden.into()
+            }
+            RequestAuthorizationError::Unavailable => UserLifecycleError::Persistence.into(),
+        }
     }
 }
 

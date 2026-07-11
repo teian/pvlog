@@ -192,7 +192,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
     let router = pvlog_api::with_request_authentication(
         pvlog_api::router(env!("CARGO_PKG_VERSION"))
-            .merge(pvlog_api::user_lifecycle_router(user_lifecycle))
+            .merge(pvlog_api::user_lifecycle_router(
+                user_lifecycle,
+                request_authorizer.clone(),
+            ))
             .merge(pvlog_api::local_password_router(local_password))
             .merge(pvlog_api::systems_router(
                 system_lifecycle,

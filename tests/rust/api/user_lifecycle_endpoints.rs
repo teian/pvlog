@@ -8,21 +8,26 @@ use axum::{
     body::Body,
     http::{Method, Request},
 };
-use pvlog_api::{RequestPrincipal, local_password_router, user_lifecycle_router};
+use pvlog_api::{
+    AuthorizedRequest, ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal,
+    local_password_router, user_lifecycle_router,
+};
 use pvlog_application::{
     AdminUserActor, AuthenticatePassword, AuthenticationOutcome, ChangePassword, CreateLocalUser,
     InvitationResult, InviteLocalUser, LifecycleUserRecord, LocalPasswordUseCases,
     PasswordServiceError, PublicLifecycleOutcome, RegisterLocalUser, SetInitialPassword,
     UserLifecycleError, UserLifecycleUseCases,
 };
-use pvlog_domain::{UserId, UserInvitationId, UserStatus};
+use pvlog_domain::{
+    AccountId, Permission, PrincipalId, SystemId, UserId, UserInvitationId, UserStatus,
+};
 use secrecy::SecretString;
 use tower::ServiceExt as _;
 
 #[tokio::test]
 async fn public_lifecycle_responses_do_not_disclose_account_existence() -> Result<(), Box<dyn Error>>
 {
-    let app = user_lifecycle_router(Arc::new(StubLifecycle));
+    let app = user_lifecycle_router(Arc::new(StubLifecycle), Arc::new(DenyAuthorizer));
     let first = request(
         &app,
         "/api/v1/auth/register",
@@ -51,7 +56,7 @@ async fn public_lifecycle_responses_do_not_disclose_account_existence() -> Resul
 #[tokio::test]
 async fn administration_requires_an_authorized_actor() -> Result<(), Box<dyn Error>> {
     let service = Arc::new(StubLifecycle);
-    let without_actor = user_lifecycle_router(service.clone());
+    let without_actor = user_lifecycle_router(service.clone(), Arc::new(DenyAuthorizer));
     let forbidden = request(
         &without_actor,
         "/api/v1/admin/users",
@@ -60,10 +65,9 @@ async fn administration_requires_an_authorized_actor() -> Result<(), Box<dyn Err
     .await?;
     assert_eq!(forbidden.0, 403);
 
-    let with_actor = user_lifecycle_router(service).layer(Extension(AdminUserActor {
-        user_id: UserId::new(),
-        can_manage_users: true,
-    }));
+    let actor = UserId::new();
+    let with_actor = user_lifecycle_router(service, Arc::new(AllowAuthorizer { actor }))
+        .layer(Extension(RequestPrincipal::User(actor)));
     let created = request(
         &with_actor,
         "/api/v1/admin/users",
@@ -180,6 +184,82 @@ impl LocalPasswordUseCases for StubPassword {
         _new_password: SecretString,
     ) -> Result<PublicLifecycleOutcome, PasswordServiceError> {
         Ok(PublicLifecycleOutcome::Accepted)
+    }
+}
+
+struct DenyAuthorizer;
+
+#[async_trait]
+impl ModernRequestAuthorizer for DenyAuthorizer {
+    async fn authorize_instance(
+        &self,
+        _principal: PrincipalId,
+        _permission: Permission,
+        _action: &'static str,
+    ) -> Result<UserId, RequestAuthorizationError> {
+        Err(RequestAuthorizationError::Forbidden)
+    }
+
+    async fn authorize_account(
+        &self,
+        _principal: PrincipalId,
+        _account_id: AccountId,
+        _permission: Permission,
+        _action: &'static str,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError> {
+        Err(RequestAuthorizationError::Forbidden)
+    }
+
+    async fn authorize_system(
+        &self,
+        _principal: PrincipalId,
+        _system_id: SystemId,
+        _permission: Permission,
+        _action: &'static str,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError> {
+        Err(RequestAuthorizationError::Forbidden)
+    }
+}
+
+struct AllowAuthorizer {
+    actor: UserId,
+}
+
+#[async_trait]
+impl ModernRequestAuthorizer for AllowAuthorizer {
+    async fn authorize_instance(
+        &self,
+        _principal: PrincipalId,
+        _permission: Permission,
+        _action: &'static str,
+    ) -> Result<UserId, RequestAuthorizationError> {
+        Ok(self.actor)
+    }
+
+    async fn authorize_account(
+        &self,
+        _principal: PrincipalId,
+        account_id: AccountId,
+        _permission: Permission,
+        _action: &'static str,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError> {
+        Ok(AuthorizedRequest {
+            actor_user_id: self.actor,
+            account_id,
+        })
+    }
+
+    async fn authorize_system(
+        &self,
+        _principal: PrincipalId,
+        _system_id: SystemId,
+        _permission: Permission,
+        _action: &'static str,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError> {
+        Ok(AuthorizedRequest {
+            actor_user_id: self.actor,
+            account_id: AccountId::new(),
+        })
     }
 }
 
