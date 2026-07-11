@@ -4,7 +4,8 @@ use std::{collections::BTreeSet, path::PathBuf};
 
 use async_trait::async_trait;
 use pvlog_domain::{
-    AccountId, ApiCredentialId, AuditEventId, MembershipId, Permission, SessionId, SystemId, UserId,
+    AccountId, ApiCredentialId, AuditEventId, MembershipId, Permission, PrincipalId, SessionId,
+    SystemId, UserId,
 };
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "postgres")]
@@ -193,6 +194,15 @@ pub trait ManagementRepository: Send + Sync {
     async fn user_is_authorized(
         &self,
         user_id: UserId,
+        account_id: AccountId,
+        system_id: Option<SystemId>,
+        permission: Permission,
+        now: i64,
+    ) -> Result<bool, ManagementRepositoryError>;
+    /// Evaluates a user or API credential role assignment at account or system scope.
+    async fn principal_is_authorized(
+        &self,
+        principal: PrincipalId,
         account_id: AccountId,
         system_id: Option<SystemId>,
         permission: Permission,
@@ -620,6 +630,53 @@ impl ManagementRepository for SqliteManagementRepository {
         Ok(allowed)
     }
 
+    async fn principal_is_authorized(
+        &self,
+        principal: PrincipalId,
+        account_id: AccountId,
+        system_id: Option<SystemId>,
+        permission: Permission,
+        now: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
+        let (principal_type, principal_id) = sqlite_principal(principal);
+        let mut connection = self.connection().await?;
+        let allowed = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM rbac_role_assignments assignment \
+             JOIN rbac_roles role ON role.id = assignment.role_id \
+             JOIN rbac_role_permissions permission ON permission.role_id = role.id \
+             JOIN accounts account ON account.id = assignment.account_id AND account.status = 'active' \
+             LEFT JOIN memberships membership ON assignment.principal_type = 'user' \
+                  AND membership.account_id = assignment.account_id \
+                  AND membership.user_id = assignment.principal_id AND membership.status = 'active' \
+             LEFT JOIN users user_record ON user_record.id = COALESCE(membership.user_id, \
+                  (SELECT owner_user_id FROM api_credentials WHERE id = assignment.principal_id)) \
+                  AND user_record.status = 'active' \
+             LEFT JOIN api_credentials credential ON assignment.principal_type = 'api_credential' \
+                  AND credential.id = assignment.principal_id AND credential.account_id = assignment.account_id \
+                  AND credential.revoked_at IS NULL AND (credential.expires_at IS NULL OR credential.expires_at > ?) \
+             WHERE assignment.principal_type = ? AND assignment.principal_id = ? \
+               AND assignment.account_id = ? AND role.account_id = ? \
+               AND permission.permission = ? AND assignment.revoked_at IS NULL \
+               AND (assignment.expires_at IS NULL OR assignment.expires_at > ?) \
+               AND (assignment.scope_type = 'account' OR \
+                    (assignment.scope_type = 'system' AND assignment.system_id = ?)) \
+               AND ((assignment.principal_type = 'user' AND membership.id IS NOT NULL) \
+                    OR (assignment.principal_type = 'api_credential' AND credential.id IS NOT NULL)))",
+        )
+        .bind(now)
+        .bind(principal_type)
+        .bind(principal_id)
+        .bind(uuid_blob(account_id.as_uuid()))
+        .bind(uuid_blob(account_id.as_uuid()))
+        .bind(permission_name(permission))
+        .bind(now)
+        .bind(system_id.map(|id| uuid_blob(id.as_uuid())))
+        .fetch_one(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(allowed)
+    }
+
     async fn routing(
         &self,
         account_id: AccountId,
@@ -866,6 +923,22 @@ impl ManagementRepository for PostgresManagementRepository {
         Ok(allowed)
     }
 
+    async fn principal_is_authorized(
+        &self,
+        principal: PrincipalId,
+        account_id: AccountId,
+        system_id: Option<SystemId>,
+        permission: Permission,
+        now: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
+        let (principal_type, principal_id) = postgres_principal(principal);
+        let mut connection = self.connection().await?;
+        let allowed = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM management.rbac_role_assignments assignment JOIN management.rbac_roles role ON role.account_id=assignment.account_id AND role.id=assignment.role_id JOIN management.rbac_role_permissions permission ON permission.account_id=role.account_id AND permission.role_id=role.id JOIN management.accounts account ON account.id=assignment.account_id AND account.status='active' LEFT JOIN management.memberships membership ON assignment.principal_type='user' AND membership.account_id=assignment.account_id AND membership.user_id=assignment.principal_id AND membership.status='active' LEFT JOIN management.api_credentials credential ON assignment.principal_type='api_credential' AND credential.account_id=assignment.account_id AND credential.id=assignment.principal_id AND credential.revoked_at IS NULL AND (credential.expires_at IS NULL OR credential.expires_at>$1) LEFT JOIN management.users user_record ON user_record.id=COALESCE(membership.user_id,credential.owner_user_id) AND user_record.status='active' WHERE assignment.principal_type=$2 AND assignment.principal_id=$3 AND assignment.account_id=$4 AND permission.permission=$5 AND assignment.revoked_at IS NULL AND (assignment.expires_at IS NULL OR assignment.expires_at>$1) AND (assignment.scope_type='account' OR (assignment.scope_type='system' AND assignment.system_id=$6)) AND ((assignment.principal_type='user' AND membership.id IS NOT NULL) OR (assignment.principal_type='api_credential' AND credential.id IS NOT NULL)))")
+            .bind(now).bind(principal_type).bind(principal_id).bind(account_id.as_uuid()).bind(permission_name(permission)).bind(system_id.map(SystemId::as_uuid)).fetch_one(&mut connection).await?;
+        connection.close().await?;
+        Ok(allowed)
+    }
+
     async fn routing(
         &self,
         account_id: AccountId,
@@ -990,6 +1063,16 @@ impl ManagementRepository for SqliteManagementRepository {
     ) -> Result<bool, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
     }
+    async fn principal_is_authorized(
+        &self,
+        _: PrincipalId,
+        _: AccountId,
+        _: Option<SystemId>,
+        _: Permission,
+        _: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
+    }
     async fn routing(
         &self,
         _: AccountId,
@@ -1094,6 +1177,16 @@ impl ManagementRepository for PostgresManagementRepository {
     ) -> Result<bool, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("postgres"))
     }
+    async fn principal_is_authorized(
+        &self,
+        _: PrincipalId,
+        _: AccountId,
+        _: Option<SystemId>,
+        _: Permission,
+        _: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("postgres"))
+    }
     async fn routing(
         &self,
         _: AccountId,
@@ -1183,6 +1276,22 @@ fn permission_name(permission: Permission) -> &'static str {
         Permission::CredentialManage => "credential_manage",
         Permission::IntegrationManage => "integration_manage",
         Permission::AuditRead => "audit_read",
+    }
+}
+
+#[cfg(feature = "sqlite")]
+fn sqlite_principal(principal: PrincipalId) -> (&'static str, Vec<u8>) {
+    match principal {
+        PrincipalId::User(id) => ("user", uuid_blob(id.as_uuid())),
+        PrincipalId::ApiCredential(id) => ("api_credential", uuid_blob(id.as_uuid())),
+    }
+}
+
+#[cfg(feature = "postgres")]
+fn postgres_principal(principal: PrincipalId) -> (&'static str, Uuid) {
+    match principal {
+        PrincipalId::User(id) => ("user", id.as_uuid()),
+        PrincipalId::ApiCredential(id) => ("api_credential", id.as_uuid()),
     }
 }
 

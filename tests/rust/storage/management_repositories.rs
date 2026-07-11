@@ -3,7 +3,8 @@
 use std::{collections::BTreeSet, error::Error};
 
 use pvlog_domain::{
-    AccountId, ApiCredentialId, AuditEventId, MembershipId, Permission, SessionId, SystemId, UserId,
+    AccountId, ApiCredentialId, AuditEventId, MembershipId, Permission, PrincipalId, SessionId,
+    SystemId, UserId,
 };
 use pvlog_storage::{
     AccountRecord, ApiCredentialRecord, AuditRecord, AuthorizationGrant, DatabaseTarget,
@@ -258,6 +259,28 @@ async fn verify_contract(
                 fixture.account_a,
                 Some(fixture.system_b),
                 Permission::AccountRead,
+                50,
+            )
+            .await?
+    );
+    assert!(
+        repository
+            .principal_is_authorized(
+                PrincipalId::User(fixture.user_id),
+                fixture.account_a,
+                Some(fixture.system_a),
+                Permission::TelemetryWrite,
+                50,
+            )
+            .await?
+    );
+    assert!(
+        !repository
+            .principal_is_authorized(
+                PrincipalId::User(fixture.user_id),
+                fixture.account_a,
+                Some(fixture.system_b),
+                Permission::TelemetryWrite,
                 50,
             )
             .await?
