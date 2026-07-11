@@ -31,6 +31,7 @@ mod series_query;
 mod statistics;
 mod system_configuration;
 mod system_lifecycle;
+mod teams;
 mod user_lifecycle;
 
 pub use analytics_api::{
@@ -143,6 +144,11 @@ pub use system_configuration::{
 pub use system_lifecycle::{
     CreateSystem, SystemLifecycleError, SystemLifecycleRecord, SystemLifecycleRepository,
     SystemLifecycleService, SystemLifecycleUseCases, UpdateSystem,
+};
+pub use teams::{
+    CreateTeam, JoinTeam, TeamAccess, TeamAggregateResource, TeamEligibility,
+    TeamMembershipResource, TeamPolicy, TeamRepository, TeamResource, TeamService,
+    TeamServiceError, TeamUseCases,
 };
 pub use user_lifecycle::{
     AdminUserActor, CreateLocalUser, InvitationRecord, InvitationResult, InviteLocalUser,

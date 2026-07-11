@@ -24,6 +24,7 @@ mod local_password;
 mod managed_resources;
 mod problem;
 mod systems;
+mod teams;
 mod telemetry;
 mod user_lifecycle;
 
@@ -33,6 +34,7 @@ pub use local_password::local_password_router;
 pub use managed_resources::managed_resources_router;
 pub use problem::Problem;
 pub use systems::systems_router;
+pub use teams::teams_router;
 pub use telemetry::telemetry_router;
 pub use user_lifecycle::user_lifecycle_router;
 
