@@ -70,6 +70,8 @@ async fn authenticate(
     mut request: Request,
     next: Next,
 ) -> Response {
+    let path = request.uri().path().to_owned();
+    let method = request.method().clone();
     let state_changing = !matches!(
         request.method(),
         &Method::GET | &Method::HEAD | &Method::OPTIONS
@@ -83,6 +85,7 @@ async fn authenticate(
             return StatusCode::SERVICE_UNAVAILABLE.into_response();
         }
     };
+    let used_session_cookie = bearer.is_none() && session_cookie_token(request.headers()).is_some();
     let result = if let Some(token) = bearer {
         state.service.authenticate_bearer(token).await.map(Some)
     } else if let Some(session_token) = session_cookie_token(request.headers()) {
@@ -101,9 +104,41 @@ async fn authenticate(
             next.run(request).await
         }
         Ok(None) => next.run(request).await,
+        Err(RequestAuthenticationError::Invalid)
+            if used_session_cookie && allows_stale_session_cookie(&method, &path) =>
+        {
+            let mut response = next.run(request).await;
+            if method == Method::GET && path == "/api/v1/session" {
+                expire_session_cookies(response.headers_mut());
+            }
+            response
+        }
         Err(RequestAuthenticationError::Invalid) => StatusCode::UNAUTHORIZED.into_response(),
         Err(RequestAuthenticationError::Unavailable) => {
             StatusCode::SERVICE_UNAVAILABLE.into_response()
+        }
+    }
+}
+
+fn allows_stale_session_cookie(method: &Method, path: &str) -> bool {
+    (method == Method::GET && path == "/api/v1/session")
+        || (method == Method::POST
+            && matches!(
+                path,
+                "/api/v1/auth/local/login"
+                    | "/api/v1/auth/register"
+                    | "/api/v1/auth/invitations/accept"
+                    | "/api/v1/auth/password-recovery"
+            ))
+}
+
+fn expire_session_cookies(headers: &mut axum::http::HeaderMap) {
+    for cookie in [
+        "pvlog_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax",
+        "__Host-pvlog_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax",
+    ] {
+        if let Ok(value) = axum::http::HeaderValue::from_str(cookie) {
+            headers.append(header::SET_COOKIE, value);
         }
     }
 }

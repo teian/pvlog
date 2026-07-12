@@ -80,6 +80,40 @@ async fn bearer_and_session_credentials_are_extracted_and_invalid_credentials_fa
     Ok(())
 }
 
+#[tokio::test]
+async fn stale_session_cookie_recovers_on_session_bootstrap_and_login() -> Result<(), Box<dyn Error>>
+{
+    let app = with_request_authentication(
+        Router::new()
+            .route("/api/v1/session", get(protected))
+            .route("/api/v1/auth/local/login", axum::routing::post(protected)),
+        Arc::new(Authenticator),
+    );
+    let bootstrap = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/session")
+                .header("cookie", "pvlog_session=expired-session")
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(bootstrap.status(), StatusCode::OK);
+    assert_eq!(bootstrap.headers().get_all("set-cookie").iter().count(), 2);
+
+    let login = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/auth/local/login")
+                .header("cookie", "pvlog_session=expired-session")
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(login.status(), StatusCode::OK);
+    Ok(())
+}
+
 async fn protected(
     principal: Option<Extension<RequestPrincipal>>,
 ) -> Result<&'static str, Infallible> {
