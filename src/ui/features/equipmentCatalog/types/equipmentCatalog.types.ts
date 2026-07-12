@@ -98,8 +98,8 @@ export const solarModuleCatalogEntrySchema = z.object({
 
 /** @property search - Bounded free-text manufacturer/model query. @property manufacturer - Optional exact manufacturer filter. @property offset - Zero-based result offset. @property limit - Requested page size, clamped to 100. */
 export interface EquipmentCatalogQuery {
-  search?: string;
-  manufacturer?: string;
+  search?: string | undefined;
+  manufacturer?: string | undefined;
   offset?: number;
   limit?: number;
 }

@@ -14,8 +14,8 @@ export function EquipmentCatalogPanel({
   accountId,
   systemId,
 }: {
-  accountId?: string;
-  systemId?: string;
+  accountId?: string | null | undefined;
+  systemId?: string | null | undefined;
 }) {
   const { t } = useTranslation();
   return (
