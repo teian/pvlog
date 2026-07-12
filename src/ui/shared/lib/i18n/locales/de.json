@@ -344,6 +344,26 @@
       "audit_read": "Audit-Protokoll lesen"
     }
   },
+  "features": {
+    "equipmentCatalog": {
+      "title": "Gerätevorlagen",
+      "description": "Fülle bearbeitbare Gerätedaten optional aus dem gebündelten Offline-Katalog vor oder erfasse alle Werte manuell.",
+      "inverterTitle": "Wechselrichterkatalog",
+      "moduleTitle": "Solarmodulkatalog",
+      "search": "Hersteller oder Modell suchen",
+      "inverterPlaceholder": "Zum Beispiel SMA, Fronius oder Huawei",
+      "modulePlaceholder": "Zum Beispiel Hersteller oder 450-W-Modell",
+      "moduleOption": "{{manufacturer}} {{model}} · {{watts}} W",
+      "loading": "Katalog wird geladen…",
+      "error": "Der Gerätekatalog konnte nicht geladen werden. Die manuelle Eingabe bleibt verfügbar.",
+      "empty": "Kein passender Katalogeintrag. Fahre mit der manuellen Eingabe fort.",
+      "results": "Passende Vorlagen",
+      "manualInverter": "Wechselrichter manuell erfassen",
+      "manualModule": "Solarmodul manuell erfassen",
+      "manufacturer": "Hersteller",
+      "model": "Modell"
+    }
+  },
   "onboarding": {
     "awaitingVerification": "Sende einen Testmesswert, um die Erfassung zu prüfen.",
     "back": "Zurück",

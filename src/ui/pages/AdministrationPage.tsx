@@ -8,6 +8,7 @@ import {
   OperationsPanel,
 } from "@/features/administration";
 import { useSession } from "@/features/auth";
+import { EquipmentCatalogPanel } from "@/features/equipmentCatalog";
 import { AppShell } from "@/widgets";
 import { useTranslation } from "react-i18next";
 
@@ -30,6 +31,7 @@ export function AdministrationPage() {
       <InvitationPanel />
       <ConnectorPanel />
       <RolesPanel accountId={accountId} />
+      <EquipmentCatalogPanel />
       <SystemResourcesPanel
         accountId={accountId}
         systemId={session.data?.systemIds[0]}

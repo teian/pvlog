@@ -344,6 +344,26 @@
       "audit_read": "Read audit trail"
     }
   },
+  "features": {
+    "equipmentCatalog": {
+      "title": "Equipment templates",
+      "description": "Optionally prefill editable equipment values from the bundled offline catalog, or enter every value manually.",
+      "inverterTitle": "Inverter catalog",
+      "moduleTitle": "Solar-module catalog",
+      "search": "Search manufacturer or model",
+      "inverterPlaceholder": "For example SMA, Fronius or Huawei",
+      "modulePlaceholder": "For example manufacturer or 450 W model",
+      "moduleOption": "{{manufacturer}} {{model}} · {{watts}} W",
+      "loading": "Loading catalog…",
+      "error": "The equipment catalog could not be loaded. Manual entry remains available.",
+      "empty": "No matching catalog entry. Continue with manual entry.",
+      "results": "Matching templates",
+      "manualInverter": "Enter inverter manually",
+      "manualModule": "Enter solar module manually",
+      "manufacturer": "Manufacturer",
+      "model": "Model"
+    }
+  },
   "onboarding": {
     "awaitingVerification": "Send a test observation to verify ingestion.",
     "back": "Back",
