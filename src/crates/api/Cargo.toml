@@ -74,6 +74,10 @@ name = "dashboard-endpoints"
 path = "../../../tests/rust/api/dashboard_endpoints.rs"
 
 [[test]]
+name = "equipment-catalog-endpoints"
+path = "../../../tests/rust/api/equipment_catalog_endpoints.rs"
+
+[[test]]
 name = "system-endpoints"
 path = "../../../tests/rust/api/system_endpoints.rs"
 

@@ -12,6 +12,22 @@ const required = [
   ["delete", "/api/v1/systems/{id}", "deleteSystem"],
   ["post", "/api/v1/systems/{id}/archive", "archiveSystem"],
   ["post", "/api/v1/systems/{id}/restore", "restoreSystem"],
+  ["get", "/api/v1/equipment-catalog/inverters", "listCatalogInverters"],
+  [
+    "get",
+    "/api/v1/equipment-catalog/inverters/{entry_id}",
+    "getCatalogInverter",
+  ],
+  [
+    "get",
+    "/api/v1/equipment-catalog/solar-modules",
+    "listCatalogSolarModules",
+  ],
+  [
+    "get",
+    "/api/v1/equipment-catalog/solar-modules/{entry_id}",
+    "getCatalogSolarModule",
+  ],
   [
     "get",
     "/api/v1/accounts/{account_id}/systems/{system_id}/equipment",
