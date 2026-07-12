@@ -345,6 +345,20 @@
     }
   },
   "features": {
+    "authConnectorPresets": {
+      "facebook": {
+        "description": "Use a Facebook Login app with the generic OAuth2 connector."
+      },
+      "github": {
+        "description": "Use a GitHub OAuth app with the generic OAuth2 connector."
+      },
+      "google": {
+        "description": "Use Google OpenID Connect discovery with standard identity scopes."
+      },
+      "x": {
+        "description": "Use an X confidential client with OAuth2 Authorization Code and PKCE."
+      }
+    },
     "equipmentCatalog": {
       "title": "Equipment templates",
       "description": "Optionally prefill editable equipment values from the bundled offline catalog, or enter every value manually.",
@@ -358,6 +372,7 @@
       "error": "The equipment catalog could not be loaded. Manual entry remains available.",
       "empty": "No matching catalog entry. Continue with manual entry.",
       "results": "Matching templates",
+      "choose": "Choose a template",
       "manualInverter": "Enter inverter manually",
       "manualModule": "Enter solar module manually",
       "manufacturer": "Manufacturer",

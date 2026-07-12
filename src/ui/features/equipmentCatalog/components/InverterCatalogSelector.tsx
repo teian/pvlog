@@ -65,6 +65,7 @@ export function InverterCatalogSelector({
             }}
             size={Math.min(5, items.length)}
           >
+            <option value="">{t("features.equipmentCatalog.choose")}</option>
             {items.map((entry) => (
               <option key={entry.id} value={entry.id}>
                 {entry.manufacturer} {entry.model}

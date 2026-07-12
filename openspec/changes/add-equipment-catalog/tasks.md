@@ -26,7 +26,7 @@
 - [x] 4.2 Implement accessible localized inverter and solar-module catalog selectors as optional prefilling aids alongside a first-class manual-entry workflow.
 - [x] 4.3 Implement localized technical-data review tables for inverter string/MPPT topology, per-string module count/manufacturer/model/per-module power/calculated total power, DC/AC electrical limits, efficiency, environmental, communications and mechanical data plus module electrical, thermal, mechanical, dimensional, bifacial, revision, and provenance information.
 - [x] 4.4 Keep all prefilled technical fields editable, persist confirmed values through the real equipment APIs, and label manual, copied, customized, and older-template provenance without restricting configuration.
-- [ ] 4.5 Add English/German translations plus component and Playwright tests for keyboard selection, manual entry despite a matching model, no-result continuity, edited prefills, validation errors, and snapshot review.
+- [x] 4.5 Add English/German translations plus component and Playwright tests for keyboard selection, manual entry despite a matching model, no-result continuity, edited prefills, validation errors, and snapshot review.
 
 ## 5. Release and Documentation
 

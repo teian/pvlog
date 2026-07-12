@@ -345,6 +345,20 @@
     }
   },
   "features": {
+    "authConnectorPresets": {
+      "facebook": {
+        "description": "Verwende eine Facebook-Login-App mit dem allgemeinen OAuth2-Connector."
+      },
+      "github": {
+        "description": "Verwende eine GitHub-OAuth-App mit dem allgemeinen OAuth2-Connector."
+      },
+      "google": {
+        "description": "Verwende Google OpenID Connect Discovery mit den Standard-Identity-Scopes."
+      },
+      "x": {
+        "description": "Verwende einen vertraulichen X-Client mit OAuth2 Authorization Code und PKCE."
+      }
+    },
     "equipmentCatalog": {
       "title": "Gerätevorlagen",
       "description": "Fülle bearbeitbare Gerätedaten optional aus dem gebündelten Offline-Katalog vor oder erfasse alle Werte manuell.",
@@ -358,6 +372,7 @@
       "error": "Der Gerätekatalog konnte nicht geladen werden. Die manuelle Eingabe bleibt verfügbar.",
       "empty": "Kein passender Katalogeintrag. Fahre mit der manuellen Eingabe fort.",
       "results": "Passende Vorlagen",
+      "choose": "Vorlage auswählen",
       "manualInverter": "Wechselrichter manuell erfassen",
       "manualModule": "Solarmodul manuell erfassen",
       "manufacturer": "Hersteller",
