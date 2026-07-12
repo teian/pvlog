@@ -11,11 +11,15 @@ use axum::{
     routing::get,
 };
 use pvlog_application::PortError;
-use pvlog_domain::{AccountId, ApiScope, InverterId, Permission, StringId, SystemId, UserId};
+use pvlog_domain::{
+    AccountId, ApiScope, EquipmentValueProvenance, InverterId, InverterSpecificationSnapshot,
+    Permission, SolarModuleSpecificationSnapshot, StringId, SystemId, UserId,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal, principal_identity,
+    ModernRequestAuthorizer, Problem, RequestAuthorizationError, RequestPrincipal,
+    principal_identity,
 };
 
 #[derive(Clone, Debug, Deserialize)]
@@ -26,6 +30,10 @@ pub struct PvStringInput {
     pub panel_manufacturer: Option<String>,
     pub panel_model: Option<String>,
     pub rated_power_watts: i64,
+    pub value_provenance: Option<EquipmentValueProvenance>,
+    pub module_specification_snapshot: Option<SolarModuleSpecificationSnapshot>,
+    pub module_peak_power_watts: Option<i64>,
+    pub total_peak_power_watts: Option<i64>,
     pub orientation_degrees: Option<u16>,
     pub tilt_degrees: Option<u8>,
     pub effective_from: i64,
@@ -40,6 +48,8 @@ pub struct InverterInput {
     pub model: Option<String>,
     pub serial_reference: Option<String>,
     pub rated_power_watts: Option<i64>,
+    pub value_provenance: Option<EquipmentValueProvenance>,
+    pub specification_snapshot: Option<InverterSpecificationSnapshot>,
     pub effective_from: i64,
     pub effective_to: Option<i64>,
     pub strings: Vec<PvStringInput>,
@@ -55,6 +65,12 @@ pub struct PvStringResponse {
     pub panel_manufacturer: Option<String>,
     pub panel_model: Option<String>,
     pub rated_power_watts: i64,
+    pub module_catalog_entry_id: Option<String>,
+    pub module_catalog_revision: Option<String>,
+    pub value_provenance: EquipmentValueProvenance,
+    pub module_specification_snapshot: Option<SolarModuleSpecificationSnapshot>,
+    pub module_peak_power_watts: Option<i64>,
+    pub total_peak_power_watts: Option<i64>,
     pub orientation_degrees: Option<u16>,
     pub tilt_degrees: Option<u8>,
     pub effective_from: i64,
@@ -71,6 +87,10 @@ pub struct InverterResponse {
     pub model: Option<String>,
     pub serial_reference: Option<String>,
     pub rated_power_watts: Option<i64>,
+    pub catalog_entry_id: Option<String>,
+    pub catalog_revision: Option<String>,
+    pub value_provenance: EquipmentValueProvenance,
+    pub specification_snapshot: Option<InverterSpecificationSnapshot>,
     pub effective_from: i64,
     pub effective_to: Option<i64>,
     pub version: u64,
@@ -193,7 +213,7 @@ fn now() -> i64 {
 #[derive(Debug)]
 pub enum InverterApiError {
     Forbidden,
-    InvalidInput,
+    InvalidInput(&'static str),
     Unavailable,
 }
 
@@ -214,10 +234,28 @@ impl From<PortError> for InverterApiError {
 }
 impl IntoResponse for InverterApiError {
     fn into_response(self) -> Response {
+        if let Self::InvalidInput(field) = self {
+            let mut response = (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(Problem {
+                    problem_type: "https://pvlog.example/problems/equipment-validation",
+                    title: "invalid_equipment_value",
+                    status: StatusCode::UNPROCESSABLE_ENTITY.as_u16(),
+                    detail: field,
+                    request_id: None,
+                }),
+            )
+                .into_response();
+            response.headers_mut().insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/problem+json"),
+            );
+            return response;
+        }
         match self {
             Self::Forbidden => StatusCode::FORBIDDEN,
-            Self::InvalidInput => StatusCode::UNPROCESSABLE_ENTITY,
             Self::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
+            Self::InvalidInput(_) => unreachable!(),
         }
         .into_response()
     }

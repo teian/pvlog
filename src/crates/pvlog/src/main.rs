@@ -399,7 +399,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     let rbac_api = compose_rbac_api(target)?;
     let identity_api = compose_identity_api(target)?;
     let connector_api = Arc::new(ManagementConnectorApi::new(&config.auth.connectors));
-    let inverter_api = Arc::new(ManagementInverterApi::new(target.clone()));
+    let inverter_api = Arc::new(ManagementInverterApi::new(
+        target.clone(),
+        equipment_catalog.clone(),
+    ));
     let readiness = Arc::new(ManagementReadiness::new(target.clone()));
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");

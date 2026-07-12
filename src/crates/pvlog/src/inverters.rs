@@ -1,9 +1,13 @@
 //! Runtime adapter for nested inverter/string aggregate resources.
 
+use std::sync::Arc;
+
 use async_trait::async_trait;
 use pvlog_api::{
-    InverterApiError, InverterApiUseCases, InverterInput, InverterResponse, PvStringResponse,
+    InverterApiError, InverterApiUseCases, InverterInput, InverterResponse, PvStringInput,
+    PvStringResponse,
 };
+use pvlog_application::{EquipmentCatalog, confirm_inverter_snapshot, confirm_string_composition};
 use pvlog_domain::{AccountId, EquipmentValueProvenance, InverterId, StringId, SystemId, UserId};
 use pvlog_storage::{
     AccountConfigurationRepository, DatabaseTarget, InverterRecord,
@@ -14,12 +18,13 @@ use pvlog_storage::{
 #[derive(Clone, Debug)]
 pub struct ManagementInverterApi {
     target: DatabaseTarget,
+    catalog: Arc<EquipmentCatalog>,
 }
 
 impl ManagementInverterApi {
     #[must_use]
-    pub fn new(target: DatabaseTarget) -> Self {
-        Self { target }
+    pub fn new(target: DatabaseTarget, catalog: Arc<EquipmentCatalog>) -> Self {
+        Self { target, catalog }
     }
 
     async fn repository(
@@ -96,6 +101,28 @@ impl InverterApiUseCases for ManagementInverterApi {
         validate(&input)?;
         let now = now();
         let id = InverterId::new();
+        let inverter_snapshot = input
+            .specification_snapshot
+            .map(|snapshot| confirm_inverter_snapshot(&self.catalog, snapshot))
+            .transpose()
+            .map_err(|_| InverterApiError::InvalidInput("specificationSnapshot"))?;
+        let template = inverter_snapshot
+            .as_ref()
+            .and_then(|snapshot| snapshot.template.as_ref());
+        let value_provenance = template.map_or(EquipmentValueProvenance::Manual, |template| {
+            template.value_provenance
+        });
+        if input
+            .value_provenance
+            .is_some_and(|value| value != value_provenance)
+        {
+            return Err(InverterApiError::InvalidInput("valueProvenance"));
+        }
+        let strings = input
+            .strings
+            .into_iter()
+            .map(|string| build_string(&self.catalog, id, string, now))
+            .collect::<Result<Vec<_>, _>>()?;
         let record = InverterRecord {
             id,
             system_id,
@@ -104,47 +131,105 @@ impl InverterApiUseCases for ManagementInverterApi {
             model: input.model,
             serial_reference: input.serial_reference,
             rated_power_watts: input.rated_power_watts,
-            catalog_entry_id: None,
-            catalog_revision: None,
-            value_provenance: EquipmentValueProvenance::Manual,
-            specification_snapshot: None,
+            catalog_entry_id: template.map(|template| template.entry_id.0.clone()),
+            catalog_revision: template.map(|template| template.revision.0.clone()),
+            value_provenance,
+            specification_snapshot: inverter_snapshot,
             effective_from: input.effective_from,
             effective_to: input.effective_to,
             created_at: now,
             updated_at: now,
-            strings: input
-                .strings
-                .into_iter()
-                .map(|string| PvStringRecord {
-                    id: StringId::new(),
-                    inverter_id: id,
-                    name: string.name,
-                    panel_count: string.panel_count,
-                    panel_manufacturer: string.panel_manufacturer,
-                    panel_model: string.panel_model,
-                    rated_power_watts: string.rated_power_watts,
-                    module_catalog_entry_id: None,
-                    module_catalog_revision: None,
-                    value_provenance: EquipmentValueProvenance::Manual,
-                    module_specification_snapshot: None,
-                    module_peak_power_watts: None,
-                    total_peak_power_watts: None,
-                    orientation_degrees: string.orientation_degrees,
-                    tilt_degrees: string.tilt_degrees,
-                    effective_from: string.effective_from,
-                    effective_to: string.effective_to,
-                    created_at: now,
-                    updated_at: now,
-                })
-                .collect(),
+            strings,
         };
         self.repository(account_id)
             .await?
             .save_inverter_aggregate(&record)
             .await
-            .map_err(|_| InverterApiError::Unavailable)?;
+            .map_err(|error| match error {
+                pvlog_storage::AccountRepositoryError::InvalidRecord(_)
+                | pvlog_storage::AccountRepositoryError::InvalidEffectiveRange => {
+                    InverterApiError::InvalidInput("equipment")
+                }
+                _ => InverterApiError::Unavailable,
+            })?;
         Ok(response(record))
     }
+}
+
+fn build_string(
+    catalog: &EquipmentCatalog,
+    inverter_id: InverterId,
+    string: PvStringInput,
+    now: i64,
+) -> Result<PvStringRecord, InverterApiError> {
+    let (snapshot, module_peak_power_watts, total_peak_power_watts, value_provenance) =
+        if let Some(snapshot) = string.module_specification_snapshot {
+            let composition = confirm_string_composition(catalog, string.panel_count, snapshot)
+                .map_err(|_| InverterApiError::InvalidInput("moduleSpecificationSnapshot"))?;
+            let peak = i64::from(composition.module.specification.peak_power_watts);
+            let total = i64::try_from(composition.total_peak_power_watts)
+                .map_err(|_| InverterApiError::InvalidInput("totalPeakPowerWatts"))?;
+            if string
+                .module_peak_power_watts
+                .is_some_and(|value| value != peak)
+                || string
+                    .total_peak_power_watts
+                    .is_some_and(|value| value != total)
+                || string.rated_power_watts != total
+            {
+                return Err(InverterApiError::InvalidInput("totalPeakPowerWatts"));
+            }
+            let provenance = composition
+                .module
+                .template
+                .as_ref()
+                .map_or(EquipmentValueProvenance::Manual, |template| {
+                    template.value_provenance
+                });
+            (
+                Some(composition.module),
+                Some(peak),
+                Some(total),
+                provenance,
+            )
+        } else {
+            if string.module_peak_power_watts.is_some() || string.total_peak_power_watts.is_some() {
+                return Err(InverterApiError::InvalidInput(
+                    "moduleSpecificationSnapshot",
+                ));
+            }
+            (None, None, None, EquipmentValueProvenance::Manual)
+        };
+    if string
+        .value_provenance
+        .is_some_and(|value| value != value_provenance)
+    {
+        return Err(InverterApiError::InvalidInput("valueProvenance"));
+    }
+    let template = snapshot
+        .as_ref()
+        .and_then(|snapshot| snapshot.template.as_ref());
+    Ok(PvStringRecord {
+        id: StringId::new(),
+        inverter_id,
+        name: string.name,
+        panel_count: string.panel_count,
+        panel_manufacturer: string.panel_manufacturer,
+        panel_model: string.panel_model,
+        rated_power_watts: string.rated_power_watts,
+        module_catalog_entry_id: template.map(|template| template.entry_id.0.clone()),
+        module_catalog_revision: template.map(|template| template.revision.0.clone()),
+        value_provenance,
+        module_specification_snapshot: snapshot,
+        module_peak_power_watts,
+        total_peak_power_watts,
+        orientation_degrees: string.orientation_degrees,
+        tilt_degrees: string.tilt_degrees,
+        effective_from: string.effective_from,
+        effective_to: string.effective_to,
+        created_at: now,
+        updated_at: now,
+    })
 }
 
 fn validate(input: &InverterInput) -> Result<(), InverterApiError> {
@@ -164,7 +249,7 @@ fn validate(input: &InverterInput) -> Result<(), InverterApiError> {
                     .is_some_and(|value| value <= string.effective_from)
         })
     {
-        return Err(InverterApiError::InvalidInput);
+        return Err(InverterApiError::InvalidInput("equipment"));
     }
     Ok(())
 }
@@ -178,6 +263,10 @@ fn response(record: InverterRecord) -> InverterResponse {
         model: record.model,
         serial_reference: record.serial_reference,
         rated_power_watts: record.rated_power_watts,
+        catalog_entry_id: record.catalog_entry_id,
+        catalog_revision: record.catalog_revision,
+        value_provenance: record.value_provenance,
+        specification_snapshot: record.specification_snapshot,
         effective_from: record.effective_from,
         effective_to: record.effective_to,
         version: 1,
@@ -192,6 +281,12 @@ fn response(record: InverterRecord) -> InverterResponse {
                 panel_manufacturer: string.panel_manufacturer,
                 panel_model: string.panel_model,
                 rated_power_watts: string.rated_power_watts,
+                module_catalog_entry_id: string.module_catalog_entry_id,
+                module_catalog_revision: string.module_catalog_revision,
+                value_provenance: string.value_provenance,
+                module_specification_snapshot: string.module_specification_snapshot,
+                module_peak_power_watts: string.module_peak_power_watts,
+                total_peak_power_watts: string.total_peak_power_watts,
                 orientation_degrees: string.orientation_degrees,
                 tilt_degrees: string.tilt_degrees,
                 effective_from: string.effective_from,
