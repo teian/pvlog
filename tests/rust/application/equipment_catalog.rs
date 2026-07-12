@@ -1,7 +1,11 @@
 use std::error::Error;
 
-use pvlog_application::{EquipmentCatalog, EquipmentCatalogError, EquipmentCatalogQuery};
-use pvlog_domain::CatalogEntryId;
+use pvlog_application::{
+    EquipmentCatalog, EquipmentCatalogError, EquipmentCatalogQuery, EquipmentConfigurationError,
+    confirm_module_snapshot, confirm_string_composition, prefill_inverter_from_catalog,
+    prefill_module_from_catalog,
+};
+use pvlog_domain::{CatalogEntryId, EquipmentValueProvenance};
 
 const CATALOG: &str = include_str!("../../../assets/equipment-catalog/catalog-v1.json");
 
@@ -98,5 +102,64 @@ fn parser_rejects_duplicate_ids_invalid_voltage_and_schema() -> Result<(), Box<d
         EquipmentCatalog::parse(&serde_json::to_string(&unsupported)?),
         Err(EquipmentCatalogError::UnsupportedSchema)
     ));
+    Ok(())
+}
+
+#[test]
+fn prefills_are_editable_and_reapplication_is_explicit() -> Result<(), Box<dyn Error>> {
+    let catalog = EquipmentCatalog::bundled()?;
+    let inverter_id = CatalogEntryId("fronius-symo-gen24-10-0".to_owned());
+    let original = prefill_inverter_from_catalog(&catalog, &inverter_id)?;
+    let reapplied = prefill_inverter_from_catalog(&catalog, &inverter_id)?;
+    assert_eq!(original, reapplied);
+    assert_eq!(
+        reapplied
+            .template
+            .as_ref()
+            .map(|template| template.value_provenance),
+        Some(EquipmentValueProvenance::CatalogCopied)
+    );
+
+    let module_id = CatalogEntryId("ja-solar-jam54d40-450-lb".to_owned());
+    let unchanged =
+        confirm_module_snapshot(&catalog, prefill_module_from_catalog(&catalog, &module_id)?)?;
+    assert_eq!(
+        unchanged
+            .template
+            .as_ref()
+            .map(|template| template.value_provenance),
+        Some(EquipmentValueProvenance::CatalogCopied)
+    );
+
+    let mut edited = prefill_module_from_catalog(&catalog, &module_id)?;
+    edited.specification.peak_power_watts = 455;
+    let edited = confirm_module_snapshot(&catalog, edited)?;
+    assert_eq!(
+        edited
+            .template
+            .as_ref()
+            .map(|template| template.value_provenance),
+        Some(EquipmentValueProvenance::CatalogCustomized)
+    );
+    Ok(())
+}
+
+#[test]
+fn string_composition_rejects_bounds_and_derives_capacity() -> Result<(), Box<dyn Error>> {
+    let catalog = EquipmentCatalog::bundled()?;
+    let module = prefill_module_from_catalog(
+        &catalog,
+        &CatalogEntryId("ja-solar-jam54d40-450-lb".to_owned()),
+    )?;
+    let string = confirm_string_composition(&catalog, 18, module.clone())?;
+    assert_eq!(string.total_peak_power_watts, 8_100);
+    assert_eq!(
+        confirm_string_composition(&catalog, 0, module.clone()),
+        Err(EquipmentConfigurationError::InvalidModuleCount)
+    );
+    assert_eq!(
+        confirm_string_composition(&catalog, 10_001, module),
+        Err(EquipmentConfigurationError::InvalidModuleCount)
+    );
     Ok(())
 }

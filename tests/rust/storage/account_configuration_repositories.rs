@@ -2,9 +2,12 @@
 
 use std::error::Error;
 
+use pvlog_application::{
+    EquipmentCatalog, prefill_inverter_from_catalog, prefill_module_from_catalog,
+};
 use pvlog_domain::{
-    AccountId, AuditEventId, ChannelId, EquipmentId, EquipmentValueProvenance, InverterId,
-    StringId, SystemId, TariffId,
+    AccountId, AuditEventId, CatalogEntryId, ChannelId, EquipmentId, EquipmentValueProvenance,
+    InverterId, StringId, SystemId, TariffId,
 };
 use pvlog_storage::{
     AccountAuditRecord, AccountConfigurationRepository, AccountRepositoryError,
@@ -77,11 +80,11 @@ async fn verify_contract(
     assert_eq!(repository.system(system_id).await?, Some(system));
     assert!(other_account.system(system_id).await?.is_none());
 
-    let inverter = inverter(system_id, 0, None);
-    repository.save_inverter_aggregate(&inverter).await?;
+    let manual_inverter = inverter(system_id, 0, Some(20));
+    repository.save_inverter_aggregate(&manual_inverter).await?;
     assert_eq!(
         repository.effective_inverters(system_id, 0).await?,
-        vec![inverter.clone()]
+        vec![manual_inverter.clone()]
     );
     assert!(
         other_account
@@ -89,12 +92,80 @@ async fn verify_contract(
             .await?
             .is_empty()
     );
-    let mut invalid_inverter = inverter;
+    let mut invalid_inverter = manual_inverter;
     invalid_inverter.strings[0].inverter_id = InverterId::new();
     assert!(matches!(
         repository.save_inverter_aggregate(&invalid_inverter).await,
         Err(AccountRepositoryError::InvalidRecord("PV string"))
     ));
+
+    let catalog = EquipmentCatalog::bundled()?;
+    let inverter_entry_id = CatalogEntryId("fronius-symo-gen24-10-0".to_owned());
+    let module_entry_id = CatalogEntryId("ja-solar-jam54d40-450-lb".to_owned());
+    let inverter_snapshot = prefill_inverter_from_catalog(&catalog, &inverter_entry_id)?;
+    let module_snapshot = prefill_module_from_catalog(&catalog, &module_entry_id)?;
+    let mut catalog_inverter = inverter(system_id, 20, None);
+    catalog_inverter.catalog_entry_id = Some(inverter_entry_id.0.clone());
+    catalog_inverter.catalog_revision = Some(catalog.revision().0.clone());
+    catalog_inverter.value_provenance = EquipmentValueProvenance::CatalogCopied;
+    catalog_inverter.specification_snapshot = Some(inverter_snapshot);
+    let string = &mut catalog_inverter.strings[0];
+    string.panel_count = 18;
+    string.panel_manufacturer = Some(module_snapshot.manufacturer.clone());
+    string.panel_model = Some(module_snapshot.model.clone());
+    string.rated_power_watts = 8_100;
+    string.module_catalog_entry_id = Some(module_entry_id.0.clone());
+    string.module_catalog_revision = Some(catalog.revision().0.clone());
+    string.value_provenance = EquipmentValueProvenance::CatalogCopied;
+    string.module_specification_snapshot = Some(module_snapshot);
+    string.module_peak_power_watts = Some(450);
+    string.total_peak_power_watts = Some(8_100);
+    repository
+        .save_inverter_aggregate(&catalog_inverter)
+        .await?;
+    assert_eq!(
+        repository.effective_inverters(system_id, 20).await?,
+        vec![catalog_inverter.clone()]
+    );
+
+    let mut contradictory = catalog_inverter.clone();
+    contradictory.id = InverterId::new();
+    contradictory.strings[0].inverter_id = contradictory.id;
+    contradictory.strings[0].total_peak_power_watts = Some(8_099);
+    assert!(matches!(
+        repository.save_inverter_aggregate(&contradictory).await,
+        Err(AccountRepositoryError::InvalidRecord("PV string power"))
+    ));
+
+    let mut historical = catalog_inverter;
+    historical.id = InverterId::new();
+    historical.strings[0].id = StringId::new();
+    historical.strings[0].inverter_id = historical.id;
+    historical.effective_from = 30;
+    historical.strings[0].effective_from = 30;
+    historical.catalog_revision = Some("2025.12.1".to_owned());
+    historical
+        .specification_snapshot
+        .as_mut()
+        .and_then(|snapshot| snapshot.template.as_mut())
+        .ok_or("inverter template missing")?
+        .revision
+        .0 = "2025.12.1".to_owned();
+    historical.strings[0].module_catalog_revision = Some("2025.12.1".to_owned());
+    historical.strings[0]
+        .module_specification_snapshot
+        .as_mut()
+        .and_then(|snapshot| snapshot.template.as_mut())
+        .ok_or("module template missing")?
+        .revision
+        .0 = "2025.12.1".to_owned();
+    repository.save_inverter_aggregate(&historical).await?;
+    assert!(
+        repository
+            .effective_inverters(system_id, 30)
+            .await?
+            .contains(&historical)
+    );
 
     let first_equipment = equipment(system_id, "Original", 0, Some(10));
     let second_equipment = equipment(system_id, "Replacement", 10, None);
