@@ -207,6 +207,8 @@ maintenance, observability, and rollback procedures.
 
 ## Documentation
 
+Equipment catalog maintenance, normalized units, custom devices, and the installer safety boundary are documented in [docs/guides/equipment-catalog.md](docs/guides/equipment-catalog.md).
+
 - [Documentation index](docs/README.md)
 - [Developer quickstarts](docs/guides/developer-quickstarts.md)
 - [Local authentication and RBAC quickstart](docs/guides/local-authentication-rbac.md)
