@@ -40,6 +40,9 @@ jobs:
       - name: Validate OpenAPI contract
         run: pnpm openapi:lint && pnpm openapi:routes && pnpm openapi:compare && pnpm test:local-authentication-guide && pnpm test:docs
 
+      - name: Validate bundled equipment catalog
+        run: pnpm catalog:validate && pnpm test:release-artifacts
+
       - name: Validate deterministic performance reports
         run: pnpm test:query-performance && pnpm test:scale-performance && pnpm test:release-artifacts
 

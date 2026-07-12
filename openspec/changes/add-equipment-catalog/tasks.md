@@ -31,5 +31,5 @@
 ## 5. Release and Documentation
 
 - [x] 5.1 Document the catalog update/review workflow, normalized units, source attribution rules, custom equipment, and the non-certification/installer-safety boundary.
-- [ ] 5.2 Add catalog schema validation and asset checksums to CI and release evidence.
+- [x] 5.2 Add catalog schema validation and asset checksums to CI and release evidence.
 - [ ] 5.3 Run warning-free Rust checks/tests, frontend lint/typecheck/tests/build, OpenAPI lint/compare/coverage, migration profiles, and production embedded-UI validation.
