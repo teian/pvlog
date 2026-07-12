@@ -31,7 +31,10 @@ export function AdministrationPage() {
       <InvitationPanel />
       <ConnectorPanel />
       <RolesPanel accountId={accountId} />
-      <EquipmentCatalogPanel />
+      <EquipmentCatalogPanel
+        accountId={accountId}
+        systemId={session.data?.systemIds[0]}
+      />
       <SystemResourcesPanel
         accountId={accountId}
         systemId={session.data?.systemIds[0]}

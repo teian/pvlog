@@ -10,7 +10,13 @@ import {
 import { useTranslation } from "react-i18next";
 
 /** Hosts optional equipment prefilling beside first-class editable manual fields. @returns The system equipment template panel. */
-export function EquipmentCatalogPanel() {
+export function EquipmentCatalogPanel({
+  accountId,
+  systemId,
+}: {
+  accountId?: string;
+  systemId?: string;
+}) {
   const { t } = useTranslation();
   return (
     <Card>
@@ -24,6 +30,15 @@ export function EquipmentCatalogPanel() {
         <InverterConfigurationSection />
         <SolarModuleConfigurationSection />
       </CardContent>
+      {accountId && systemId ? (
+        <CardContent>
+          <EquipmentConfirmationForm
+            accountId={accountId}
+            systemId={systemId}
+          />
+        </CardContent>
+      ) : null}
     </Card>
   );
 }
+import { EquipmentConfirmationForm } from "@/features/equipmentCatalog/components/EquipmentConfirmationForm";

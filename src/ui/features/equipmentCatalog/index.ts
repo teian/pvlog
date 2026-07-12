@@ -5,6 +5,7 @@ export {
 export {
   useInverterCatalog,
   useSolarModuleCatalog,
+  useSaveEquipmentConfiguration,
 } from "./hooks/useEquipmentCatalog";
 export {
   inverterCatalogEntrySchema,
