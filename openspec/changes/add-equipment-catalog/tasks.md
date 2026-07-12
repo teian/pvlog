@@ -22,7 +22,7 @@
 
 ## 4. Web Equipment Workflow
 
-- [ ] 4.1 Add typed catalog clients and TanStack Query hooks with Zod validation, bounded search caching, loading, empty, and error states.
+- [x] 4.1 Add typed catalog clients and TanStack Query hooks with Zod validation, bounded search caching, loading, empty, and error states.
 - [ ] 4.2 Implement accessible localized inverter and solar-module catalog selectors as optional prefilling aids alongside a first-class manual-entry workflow.
 - [ ] 4.3 Implement localized technical-data review tables for inverter string/MPPT topology, per-string module count/manufacturer/model/per-module power/calculated total power, DC/AC electrical limits, efficiency, environmental, communications and mechanical data plus module electrical, thermal, mechanical, dimensional, bifacial, revision, and provenance information.
 - [ ] 4.4 Keep all prefilled technical fields editable, persist confirmed values through the real equipment APIs, and label manual, copied, customized, and older-template provenance without restricting configuration.
