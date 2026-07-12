@@ -383,7 +383,7 @@ fn database_target(config: &RuntimeConfig) -> DatabaseTarget {
 
 async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(), StartupError> {
     probe_database(target).await?;
-    let _equipment_catalog = EquipmentCatalog::bundled()?;
+    let equipment_catalog = Arc::new(EquipmentCatalog::bundled()?);
     let user_lifecycle = compose_user_lifecycle(config, target)?;
     let local_password = compose_local_password(config, target)?;
     let request_authenticator = compose_request_authenticator(config, target)?;
@@ -437,6 +437,7 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 inverter_api,
                 request_authorizer.clone(),
             ))
+            .merge(pvlog_api::equipment_catalog_router(equipment_catalog))
             .merge(pvlog_api::dashboard_router(Arc::new(EmptyDashboardApi))),
         request_authenticator,
     );

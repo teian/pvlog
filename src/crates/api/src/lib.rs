@@ -32,6 +32,7 @@ mod authentication;
 mod authorization;
 mod connectors;
 mod dashboard;
+mod equipment_catalog;
 mod identities;
 mod inverters;
 mod local_password;
@@ -61,6 +62,9 @@ pub use connectors::{
 pub use dashboard::{
     DashboardAlertResponse, DashboardApiError, DashboardApiUseCases, DashboardIngestionResponse,
     DashboardResponse, dashboard_router,
+};
+pub use equipment_catalog::{
+    CatalogPageResponse, EquipmentCatalogApiError, equipment_catalog_router,
 };
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,

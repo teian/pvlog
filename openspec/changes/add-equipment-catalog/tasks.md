@@ -15,7 +15,7 @@
 
 ## 3. Catalog and Equipment APIs
 
-- [ ] 3.1 Add authenticated inverter and solar-module list/detail routes with search, manufacturer filters, bounded pagination, deterministic ordering, and revision metadata.
+- [x] 3.1 Add authenticated inverter and solar-module list/detail routes with search, manufacturer filters, bounded pagination, deterministic ordering, and revision metadata.
 - [ ] 3.2 Extend inverter/string equipment write and read contracts with optional template references, confirmed snapshot data, module count, manufacturer/model, per-module and derived total peak power, manual/copied/customized provenance, and safe value-validation errors.
 - [ ] 3.3 Document catalog schemas, normalized units, pagination, authentication, examples, optional prefilling, editable values, and snapshot semantics in OpenAPI.
 - [ ] 3.4 Add API authorization, schema, filtering, not-found, edited-prefill, manual-entry, and bidirectional route-coverage tests.
