@@ -37,3 +37,25 @@ compatible schema. Connector settings stay provider-neutral: configure generic
 OIDC/OAuth2 records through supported `PVLOG_AUTH__CONNECTORS__<INDEX>__*`
 variables or a mounted `pvlog.toml`; store the corresponding secret references
 outside version control.
+## PV yield forecasting
+
+Forecasting is disabled by default. Set `PVLOG_FORECASTING_ENABLED=true` only
+after deploying a normalized weather adapter and an external secret reference.
+`PVLOG_FORECASTING_ADAPTER_ENDPOINT` identifies the provider-neutral adapter;
+`PVLOG_FORECASTING_CREDENTIAL_SECRET_REF` is a reference such as
+`secret://weather/production`, never the credential value. The adapter owns
+provider authentication and licensing compliance.
+
+Polling defaults to 900 seconds and requests a 72-hour horizon. A stale run may
+be used only when its age is within
+`PVLOG_FORECASTING_MAXIMUM_STALE_AGE_SECONDS`; set that value to `0` to fail
+closed instead. `MODEL_IDENTIFIER` plus `MODEL_REVISION` select deterministic
+calculation semantics. Unreferenced working inputs/results expire after
+`WORKING_RETENTION_DAYS`, while issued forecasts referenced by historical
+performance are preserved. `WORKER_CONCURRENCY` bounds forecast jobs per worker
+independently of the worker readiness interval.
+
+Feature gating does not affect telemetry ingestion. If the adapter is down,
+forecast endpoints report stale or unavailable modeled data while push and
+historical telemetry paths continue operating.
+

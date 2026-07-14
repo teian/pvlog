@@ -153,3 +153,61 @@ fn local_password_security_parameters_are_validated() {
     assert!(issues.iter().any(|issue| issue.contains("brute-force")));
     assert!(issues.iter().any(|issue| issue.contains("Argon2id")));
 }
+
+#[test]
+fn forecasting_configuration_is_provider_neutral_and_bounded() {
+    let config = config_from_json(json!({
+        "security": {
+            "session_secret": "session-secret-that-is-at-least-32-bytes",
+            "credential_encryption_key": "encryption-key-that-is-at-least-32-bytes"
+        },
+        "forecasting": {
+            "enabled": true,
+            "adapter_endpoint": "https://weather-adapter.internal/v1/normalized",
+            "credential_secret_ref": "secret://weather/production",
+            "poll_interval_seconds": 600,
+            "horizon_hours": 96,
+            "maximum_stale_age_seconds": 7200,
+            "worker_concurrency": 4
+        }
+    }));
+
+    assert!(config.forecasting.enabled);
+    assert_eq!(config.forecasting.horizon_hours, 96);
+    assert_eq!(config.forecasting.worker_concurrency, 4);
+    assert_eq!(config.forecasting.model_identifier, "pv-yield-v1");
+}
+
+#[test]
+fn enabled_forecasting_rejects_missing_adapter_and_unbounded_policy() {
+    let config: RuntimeConfig = Figment::from(Serialized::defaults(json!({
+        "security": {
+            "session_secret": "session-secret-that-is-at-least-32-bytes",
+            "credential_encryption_key": "encryption-key-that-is-at-least-32-bytes"
+        },
+        "forecasting": {
+            "enabled": true,
+            "horizon_hours": 337,
+            "worker_concurrency": 0,
+            "working_retention_days": 0
+        }
+    })))
+    .extract()
+    .unwrap_or_else(|error| panic!("configuration shape must decode: {error}"));
+
+    let Err(ConfigError::Validation(issues)) = config.validate() else {
+        panic!("expected forecasting validation errors");
+    };
+    assert!(
+        issues
+            .iter()
+            .any(|issue| issue.contains("adapter_endpoint"))
+    );
+    assert!(
+        issues
+            .iter()
+            .any(|issue| issue.contains("credential_secret_ref"))
+    );
+    assert!(issues.iter().any(|issue| issue.contains("336 hours")));
+    assert!(issues.iter().any(|issue| issue.contains("concurrency")));
+}

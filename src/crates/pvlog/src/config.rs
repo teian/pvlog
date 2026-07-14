@@ -27,6 +27,8 @@ pub struct RuntimeConfig {
     pub auth: AuthConfig,
     /// OpenTelemetry export settings.
     pub telemetry: TelemetryConfig,
+    /// Provider-neutral PV yield forecasting controls.
+    pub forecasting: ForecastingConfig,
 }
 
 impl RuntimeConfig {
@@ -132,6 +134,8 @@ impl RuntimeConfig {
             connector.validate(&mut issues);
         }
 
+        self.forecasting.validate(&mut issues);
+
         if self.environment == Environment::Production {
             if self.http.public_base_url.scheme() != "https" {
                 issues.push("http.public_base_url must use HTTPS in production".to_owned());
@@ -166,6 +170,7 @@ impl Default for RuntimeConfig {
             security: SecurityConfig::default(),
             auth: AuthConfig::default(),
             telemetry: TelemetryConfig::default(),
+            forecasting: ForecastingConfig::default(),
         }
     }
 }
@@ -180,6 +185,7 @@ impl fmt::Debug for RuntimeConfig {
             .field("security", &self.security)
             .field("auth", &self.auth)
             .field("telemetry", &self.telemetry)
+            .field("forecasting", &self.forecasting)
             .finish()
     }
 }
@@ -468,6 +474,79 @@ pub struct TelemetryConfig {
     pub enabled: bool,
     /// Provider-neutral OTLP/HTTP collector endpoint.
     pub otlp_endpoint: Option<Url>,
+}
+
+/// Provider-neutral weather adapter, model, retention, and worker policy.
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct ForecastingConfig {
+    /// Enables weather polling and yield calculation jobs.
+    pub enabled: bool,
+    /// Administrator-controlled normalized weather adapter endpoint.
+    pub adapter_endpoint: Option<Url>,
+    /// External secret-manager reference resolved by the adapter integration.
+    pub credential_secret_ref: Option<String>,
+    /// Seconds between provider polls.
+    pub poll_interval_seconds: u32,
+    /// Forward forecast horizon requested from the provider.
+    pub horizon_hours: u16,
+    /// Maximum age accepted for an explicitly stale degraded run; zero disables stale fallback.
+    pub maximum_stale_age_seconds: u32,
+    /// Stable deterministic model identifier.
+    pub model_identifier: String,
+    /// Deterministic model revision.
+    pub model_revision: u16,
+    /// Days to retain unreferenced working runs and results.
+    pub working_retention_days: u16,
+    /// Maximum concurrent forecast job executions per worker.
+    pub worker_concurrency: u16,
+}
+
+impl ForecastingConfig {
+    fn validate(&self, issues: &mut Vec<String>) {
+        if self.enabled && self.adapter_endpoint.is_none() {
+            issues.push(
+                "forecasting.adapter_endpoint is required when forecasting is enabled".to_owned(),
+            );
+        }
+        if self.enabled
+            && self
+                .credential_secret_ref
+                .as_deref()
+                .is_none_or(|reference| reference.trim().is_empty())
+        {
+            issues.push(
+                "forecasting.credential_secret_ref is required when forecasting is enabled"
+                    .to_owned(),
+            );
+        }
+        if self.poll_interval_seconds == 0 || self.horizon_hours == 0 || self.horizon_hours > 336 {
+            issues.push("forecasting poll interval and horizon must be non-zero and horizon must not exceed 336 hours".to_owned());
+        }
+        if self.model_identifier.trim().is_empty() || self.model_revision == 0 {
+            issues.push("forecasting model identifier and revision must be set".to_owned());
+        }
+        if self.working_retention_days == 0 || !(1..=64).contains(&self.worker_concurrency) {
+            issues.push("forecasting retention must be non-zero and worker concurrency must be between 1 and 64".to_owned());
+        }
+    }
+}
+
+impl Default for ForecastingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            adapter_endpoint: None,
+            credential_secret_ref: None,
+            poll_interval_seconds: 900,
+            horizon_hours: 72,
+            maximum_stale_age_seconds: 21_600,
+            model_identifier: "pv-yield-v1".to_owned(),
+            model_revision: 1,
+            working_retention_days: 30,
+            worker_concurrency: 2,
+        }
+    }
 }
 
 /// Runtime configuration failure.
