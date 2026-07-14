@@ -27,6 +27,18 @@ export function SystemLayoutPage() {
                     : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
                 }`
               }
+              to="forecast"
+            >
+              {t("forecasting.page.tab")}
+            </NavLink>
+            <NavLink
+              className={({ isActive }) =>
+                `${TAB_CLASS} ${
+                  isActive
+                    ? "border-primary text-foreground"
+                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground"
+                }`
+              }
               end
               to="."
             >

@@ -84,3 +84,5 @@ export function AppRoutes() {
     </AppErrorBoundary>
   );
 }
+  SystemForecastPage,
+            <Route element={<SystemForecastPage />} path="forecast" />

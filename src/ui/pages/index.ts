@@ -1,4 +1,5 @@
 export { HomePage } from "./HomePage";
+export { SystemForecastPage } from "./SystemForecastPage";
 export { ActivationPage } from "./ActivationPage";
 export { AdministrationPage } from "./AdministrationPage";
 export { AuthCallbackPage } from "./AuthCallbackPage";

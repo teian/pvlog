@@ -3,6 +3,7 @@ import {
   fetchForecastSettings,
   fetchPerformanceSeries,
   fetchYieldSeries,
+  requestForecastExport,
   updateForecastSettings,
 } from "@/features/forecasting/api/forecastApi";
 import type {
@@ -64,6 +65,7 @@ export function useYieldSeries(
     queryKey: [...rootKey(accountId, systemId), "yield", basis, range],
     queryFn: () => fetchYieldSeries(accountId, systemId, range, basis),
     staleTime: 60_000,
+    retry: false,
     enabled: Boolean(accountId && systemId),
   });
 }
@@ -79,6 +81,36 @@ export function usePerformanceSeries(
     queryKey: [...rootKey(accountId, systemId), "performance", metric, range],
     queryFn: () => fetchPerformanceSeries(accountId, systemId, range, metric),
     staleTime: 60_000,
+    retry: false,
     enabled: Boolean(accountId && systemId),
+  });
+}
+
+/** Downloads an export matching a modeled view. @returns Export mutation state. */
+export function useForecastExport() {
+  return useMutation({
+    mutationFn: ({
+      systemId,
+      range,
+      field,
+      format,
+    }: {
+      systemId: string;
+      range: ForecastRange;
+      field:
+        | "forecast_power"
+        | "expected_energy"
+        | "generation_performance"
+        | "forecast_realization";
+      format: "csv" | "json";
+    }) => requestForecastExport(systemId, range, field, format),
+    onSuccess: (blob, variables) => {
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${variables.field}.${variables.format}`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    },
   });
 }

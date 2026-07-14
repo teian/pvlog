@@ -59,7 +59,9 @@ export function ForecastSettingsForm({
     resolver: zodResolver(formSchema),
     defaultValues: defaults(versioned),
   });
-  useEffect(() => form.reset(defaults(versioned)), [form, versioned]);
+  useEffect(() => {
+    form.reset(defaults(versioned));
+  }, [form, versioned]);
   if (loading) return <Card className="h-80 animate-pulse bg-muted" />;
   if (error || !versioned)
     return (
@@ -105,7 +107,12 @@ export function ForecastSettingsForm({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form className="grid gap-4 md:grid-cols-2" onSubmit={submit}>
+        <form
+          className="grid gap-4 md:grid-cols-2"
+          onSubmit={(event) => {
+            void submit(event);
+          }}
+        >
           <Field>
             <FieldLabel htmlFor="forecast-effective-from">
               {t("forecasting.settings.effectiveFrom")}

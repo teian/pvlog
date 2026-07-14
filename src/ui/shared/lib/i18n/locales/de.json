@@ -510,3 +510,72 @@
     "tabsLabel": "Anlagenbereiche"
   }
 }
+    "notAvailableReason": "Nicht verfügbar: {{reason}}",
+    "capacityKwp": "{{included}} von {{total}} kWp",
+    "coverage": "Abdeckung",
+    "energyKwh": "{{value}} kWh",
+    "exportCsv": "CSV exportieren",
+    "exportJson": "JSON exportieren",
+    "interval": "Intervall",
+    "percent": "{{value}} %",
+    "powerKw": "{{value}} kW",
+    "freshness": {
+      "fresh": "Aktuelle Prognose",
+      "stale": "Veraltete Prognose",
+      "unavailable": "Anbieter nicht verfügbar"
+    },
+    "page": {
+      "description": "Wetterbasiertes Erzeugungspotenzial prüfen und mit der gemessenen Erzeugung vergleichen.",
+      "tab": "Prognose",
+      "title": "PV-Ertragsprognose"
+    },
+    "view": {
+      "chart": "Diagramm",
+      "table": "Datentabelle"
+    },
+    "forward": {
+      "capacity": "Modellierte Leistung",
+      "central": "Wahrscheinlichste Leistung",
+      "configuration": "Konfigurationsversion",
+      "description": "Potenzielle Erzeugung auf Basis der Wettervorhersage; dies sind Modelldaten, keine Messwerte.",
+      "emptyDescription": "Für den gewählten Zeitraum liegen keine modellierten Punkte vor.",
+      "emptyTitle": "Keine Prognose verfügbar",
+      "energy": "Potenzielle Energie",
+      "errorDescription": "Die Ist-Telemetrie bleibt verfügbar, während sich Wetter- oder Berechnungsdienst erholen.",
+      "errorTitle": "Prognose vorübergehend nicht verfügbar",
+      "horizon": "Prognosehorizont",
+      "issued": "Ausgegeben am",
+      "lower": "Untere Unsicherheitsgrenze",
+      "model": "Berechnungsmodell",
+      "partialDescription": "Werte decken möglicherweise nur einen Teil der konfigurierten Nennleistung ab oder nutzen einen älteren Wetterlauf. Leistung und Aktualität stehen unten.",
+      "partialTitle": "Teilweises oder veraltetes Modellergebnis",
+      "peak": "Modellierte Spitzenleistung",
+      "provider": "Wetterdaten-Attribution",
+      "tableCaption": "Vorhersagewerte mit Unsicherheit und Abdeckung",
+      "textSummary": "Die aktuelle Prognose modelliert {{energy}} kWh und eine Spitze von {{peak}} kW mit Wetterdaten von {{attribution}}.",
+      "title": "Leistungsprognose",
+      "uncertainty": "Unsicherheitsbereich",
+      "upper": "Obere Unsicherheitsgrenze"
+    },
+    "performance": {
+      "actual": "Ist-Erzeugung",
+      "average": "Durchschnittliches Verhältnis",
+      "description": "Die Ist-Energie wird mit historisch erwarteter Erzeugung und mit der zuvor ausgegebenen Prognose abgeglichen. Diese Verhältnisse sind nicht der Wechselrichterwirkungsgrad.",
+      "errorDescription": "Die abgeglichenen Mess- und Modellreihen konnten nicht geladen werden.",
+      "errorTitle": "Leistungsvergleich nicht verfügbar",
+      "forecast_realization": {
+        "description": "Ist-Erzeugung geteilt durch die vor dem Intervall ausgegebene Wetterprognose.",
+        "explanation": "Zeigt Prognosegüte und Betriebsergebnis zusammen; beschreibt nicht den DC-AC-Wirkungsgrad des Wechselrichters.",
+        "title": "Prognoserealisierung"
+      },
+      "generation_performance": {
+        "description": "Ist-Erzeugung geteilt durch die aus beobachtetem oder Reanalyse-Wetter rekonstruierte erwartete Erzeugung.",
+        "explanation": "Zeigt die Anlagenerzeugung gegenüber wetterbereinigtem Potenzial; beschreibt nicht den DC-AC-Wirkungsgrad des Wechselrichters.",
+        "title": "Erzeugungsleistung"
+      },
+      "modeled": "Modellierte Erzeugung",
+      "noData": "Keine abgeglichenen Intervalle erfüllen die Abdeckungsanforderungen. Fehlende Werte bleiben nicht verfügbar und werden nicht als null dargestellt.",
+      "ratio": "Verhältnis",
+      "tableCaption": "Ist- und Modellerzeugung mit ausdrücklichem Verfügbarkeitsgrund",
+      "title": "Erwartete und tatsächliche Erzeugung"
+    },

@@ -10,6 +10,11 @@ export const seriesFieldSchema = z.enum([
   "battery_power",
   "battery_state_of_charge",
   "temperature",
+  "forecast_power",
+  "forecast_energy",
+  "expected_energy",
+  "generation_performance",
+  "forecast_realization",
   "extended",
 ]);
 

@@ -510,3 +510,72 @@
     "tabsLabel": "System sections"
   }
 }
+    "notAvailableReason": "Not available: {{reason}}",
+    "capacityKwp": "{{included}} of {{total}} kWp",
+    "coverage": "Coverage",
+    "energyKwh": "{{value}} kWh",
+    "exportCsv": "Export CSV",
+    "exportJson": "Export JSON",
+    "interval": "Interval",
+    "percent": "{{value}}%",
+    "powerKw": "{{value}} kW",
+    "freshness": {
+      "fresh": "Fresh forecast",
+      "stale": "Stale forecast",
+      "unavailable": "Provider unavailable"
+    },
+    "page": {
+      "description": "Review weather-based potential generation and compare it with measured output.",
+      "tab": "Forecast",
+      "title": "PV yield forecasting"
+    },
+    "view": {
+      "chart": "Chart",
+      "table": "Data table"
+    },
+    "forward": {
+      "capacity": "Modeled capacity",
+      "central": "Most likely power",
+      "configuration": "Configuration version",
+      "description": "Potential generation based on predicted weather; this is modeled data, not a measurement.",
+      "emptyDescription": "No modeled points exist for the selected horizon.",
+      "emptyTitle": "No forecast available",
+      "energy": "Potential energy",
+      "errorDescription": "Actual telemetry remains available while the weather or calculation service recovers.",
+      "errorTitle": "Forecast temporarily unavailable",
+      "horizon": "Forecast horizon",
+      "issued": "Issued at",
+      "lower": "Lower uncertainty bound",
+      "model": "Calculation model",
+      "partialDescription": "Values may cover only part of the configured nameplate capacity or use an older weather run. Capacity and freshness are shown below.",
+      "partialTitle": "Partial or stale modeled result",
+      "peak": "Peak modeled power",
+      "provider": "Weather attribution",
+      "tableCaption": "Forward forecast values with uncertainty and coverage",
+      "textSummary": "The current forecast models {{energy}} kWh and a peak of {{peak}} kW using weather attributed to {{attribution}}.",
+      "title": "Forward power forecast",
+      "uncertainty": "Uncertainty range",
+      "upper": "Upper uncertainty bound"
+    },
+    "performance": {
+      "actual": "Actual generation",
+      "average": "Average ratio",
+      "description": "Actual energy is aligned with historical expected generation and with the forecast that was issued beforehand. These ratios are not inverter conversion efficiency.",
+      "errorDescription": "The aligned measured and modeled series could not be loaded.",
+      "errorTitle": "Performance comparison unavailable",
+      "forecast_realization": {
+        "description": "Actual generation divided by the weather forecast issued before the interval.",
+        "explanation": "Shows forecast accuracy and operational outcome together; it does not describe DC-to-AC inverter efficiency.",
+        "title": "Forecast realization"
+      },
+      "generation_performance": {
+        "description": "Actual generation divided by expected generation reconstructed from observed or reanalysis weather.",
+        "explanation": "Shows system generation performance against weather-adjusted potential; it does not describe DC-to-AC inverter efficiency.",
+        "title": "Generation performance"
+      },
+      "modeled": "Modeled generation",
+      "noData": "No aligned intervals meet the coverage requirements. Missing values remain unavailable and are not displayed as zero.",
+      "ratio": "Ratio",
+      "tableCaption": "Actual and modeled generation with an explicit availability reason",
+      "title": "Expected versus actual generation"
+    },

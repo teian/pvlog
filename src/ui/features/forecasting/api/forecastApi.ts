@@ -109,3 +109,34 @@ export async function fetchPerformanceSeries(
     ),
   );
 }
+
+/** Requests an analysis export matching a forecast or performance view. @param systemId - Target system. @param range - Export range. @param field - Modeled field. @param format - File format. @returns Downloadable response blob. */
+export async function requestForecastExport(
+  systemId: string,
+  range: ForecastRange,
+  field:
+    | "forecast_power"
+    | "expected_energy"
+    | "generation_performance"
+    | "forecast_realization",
+  format: "csv" | "json",
+): Promise<Blob> {
+  const response = await fetch(`/api/v1/systems/${systemId}/analysis-exports`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      startEpochMillis: range.startEpochMillis,
+      endEpochMillis: range.endEpochMillis,
+      fields: [field],
+      resolution: range.resolution === "15m" ? "15m" : range.resolution,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      maximumPoints: range.maximumPoints,
+      format,
+      asynchronous: false,
+    }),
+  });
+  if (!response.ok)
+    throw new Error(`forecast_export_failed:${String(response.status)}`);
+  return response.blob();
+}
