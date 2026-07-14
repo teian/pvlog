@@ -113,7 +113,10 @@ pub use sqlite_router::{
     RoutedSqliteAccount, SerializedSqliteWriter, SqliteAccountPoolConfig, SqliteAccountPoolRouter,
     SqliteCheckpointMode, SqliteCheckpointReport, SqliteRoutingError,
 };
-pub use summary_rebuild::{DailyAggregate, LifetimeAggregate, SummaryDay, SummaryProjection};
+pub use summary_rebuild::{
+    DailyAggregate, LifetimeAggregate, ModeledSummary, ModeledYieldAggregate, SummaryDay,
+    SummaryPeriod, SummaryProjection,
+};
 #[cfg(feature = "postgres")]
 pub use system_lifecycle_repository::PostgresSystemLifecycleRepository;
 #[cfg(feature = "sqlite")]
