@@ -143,7 +143,8 @@ pub use yield_result_repository::PostgresYieldResultRepository;
 #[cfg(feature = "sqlite")]
 pub use yield_result_repository::SqliteYieldResultRepository;
 pub use yield_result_repository::{
-    StoredYieldResult, YieldCalculationRunRecord, YieldCalculationState, YieldResultRepository,
+    StoredYieldResult, YieldCalculationRunRecord, YieldCalculationState, YieldInvalidationReason,
+    YieldInvalidationRecord, YieldInvalidationState, YieldResultRepository,
     YieldResultRepositoryError,
 };
 

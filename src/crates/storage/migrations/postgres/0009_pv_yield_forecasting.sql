@@ -221,7 +221,11 @@ END;
 $$;
 
 CREATE TRIGGER weather_data_runs_no_update
-BEFORE UPDATE ON account_data.weather_data_runs
+BEFORE UPDATE OF id, account_id, system_id, provider_configuration_id, source_run_key,
+    data_kind, issued_at, fetched_at, valid_from, valid_to, resolution_seconds,
+    spatial_kind, latitude_e6, longitude_e6, provider_region, adapter, source_url,
+    license_identifier, attribution, provenance, created_at
+ON account_data.weather_data_runs
 FOR EACH ROW EXECUTE FUNCTION account_data.reject_immutable_yield_update();
 
 CREATE TRIGGER weather_data_points_no_update

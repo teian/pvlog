@@ -117,6 +117,20 @@ pub trait YieldForecastInputRepository: Send + Sync {
         range: TimeRange,
         issued_before: Option<UtcTimestamp>,
     ) -> Result<Option<WeatherRunRecord>, YieldForecastRepositoryError>;
+
+    async fn retain_weather_run(
+        &self,
+        id: WeatherDataRunId,
+        retention_class: ForecastRetentionClass,
+        retain_until: Option<i64>,
+        referenced_at: Option<i64>,
+    ) -> Result<bool, YieldForecastRepositoryError>;
+
+    async fn purge_expired_weather_runs(
+        &self,
+        now: i64,
+        limit: u32,
+    ) -> Result<u64, YieldForecastRepositoryError>;
 }
 
 #[cfg(feature = "sqlite")]
@@ -314,6 +328,49 @@ impl YieldForecastInputRepository for SqliteYieldForecastInputRepository {
             None => Ok(None),
         }
     }
+
+    async fn retain_weather_run(
+        &self,
+        id: WeatherDataRunId,
+        retention_class: ForecastRetentionClass,
+        retain_until: Option<i64>,
+        referenced_at: Option<i64>,
+    ) -> Result<bool, YieldForecastRepositoryError> {
+        validate_retention(retention_class, retain_until, referenced_at)?;
+        let mut writer = self.account.acquire_writer().await?;
+        let changed = sqlx::query(
+            "UPDATE weather_data_runs SET retention_class=?,retain_until=?,referenced_at=? WHERE id=?",
+        )
+        .bind(retention_class.as_str())
+        .bind(retain_until)
+        .bind(referenced_at)
+        .bind(blob(id.as_uuid()))
+        .execute(writer.connection())
+        .await?
+        .rows_affected();
+        Ok(changed == 1)
+    }
+
+    async fn purge_expired_weather_runs(
+        &self,
+        now: i64,
+        limit: u32,
+    ) -> Result<u64, YieldForecastRepositoryError> {
+        validate_retention_limit(limit)?;
+        let mut writer = self.account.acquire_writer().await?;
+        let changed = sqlx::query(
+            "DELETE FROM weather_data_runs WHERE id IN (SELECT w.id FROM weather_data_runs w \
+             WHERE w.retention_class='working' AND w.referenced_at IS NULL AND w.retain_until<=? \
+             AND NOT EXISTS (SELECT 1 FROM yield_calculation_runs c WHERE c.weather_run_id=w.id) \
+             ORDER BY w.retain_until,w.id LIMIT ?)",
+        )
+        .bind(now)
+        .bind(i64::from(limit))
+        .execute(writer.connection())
+        .await?
+        .rows_affected();
+        Ok(changed)
+    }
 }
 
 #[cfg(feature = "postgres")]
@@ -476,6 +533,55 @@ impl YieldForecastInputRepository for PostgresYieldForecastInputRepository {
             }
             None => Ok(None),
         }
+    }
+
+    async fn retain_weather_run(
+        &self,
+        id: WeatherDataRunId,
+        retention_class: ForecastRetentionClass,
+        retain_until: Option<i64>,
+        referenced_at: Option<i64>,
+    ) -> Result<bool, YieldForecastRepositoryError> {
+        validate_retention(retention_class, retain_until, referenced_at)?;
+        let mut connection = self.connection().await?;
+        let changed = sqlx::query(
+            "UPDATE account_data.weather_data_runs SET retention_class=$1,retain_until=$2,referenced_at=$3 \
+             WHERE account_id=$4 AND id=$5",
+        )
+        .bind(retention_class.as_str())
+        .bind(retain_until)
+        .bind(referenced_at)
+        .bind(self.account_id.as_uuid())
+        .bind(id.as_uuid())
+        .execute(&mut connection)
+        .await?
+        .rows_affected();
+        Ok(changed == 1)
+    }
+
+    async fn purge_expired_weather_runs(
+        &self,
+        now: i64,
+        limit: u32,
+    ) -> Result<u64, YieldForecastRepositoryError> {
+        validate_retention_limit(limit)?;
+        let mut connection = self.connection().await?;
+        let changed = sqlx::query(
+            "DELETE FROM account_data.weather_data_runs w WHERE w.account_id=$1 AND w.id IN ( \
+             SELECT candidate.id FROM account_data.weather_data_runs candidate \
+             WHERE candidate.account_id=$1 AND candidate.retention_class='working' \
+             AND candidate.referenced_at IS NULL AND candidate.retain_until<=$2 \
+             AND NOT EXISTS (SELECT 1 FROM account_data.yield_calculation_runs c \
+                 WHERE c.account_id=$1 AND c.weather_run_id=candidate.id) \
+             ORDER BY candidate.retain_until,candidate.id LIMIT $3)",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(now)
+        .bind(i64::from(limit))
+        .execute(&mut connection)
+        .await?
+        .rows_affected();
+        Ok(changed)
     }
 }
 
@@ -1114,6 +1220,39 @@ fn validate_weather_record(record: &WeatherRunRecord) -> Result<(), YieldForecas
         previous_end = Some(point.interval.end);
     }
     Ok(())
+}
+
+fn validate_retention(
+    retention_class: ForecastRetentionClass,
+    retain_until: Option<i64>,
+    referenced_at: Option<i64>,
+) -> Result<(), YieldForecastRepositoryError> {
+    if retention_class == ForecastRetentionClass::Referenced && referenced_at.is_none() {
+        return Err(YieldForecastRepositoryError::Validation(
+            "referenced weather retention requires a reference time",
+        ));
+    }
+    if retention_class != ForecastRetentionClass::Referenced && referenced_at.is_some() {
+        return Err(YieldForecastRepositoryError::Validation(
+            "only referenced weather runs may carry a reference time",
+        ));
+    }
+    if retention_class == ForecastRetentionClass::Working && retain_until.is_none() {
+        return Err(YieldForecastRepositoryError::Validation(
+            "working weather retention requires an expiry",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_retention_limit(limit: u32) -> Result<(), YieldForecastRepositoryError> {
+    if limit == 0 || limit > 10_000 {
+        Err(YieldForecastRepositoryError::Validation(
+            "retention limit must be between 1 and 10000",
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 fn point_values(point: &NormalizedWeatherPoint) -> [Option<i64>; 12] {

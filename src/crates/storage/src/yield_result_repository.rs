@@ -77,6 +77,49 @@ pub struct StoredYieldResult {
     pub created_at: i64,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum YieldInvalidationReason {
+    Equipment,
+    Settings,
+    ProviderRevision,
+    LateTelemetry,
+    Correction,
+    ModelVersion,
+}
+
+impl YieldInvalidationReason {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Equipment => "equipment",
+            Self::Settings => "settings",
+            Self::ProviderRevision => "provider_revision",
+            Self::LateTelemetry => "late_telemetry",
+            Self::Correction => "correction",
+            Self::ModelVersion => "model_version",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum YieldInvalidationState {
+    Pending,
+    Leased,
+    Completed,
+    Failed,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct YieldInvalidationRecord {
+    pub id: Uuid,
+    pub system_id: SystemId,
+    pub range: TimeRange,
+    pub reason: YieldInvalidationReason,
+    pub state: YieldInvalidationState,
+    pub idempotency_key: String,
+    pub created_at: i64,
+    pub completed_at: Option<i64>,
+}
+
 #[async_trait]
 pub trait YieldResultRepository: Send + Sync {
     fn account_id(&self) -> AccountId;
@@ -123,6 +166,38 @@ pub trait YieldResultRepository: Send + Sync {
         range: TimeRange,
         limit: u32,
     ) -> Result<Vec<StoredYieldResult>, YieldResultRepositoryError>;
+
+    async fn insert_invalidation(
+        &self,
+        invalidation: &YieldInvalidationRecord,
+    ) -> Result<WeatherRunInsertOutcome, YieldResultRepositoryError>;
+
+    async fn pending_invalidations(
+        &self,
+        system_id: SystemId,
+        range: TimeRange,
+        limit: u32,
+    ) -> Result<Vec<YieldInvalidationRecord>, YieldResultRepositoryError>;
+
+    async fn complete_invalidation(
+        &self,
+        id: Uuid,
+        completed_at: i64,
+    ) -> Result<bool, YieldResultRepositoryError>;
+
+    async fn retain_calculation_run(
+        &self,
+        id: YieldCalculationRunId,
+        retention_class: ForecastRetentionClass,
+        retain_until: Option<i64>,
+        referenced_at: Option<i64>,
+    ) -> Result<bool, YieldResultRepositoryError>;
+
+    async fn purge_expired_calculation_runs(
+        &self,
+        now: i64,
+        limit: u32,
+    ) -> Result<u64, YieldResultRepositoryError>;
 }
 
 #[cfg(feature = "sqlite")]
@@ -513,6 +588,53 @@ fn validate_run(run: &YieldCalculationRunRecord) -> Result<(), YieldResultReposi
     validate_state(run.state, run.completed_at, run.safe_error_code.as_deref())
 }
 
+fn validate_invalidation(
+    invalidation: &YieldInvalidationRecord,
+) -> Result<(), YieldResultRepositoryError> {
+    if invalidation.idempotency_key.trim().is_empty()
+        || invalidation.state != YieldInvalidationState::Pending
+        || invalidation.completed_at.is_some()
+    {
+        return Err(YieldResultRepositoryError::Validation(
+            "new invalidation must be pending with an idempotency key",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_retention(
+    retention_class: ForecastRetentionClass,
+    retain_until: Option<i64>,
+    referenced_at: Option<i64>,
+) -> Result<(), YieldResultRepositoryError> {
+    if retention_class == ForecastRetentionClass::Referenced && referenced_at.is_none() {
+        return Err(YieldResultRepositoryError::Validation(
+            "referenced result retention requires a reference time",
+        ));
+    }
+    if retention_class != ForecastRetentionClass::Referenced && referenced_at.is_some() {
+        return Err(YieldResultRepositoryError::Validation(
+            "only referenced calculation runs may carry a reference time",
+        ));
+    }
+    if retention_class == ForecastRetentionClass::Working && retain_until.is_none() {
+        return Err(YieldResultRepositoryError::Validation(
+            "working calculation retention requires an expiry",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_retention_limit(limit: u32) -> Result<(), YieldResultRepositoryError> {
+    if limit == 0 || limit > 10_000 {
+        Err(YieldResultRepositoryError::Validation(
+            "retention limit must be between 1 and 10000",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 fn validate_state(
     state: YieldCalculationState,
     completed_at: Option<i64>,
@@ -711,6 +833,87 @@ fn parse_retention(value: &str) -> Result<ForecastRetentionClass, YieldResultRep
             "unknown result retention class",
         )),
     }
+}
+
+#[cfg(feature = "sqlite")]
+fn sqlite_invalidation(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<YieldInvalidationRecord, YieldResultRepositoryError> {
+    invalidation_from_columns(
+        uuid_from_blob(&row.try_get::<Vec<u8>, _>("id")?)?,
+        SystemId::from_uuid(uuid_from_blob(&row.try_get::<Vec<u8>, _>("system_id")?)?)?,
+        row.try_get("range_start")?,
+        row.try_get("range_end")?,
+        row.try_get("reason")?,
+        row.try_get("state")?,
+        row.try_get("idempotency_key")?,
+        row.try_get("created_at")?,
+        row.try_get("completed_at")?,
+    )
+}
+
+#[cfg(feature = "postgres")]
+fn postgres_invalidation(
+    row: &sqlx::postgres::PgRow,
+) -> Result<YieldInvalidationRecord, YieldResultRepositoryError> {
+    invalidation_from_columns(
+        row.try_get("id")?,
+        SystemId::from_uuid(row.try_get("system_id")?)?,
+        row.try_get("range_start")?,
+        row.try_get("range_end")?,
+        row.try_get("reason")?,
+        row.try_get("state")?,
+        row.try_get("idempotency_key")?,
+        row.try_get("created_at")?,
+        row.try_get("completed_at")?,
+    )
+}
+
+#[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)]
+fn invalidation_from_columns(
+    id: Uuid,
+    system_id: SystemId,
+    range_start: i64,
+    range_end: i64,
+    reason: String,
+    state: String,
+    idempotency_key: String,
+    created_at: i64,
+    completed_at: Option<i64>,
+) -> Result<YieldInvalidationRecord, YieldResultRepositoryError> {
+    Ok(YieldInvalidationRecord {
+        id,
+        system_id,
+        range: TimeRange::new(timestamp(range_start)?, timestamp(range_end)?)
+            .map_err(|_| YieldResultRepositoryError::Corrupt("invalid invalidation range"))?,
+        reason: match reason.as_str() {
+            "equipment" => YieldInvalidationReason::Equipment,
+            "settings" => YieldInvalidationReason::Settings,
+            "provider_revision" => YieldInvalidationReason::ProviderRevision,
+            "late_telemetry" => YieldInvalidationReason::LateTelemetry,
+            "correction" => YieldInvalidationReason::Correction,
+            "model_version" => YieldInvalidationReason::ModelVersion,
+            _ => {
+                return Err(YieldResultRepositoryError::Corrupt(
+                    "unknown invalidation reason",
+                ));
+            }
+        },
+        state: match state.as_str() {
+            "pending" => YieldInvalidationState::Pending,
+            "leased" => YieldInvalidationState::Leased,
+            "completed" => YieldInvalidationState::Completed,
+            "failed" => YieldInvalidationState::Failed,
+            _ => {
+                return Err(YieldResultRepositoryError::Corrupt(
+                    "unknown invalidation state",
+                ));
+            }
+        },
+        idempotency_key,
+        created_at,
+        completed_at,
+    })
 }
 
 fn timestamp_i64(value: UtcTimestamp) -> Result<i64, YieldResultRepositoryError> {
@@ -960,6 +1163,128 @@ impl YieldResultRepository for SqliteYieldResultRepository {
         .await?;
         rows.iter().map(sqlite_result).collect()
     }
+
+    async fn insert_invalidation(
+        &self,
+        invalidation: &YieldInvalidationRecord,
+    ) -> Result<WeatherRunInsertOutcome, YieldResultRepositoryError> {
+        validate_invalidation(invalidation)?;
+        let mut writer = self.account.acquire_writer().await?;
+        let existing = sqlx::query_scalar::<_, Vec<u8>>(
+            "SELECT id FROM yield_invalidations WHERE system_id=? AND idempotency_key=?",
+        )
+        .bind(blob(invalidation.system_id.as_uuid()))
+        .bind(&invalidation.idempotency_key)
+        .fetch_optional(writer.connection())
+        .await?;
+        if let Some(existing) = existing {
+            return if uuid_from_blob(&existing)? == invalidation.id {
+                Ok(WeatherRunInsertOutcome::AlreadyPresent)
+            } else {
+                Err(YieldResultRepositoryError::Conflict(
+                    "invalidation idempotency key belongs to another request",
+                ))
+            };
+        }
+        sqlx::query(
+            "INSERT INTO yield_invalidations \
+             (id,system_id,range_start,range_end,reason,state,idempotency_key,created_at,completed_at) \
+             VALUES (?,?,?,?,?,'pending',?,?,NULL)",
+        )
+        .bind(blob(invalidation.id))
+        .bind(blob(invalidation.system_id.as_uuid()))
+        .bind(timestamp_i64(invalidation.range.start)?)
+        .bind(timestamp_i64(invalidation.range.end)?)
+        .bind(invalidation.reason.as_str())
+        .bind(&invalidation.idempotency_key)
+        .bind(invalidation.created_at)
+        .execute(writer.connection())
+        .await?;
+        Ok(WeatherRunInsertOutcome::Inserted)
+    }
+
+    async fn pending_invalidations(
+        &self,
+        system_id: SystemId,
+        range: TimeRange,
+        limit: u32,
+    ) -> Result<Vec<YieldInvalidationRecord>, YieldResultRepositoryError> {
+        validate_query(range, limit)?;
+        let mut connection = self.account.acquire().await?;
+        let rows = sqlx::query(
+            "SELECT * FROM yield_invalidations WHERE system_id=? AND state='pending' \
+             AND range_start<? AND range_end>? ORDER BY range_start,created_at,id LIMIT ?",
+        )
+        .bind(blob(system_id.as_uuid()))
+        .bind(timestamp_i64(range.end)?)
+        .bind(timestamp_i64(range.start)?)
+        .bind(i64::from(limit))
+        .fetch_all(&mut *connection)
+        .await?;
+        rows.iter().map(sqlite_invalidation).collect()
+    }
+
+    async fn complete_invalidation(
+        &self,
+        id: Uuid,
+        completed_at: i64,
+    ) -> Result<bool, YieldResultRepositoryError> {
+        let mut writer = self.account.acquire_writer().await?;
+        let changed = sqlx::query(
+            "UPDATE yield_invalidations SET state='completed',completed_at=? \
+             WHERE id=? AND state IN ('pending','leased')",
+        )
+        .bind(completed_at)
+        .bind(blob(id))
+        .execute(writer.connection())
+        .await?
+        .rows_affected();
+        Ok(changed == 1)
+    }
+
+    async fn retain_calculation_run(
+        &self,
+        id: YieldCalculationRunId,
+        retention_class: ForecastRetentionClass,
+        retain_until: Option<i64>,
+        referenced_at: Option<i64>,
+    ) -> Result<bool, YieldResultRepositoryError> {
+        validate_retention(retention_class, retain_until, referenced_at)?;
+        let mut writer = self.account.acquire_writer().await?;
+        let changed = sqlx::query(
+            "UPDATE yield_calculation_runs SET retention_class=?,retain_until=?,referenced_at=? WHERE id=?",
+        )
+        .bind(retention_class.as_str())
+        .bind(retain_until)
+        .bind(referenced_at)
+        .bind(blob(id.as_uuid()))
+        .execute(writer.connection())
+        .await?
+        .rows_affected();
+        Ok(changed == 1)
+    }
+
+    async fn purge_expired_calculation_runs(
+        &self,
+        now: i64,
+        limit: u32,
+    ) -> Result<u64, YieldResultRepositoryError> {
+        validate_retention_limit(limit)?;
+        let mut writer = self.account.acquire_writer().await?;
+        let changed = sqlx::query(
+            "DELETE FROM yield_calculation_runs WHERE id IN (SELECT c.id FROM yield_calculation_runs c \
+             WHERE c.retention_class='working' AND c.referenced_at IS NULL AND c.retain_until<=? \
+             AND NOT EXISTS (SELECT 1 FROM yield_result_projections p JOIN yield_calculation_results r \
+                 ON r.id=p.result_id WHERE r.calculation_run_id=c.id) \
+             ORDER BY c.retain_until,c.id LIMIT ?)",
+        )
+        .bind(now)
+        .bind(i64::from(limit))
+        .execute(writer.connection())
+        .await?
+        .rows_affected();
+        Ok(changed)
+    }
 }
 
 #[cfg(feature = "postgres")]
@@ -1117,6 +1442,140 @@ impl YieldResultRepository for PostgresYieldResultRepository {
     ) -> Result<Vec<StoredYieldResult>, YieldResultRepositoryError> {
         self.query_results(system_id, basis_value, scope, range, limit, false)
             .await
+    }
+
+    async fn insert_invalidation(
+        &self,
+        invalidation: &YieldInvalidationRecord,
+    ) -> Result<WeatherRunInsertOutcome, YieldResultRepositoryError> {
+        validate_invalidation(invalidation)?;
+        let mut connection = self.connection().await?;
+        let existing = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM account_data.yield_invalidations \
+             WHERE account_id=$1 AND system_id=$2 AND idempotency_key=$3",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(invalidation.system_id.as_uuid())
+        .bind(&invalidation.idempotency_key)
+        .fetch_optional(&mut connection)
+        .await?;
+        if let Some(existing) = existing {
+            return if existing == invalidation.id {
+                Ok(WeatherRunInsertOutcome::AlreadyPresent)
+            } else {
+                Err(YieldResultRepositoryError::Conflict(
+                    "invalidation idempotency key belongs to another request",
+                ))
+            };
+        }
+        sqlx::query::<sqlx::Postgres>(
+            "INSERT INTO account_data.yield_invalidations \
+             (account_id,id,system_id,range_start,range_end,reason,state,idempotency_key,created_at,completed_at) \
+             VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8,NULL)",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(invalidation.id)
+        .bind(invalidation.system_id.as_uuid())
+        .bind(timestamp_i64(invalidation.range.start)?)
+        .bind(timestamp_i64(invalidation.range.end)?)
+        .bind(invalidation.reason.as_str())
+        .bind(&invalidation.idempotency_key)
+        .bind(invalidation.created_at)
+        .execute(&mut connection)
+        .await?;
+        Ok(WeatherRunInsertOutcome::Inserted)
+    }
+
+    async fn pending_invalidations(
+        &self,
+        system_id: SystemId,
+        range: TimeRange,
+        limit: u32,
+    ) -> Result<Vec<YieldInvalidationRecord>, YieldResultRepositoryError> {
+        validate_query(range, limit)?;
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "SELECT * FROM account_data.yield_invalidations WHERE account_id=$1 AND system_id=$2 \
+             AND state='pending' AND range_start<$3 AND range_end>$4 \
+             ORDER BY range_start,created_at,id LIMIT $5",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .bind(timestamp_i64(range.end)?)
+        .bind(timestamp_i64(range.start)?)
+        .bind(i64::from(limit))
+        .fetch_all(&mut connection)
+        .await?;
+        rows.iter().map(postgres_invalidation).collect()
+    }
+
+    async fn complete_invalidation(
+        &self,
+        id: Uuid,
+        completed_at: i64,
+    ) -> Result<bool, YieldResultRepositoryError> {
+        let mut connection = self.connection().await?;
+        let changed = sqlx::query(
+            "UPDATE account_data.yield_invalidations SET state='completed',completed_at=$1 \
+             WHERE account_id=$2 AND id=$3 AND state IN ('pending','leased')",
+        )
+        .bind(completed_at)
+        .bind(self.account_id.as_uuid())
+        .bind(id)
+        .execute(&mut connection)
+        .await?
+        .rows_affected();
+        Ok(changed == 1)
+    }
+
+    async fn retain_calculation_run(
+        &self,
+        id: YieldCalculationRunId,
+        retention_class: ForecastRetentionClass,
+        retain_until: Option<i64>,
+        referenced_at: Option<i64>,
+    ) -> Result<bool, YieldResultRepositoryError> {
+        validate_retention(retention_class, retain_until, referenced_at)?;
+        let mut connection = self.connection().await?;
+        let changed = sqlx::query(
+            "UPDATE account_data.yield_calculation_runs \
+             SET retention_class=$1,retain_until=$2,referenced_at=$3 WHERE account_id=$4 AND id=$5",
+        )
+        .bind(retention_class.as_str())
+        .bind(retain_until)
+        .bind(referenced_at)
+        .bind(self.account_id.as_uuid())
+        .bind(id.as_uuid())
+        .execute(&mut connection)
+        .await?
+        .rows_affected();
+        Ok(changed == 1)
+    }
+
+    async fn purge_expired_calculation_runs(
+        &self,
+        now: i64,
+        limit: u32,
+    ) -> Result<u64, YieldResultRepositoryError> {
+        validate_retention_limit(limit)?;
+        let mut connection = self.connection().await?;
+        let changed = sqlx::query(
+            "DELETE FROM account_data.yield_calculation_runs c WHERE c.account_id=$1 AND c.id IN ( \
+             SELECT candidate.id FROM account_data.yield_calculation_runs candidate \
+             WHERE candidate.account_id=$1 AND candidate.retention_class='working' \
+             AND candidate.referenced_at IS NULL AND candidate.retain_until<=$2 \
+             AND NOT EXISTS (SELECT 1 FROM account_data.yield_result_projections p \
+                 JOIN account_data.yield_calculation_results r ON r.account_id=p.account_id AND r.id=p.result_id \
+                 WHERE p.account_id=$1 AND r.calculation_run_id=candidate.id) \
+             ORDER BY candidate.retain_until,candidate.id LIMIT $3)",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(now)
+        .bind(i64::from(limit))
+        .execute(&mut connection)
+        .await?
+        .rows_affected();
+        Ok(changed)
     }
 }
 

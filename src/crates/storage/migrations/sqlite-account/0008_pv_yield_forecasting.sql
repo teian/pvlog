@@ -178,7 +178,11 @@ CREATE INDEX yield_invalidations_dispatch_idx
     ON yield_invalidations(state, system_id, range_start, range_end);
 
 CREATE TRIGGER weather_data_runs_no_update
-BEFORE UPDATE ON weather_data_runs
+BEFORE UPDATE OF id, system_id, provider_configuration_id, source_run_key, data_kind,
+    issued_at, fetched_at, valid_from, valid_to, resolution_seconds, spatial_kind,
+    latitude_e6, longitude_e6, provider_region, adapter, source_url,
+    license_identifier, attribution, provenance_json, created_at
+ON weather_data_runs
 BEGIN
     SELECT RAISE(ABORT, 'weather data runs are immutable');
 END;
