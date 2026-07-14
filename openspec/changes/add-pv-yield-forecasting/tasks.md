@@ -9,7 +9,7 @@
 
 - [x] 2.1 Add backward-compatible SQLite and PostgreSQL migrations for forecast settings, immutable weather runs/points, calculation runs/results, provenance, uncertainty, invalidations, and retention metadata.
 - [x] 2.2 Implement cross-engine repositories for effective forecast configuration and immutable normalized weather runs with ordering, overlap, revision, classification, and idempotency constraints.
-- [ ] 2.3 Implement cross-engine repositories for versioned string/inverter/system calculation results, active projections, completeness, run history, and bounded range queries.
+- [x] 2.3 Implement cross-engine repositories for versioned string/inverter/system calculation results, active projections, completeness, run history, and bounded range queries.
 - [ ] 2.4 Implement targeted invalidation and retention operations that preserve referenced issued forecasts and historical performance inputs.
 - [ ] 2.5 Add SQLite/PostgreSQL migration and repository tests for legacy systems, round trips, immutable revisions, stale selection, effective boundaries, idempotent writes, partial capacity, invalidation, and retention.
 

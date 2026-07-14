@@ -39,6 +39,7 @@ mod system_lifecycle_repository;
 mod telemetry_repository;
 mod user_lifecycle_repository;
 mod yield_forecast_repository;
+mod yield_result_repository;
 
 #[cfg(feature = "postgres")]
 pub use account_repository::PostgresAccountConfigurationRepository;
@@ -136,6 +137,14 @@ pub use yield_forecast_repository::SqliteYieldForecastInputRepository;
 pub use yield_forecast_repository::{
     ForecastRetentionClass, ForecastSettingsRecord, WeatherRunInsertOutcome, WeatherRunRecord,
     YieldForecastInputRepository, YieldForecastRepositoryError,
+};
+#[cfg(feature = "postgres")]
+pub use yield_result_repository::PostgresYieldResultRepository;
+#[cfg(feature = "sqlite")]
+pub use yield_result_repository::SqliteYieldResultRepository;
+pub use yield_result_repository::{
+    StoredYieldResult, YieldCalculationRunRecord, YieldCalculationState, YieldResultRepository,
+    YieldResultRepositoryError,
 };
 
 /// Database topology selected for the current process.

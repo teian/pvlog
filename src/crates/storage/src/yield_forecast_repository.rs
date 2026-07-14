@@ -48,7 +48,7 @@ pub enum ForecastRetentionClass {
 }
 
 impl ForecastRetentionClass {
-    const fn as_str(self) -> &'static str {
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::Working => "working",
             Self::Issued => "issued",
@@ -56,7 +56,7 @@ impl ForecastRetentionClass {
         }
     }
 
-    fn parse(value: &str) -> Result<Self, YieldForecastRepositoryError> {
+    pub(crate) fn parse(value: &str) -> Result<Self, YieldForecastRepositoryError> {
         match value {
             "working" => Ok(Self::Working),
             "issued" => Ok(Self::Issued),
@@ -877,7 +877,7 @@ fn postgres_weather_record(
     )?))
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::needless_pass_by_value, clippy::too_many_arguments)]
 fn weather_record_from_columns(
     id: WeatherDataRunId,
     system_id: SystemId,
@@ -969,6 +969,7 @@ fn postgres_weather_point(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn weather_point_from_row(
     interval_start: i64,
     interval_end: i64,
