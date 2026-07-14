@@ -262,3 +262,80 @@ fn provider_plane_of_array_is_not_recomputed() -> Result<(), Box<dyn Error>> {
     assert_eq!(actual, provider_value);
     Ok(())
 }
+
+#[test]
+fn nighttime_zero_expectation_and_unavailable_topology_are_explicit() -> Result<(), Box<dyn Error>>
+{
+    let nighttime = plane_of_array_irradiance(
+        IrradiancePoint {
+            global_horizontal: Some(EstimateRange::without_uncertainty(
+                WattsPerSquareMetre::new(10),
+            )),
+            direct_normal: Some(EstimateRange::without_uncertainty(
+                WattsPerSquareMetre::new(10),
+            )),
+            diffuse_horizontal: Some(EstimateRange::without_uncertainty(
+                WattsPerSquareMetre::new(10),
+            )),
+            plane_of_array: None,
+        },
+        pvlog_domain::SolarPosition {
+            zenith_millidegrees: 100_000,
+            azimuth_millidegrees: 0,
+        },
+        SurfaceOrientation::new(180, 35)?,
+    )?;
+    assert_eq!(nighttime.central.value(), 0);
+
+    let scope = pvlog_domain::YieldScope::System(SystemId::new());
+    let comparison = compare_actual_to_modeled(
+        PerformanceKind::GenerationPerformance,
+        CalculationBasis::Expected,
+        scope,
+        ActualEnergySample {
+            scope,
+            energy: Some(pvlog_domain::WattHours::new(0)),
+            coverage: UnsignedBasisPoints::new(10_000)?,
+            quality: UnsignedBasisPoints::new(10_000)?,
+        },
+        Some(pvlog_domain::WattHours::new(0)),
+        UnsignedBasisPoints::new(9_000)?,
+        UnsignedBasisPoints::new(9_000)?,
+    )?;
+    assert!(matches!(
+        comparison,
+        PerformanceComparison::Unavailable {
+            reason: pvlog_domain::ForecastCompletenessReason::NonPositiveExpectedEnergy
+        }
+    ));
+
+    let unavailable = aggregate_system_yield(SystemId::new(), &[])?;
+    assert!(unavailable.power.is_none());
+    assert!(matches!(
+        unavailable.completeness,
+        pvlog_domain::ForecastCompleteness::Unavailable { .. }
+    ));
+    Ok(())
+}
+
+#[test]
+fn effective_calibration_change_produces_a_distinct_deterministic_result()
+-> Result<(), Box<dyn Error>> {
+    let input = StringDcInput {
+        nameplate_power: Watts::new(5_000),
+        plane_of_array: EstimateRange::without_uncertainty(WattsPerSquareMetre::new(800)),
+        ambient_temperature: MilliDegreesCelsius::new(20_000),
+        peak_power_temperature_coefficient_ppm_per_celsius: None,
+        losses: ForecastLossFactors::default(),
+        calibration: BasisPoints::new(0)?,
+    };
+    let original = calculate_string_dc(input)?;
+    let changed = calculate_string_dc(StringDcInput {
+        calibration: BasisPoints::new(500)?,
+        ..input
+    })?;
+    assert_eq!(original.power.central.value(), 4_000);
+    assert_eq!(changed.power.central.value(), 4_200);
+    assert_ne!(original, changed);
+    Ok(())
+}

@@ -28,7 +28,7 @@
 - [x] 4.3 Implement inverter conversion/clipping and compatible string-to-inverter-to-system aggregation with included/excluded capacity and uncertainty propagation.
 - [x] 4.4 Implement interval power-to-energy integration and distinct forecast-generation versus observed/reanalysis expected-generation calculation paths.
 - [x] 4.5 Implement actual-versus-expected generation performance and actual-versus-forecast realization with coverage/quality thresholds, positive-denominator checks, and no downward allocation of aggregate actuals.
-- [ ] 4.6 Add deterministic model tests for reference irradiance, temperature effects, losses, clipping, uncertainty, nighttime/zero expectation, configuration changes, partial topology, aggregation conservation, and unavailable reasons.
+- [x] 4.6 Add deterministic model tests for reference irradiance, temperature effects, losses, clipping, uncertainty, nighttime/zero expectation, configuration changes, partial topology, aggregation conservation, and unavailable reasons.
 
 ## 5. Calculation Jobs and Reconciliation
 
