@@ -21,48 +21,10 @@ use uuid::Uuid;
 async fn administrator_weather_json_adapter_normalizes_deterministic_fixture()
 -> Result<(), Box<dyn Error>> {
     let run_id = Uuid::now_v7();
-    let body = serde_json::to_vec(&serde_json::json!({
-        "id": run_id,
-        "kind": "forecast",
-        "issuedAtMs": 800,
-        "validFromMs": 1_000,
-        "validToMs": 3_000,
-        "resolutionSeconds": 2,
-        "coverage": {"kind": "point", "latitude_e6": 52_520_000, "longitude_e6": 13_405_000},
-        "units": {
-            "irradiance": "W/m2",
-            "temperature": "mC",
-            "windSpeed": "mm/s",
-            "cloudCover": "basis_points"
-        },
-        "sourceUrl": "https://weather.example.test/runs/revision-1",
-        "points": [{
-            "intervalStartMs": 1_000,
-            "intervalEndMs": 3_000,
-            "globalHorizontal": {"central": 500, "lower": 450, "upper": 550},
-            "directNormal": null,
-            "diffuseHorizontal": null,
-            "planeOfArray": null,
-            "ambientTemperature": 20_000,
-            "windSpeed": 3_000,
-            "cloudCover": 2_500
-        }]
-    }))?;
+    let body = serde_json::to_vec(&weather_fixture(run_id))?;
     let adapter = AdministratorWeatherJsonAdapter::new(FixtureTransport(body));
     let configuration = weather_configuration()?;
-    let request = ExternalDataRequest::Weather {
-        system_id: SystemId::new(),
-        kind: WeatherDataKind::Forecast,
-        range: TimeRange::new(
-            UtcTimestamp::from_epoch_millis(1_000)?,
-            UtcTimestamp::from_epoch_millis(3_000)?,
-        )?,
-        spatial_coverage: SpatialCoverage::Point(GeographicPoint {
-            latitude_microdegrees: 52_520_000,
-            longitude_microdegrees: 13_405_000,
-        }),
-        issued_before: Some(UtcTimestamp::from_epoch_millis(900)?),
-    };
+    let request = weather_request()?;
     let entry = adapter
         .fetch(
             &configuration,
@@ -84,6 +46,93 @@ async fn administrator_weather_json_adapter_normalizes_deterministic_fixture()
     );
     assert_eq!(provenance.license_identifier, "operator-supplied");
     Ok(())
+}
+
+#[tokio::test]
+async fn weather_adapter_rejects_invalid_units_inputs_intervals_and_location()
+-> Result<(), Box<dyn Error>> {
+    let configuration = weather_configuration()?;
+    let request = weather_request()?;
+    let fetched_at = UtcTimestamp::from_epoch_millis(900)?;
+    let mut fixtures = Vec::new();
+
+    let mut unsupported_units = weather_fixture(Uuid::now_v7());
+    unsupported_units["units"]["irradiance"] = serde_json::json!("kW/m2");
+    fixtures.push(unsupported_units);
+
+    let mut missing_irradiance = weather_fixture(Uuid::now_v7());
+    missing_irradiance["points"][0]["globalHorizontal"] = serde_json::Value::Null;
+    fixtures.push(missing_irradiance);
+
+    let mut overlapping = weather_fixture(Uuid::now_v7());
+    overlapping["resolutionSeconds"] = serde_json::json!(1);
+    overlapping["points"] =
+        serde_json::json!([weather_point(1_000, 2_000), weather_point(1_500, 2_500)]);
+    fixtures.push(overlapping);
+
+    let mut wrong_location = weather_fixture(Uuid::now_v7());
+    wrong_location["coverage"]["latitude_e6"] = serde_json::json!(48_137_000);
+    fixtures.push(wrong_location);
+
+    for fixture in fixtures {
+        let adapter =
+            AdministratorWeatherJsonAdapter::new(FixtureTransport(serde_json::to_vec(&fixture)?));
+        assert!(matches!(
+            adapter.fetch(&configuration, &request, fetched_at).await,
+            Err(PortError::Rejected(_))
+        ));
+    }
+    Ok(())
+}
+
+fn weather_request() -> Result<ExternalDataRequest, Box<dyn Error>> {
+    Ok(ExternalDataRequest::Weather {
+        system_id: SystemId::new(),
+        kind: WeatherDataKind::Forecast,
+        range: TimeRange::new(
+            UtcTimestamp::from_epoch_millis(1_000)?,
+            UtcTimestamp::from_epoch_millis(3_000)?,
+        )?,
+        spatial_coverage: SpatialCoverage::Point(GeographicPoint {
+            latitude_microdegrees: 52_520_000,
+            longitude_microdegrees: 13_405_000,
+        }),
+        issued_before: Some(UtcTimestamp::from_epoch_millis(900)?),
+    })
+}
+
+fn weather_fixture(run_id: Uuid) -> serde_json::Value {
+    serde_json::json!({
+        "id": run_id,
+        "kind": "forecast",
+        "issuedAtMs": 800,
+        "validFromMs": 1_000,
+        "validToMs": 3_000,
+        "resolutionSeconds": 2,
+        "coverage": {"kind": "point", "latitude_e6": 52_520_000, "longitude_e6": 13_405_000},
+        "units": {
+            "irradiance": "W/m2",
+            "temperature": "mC",
+            "windSpeed": "mm/s",
+            "cloudCover": "basis_points"
+        },
+        "sourceUrl": "https://weather.example.test/runs/revision-1",
+        "points": [weather_point(1_000, 3_000)]
+    })
+}
+
+fn weather_point(start: i64, end: i64) -> serde_json::Value {
+    serde_json::json!({
+        "intervalStartMs": start,
+        "intervalEndMs": end,
+        "globalHorizontal": {"central": 500, "lower": 450, "upper": 550},
+        "directNormal": null,
+        "diffuseHorizontal": null,
+        "planeOfArray": null,
+        "ambientTemperature": 20_000,
+        "windSpeed": 3_000,
+        "cloudCover": 2_500
+    })
 }
 
 struct FixtureTransport(Vec<u8>);
@@ -134,7 +183,7 @@ async fn configured_adapter_caches_provenance_and_serves_stale_data_when_degrade
         fail: Mutex::new(false),
     });
     let cache = Arc::new(MemoryCache::default());
-    let service = build_service(adapter.clone(), cache, now)?;
+    let service = build_service(adapter.clone(), cache.clone(), now)?;
     let (key, request) = request(now)?;
 
     let fresh = service.query(&key, &request).await?;
@@ -147,6 +196,16 @@ async fn configured_adapter_caches_provenance_and_serves_stale_data_when_degrade
     *adapter.fail.lock().map_err(|_| "adapter lock")? = true;
     let degraded = service.query(&key, &request).await?;
     assert_eq!(degraded.freshness, ExternalDataFreshness::StaleDegraded);
+
+    let expired_service = build_service(
+        adapter.clone(),
+        cache,
+        UtcTimestamp::from_epoch_millis(400_000)?,
+    )?;
+    assert!(matches!(
+        expired_service.query(&key, &request).await,
+        Err(PortError::Unavailable)
+    ));
 
     let empty_service = build_service(adapter, Arc::new(MemoryCache::default()), now)?;
     assert!(matches!(
