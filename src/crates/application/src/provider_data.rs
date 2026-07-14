@@ -120,7 +120,7 @@ pub enum ExternalDataCacheEntry {
         provenance: ExternalDataProvenance,
     },
     Weather {
-        run: NormalizedWeatherRun,
+        run: Box<NormalizedWeatherRun>,
         provenance: ExternalDataProvenance,
     },
 }

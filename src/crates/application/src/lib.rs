@@ -34,6 +34,7 @@ mod statistics;
 mod system_configuration;
 mod system_lifecycle;
 mod user_lifecycle;
+mod weather_adapter;
 mod webhook_delivery;
 mod webhook_security;
 mod webhooks;
@@ -164,6 +165,7 @@ pub use user_lifecycle::{
     PublicLifecycleOutcome, RegisterLocalUser, UserLifecycleError, UserLifecycleRepository,
     UserLifecycleService, UserLifecycleUseCases,
 };
+pub use weather_adapter::{AdministratorWeatherJsonAdapter, WeatherJsonTransport};
 pub use webhook_delivery::{
     DeliveryMetrics, DeliveryRepository, DeliveryService, DeliveryServiceError, DeliveryWorkItem,
     JitterSource,

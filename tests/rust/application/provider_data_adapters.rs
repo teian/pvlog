@@ -1,16 +1,130 @@
 use async_trait::async_trait;
 use pvlog_application::{
-    CircuitBreakerPolicy, Clock, ConfiguredExternalDataAdapter, ConfiguredExternalDataService,
-    ExternalDataCacheEntry, ExternalDataCacheKey, ExternalDataCacheRepository,
-    ExternalDataConfiguration, ExternalDataFreshness, ExternalDataKind, ExternalDataLicense,
-    ExternalDataProvenance, ExternalDataRequest, InsolationPoint, PortError,
+    AdministratorWeatherJsonAdapter, CircuitBreakerPolicy, Clock, ConfiguredExternalDataAdapter,
+    ConfiguredExternalDataService, ExternalDataCacheEntry, ExternalDataCacheKey,
+    ExternalDataCacheRepository, ExternalDataConfiguration, ExternalDataFreshness,
+    ExternalDataKind, ExternalDataLicense, ExternalDataProvenance, ExternalDataRequest,
+    InsolationPoint, PortError, WeatherJsonTransport,
 };
-use pvlog_domain::{ProviderId, SystemId, TimeRange, UtcTimestamp};
+use pvlog_domain::{
+    GeographicPoint, ProviderId, SpatialCoverage, SystemId, TimeRange, UtcTimestamp,
+    WeatherDataKind,
+};
 use std::{
     error::Error,
     sync::{Arc, Mutex},
 };
 use url::Url;
+use uuid::Uuid;
+
+#[tokio::test]
+async fn administrator_weather_json_adapter_normalizes_deterministic_fixture()
+-> Result<(), Box<dyn Error>> {
+    let run_id = Uuid::now_v7();
+    let body = serde_json::to_vec(&serde_json::json!({
+        "id": run_id,
+        "kind": "forecast",
+        "issuedAtMs": 800,
+        "validFromMs": 1_000,
+        "validToMs": 3_000,
+        "resolutionSeconds": 2,
+        "coverage": {"kind": "point", "latitude_e6": 52_520_000, "longitude_e6": 13_405_000},
+        "units": {
+            "irradiance": "W/m2",
+            "temperature": "mC",
+            "windSpeed": "mm/s",
+            "cloudCover": "basis_points"
+        },
+        "sourceUrl": "https://weather.example.test/runs/revision-1",
+        "points": [{
+            "intervalStartMs": 1_000,
+            "intervalEndMs": 3_000,
+            "globalHorizontal": {"central": 500, "lower": 450, "upper": 550},
+            "directNormal": null,
+            "diffuseHorizontal": null,
+            "planeOfArray": null,
+            "ambientTemperature": 20_000,
+            "windSpeed": 3_000,
+            "cloudCover": 2_500
+        }]
+    }))?;
+    let adapter = AdministratorWeatherJsonAdapter::new(FixtureTransport(body));
+    let configuration = weather_configuration()?;
+    let request = ExternalDataRequest::Weather {
+        system_id: SystemId::new(),
+        kind: WeatherDataKind::Forecast,
+        range: TimeRange::new(
+            UtcTimestamp::from_epoch_millis(1_000)?,
+            UtcTimestamp::from_epoch_millis(3_000)?,
+        )?,
+        spatial_coverage: SpatialCoverage::Point(GeographicPoint {
+            latitude_microdegrees: 52_520_000,
+            longitude_microdegrees: 13_405_000,
+        }),
+        issued_before: Some(UtcTimestamp::from_epoch_millis(900)?),
+    };
+    let entry = adapter
+        .fetch(
+            &configuration,
+            &request,
+            UtcTimestamp::from_epoch_millis(900)?,
+        )
+        .await?;
+    let ExternalDataCacheEntry::Weather { run, provenance } = entry else {
+        return Err("weather adapter returned a different data class".into());
+    };
+    assert_eq!(run.id.as_uuid(), run_id);
+    assert_eq!(run.kind, WeatherDataKind::Forecast);
+    assert_eq!(
+        run.points[0]
+            .irradiance
+            .global_horizontal
+            .map(|value| value.central.value()),
+        Some(500)
+    );
+    assert_eq!(provenance.license_identifier, "operator-supplied");
+    Ok(())
+}
+
+struct FixtureTransport(Vec<u8>);
+
+#[async_trait]
+impl WeatherJsonTransport for FixtureTransport {
+    async fn get(
+        &self,
+        url: Url,
+        timeout_milliseconds: u32,
+        credential_secret_reference: Option<&str>,
+    ) -> Result<Vec<u8>, PortError> {
+        assert!(
+            url.query()
+                .is_some_and(|query| query.contains("kind=forecast"))
+        );
+        assert_eq!(timeout_milliseconds, 500);
+        assert_eq!(credential_secret_reference, Some("secret:weather/test"));
+        Ok(self.0.clone())
+    }
+}
+
+fn weather_configuration() -> Result<ExternalDataConfiguration, url::ParseError> {
+    Ok(ExternalDataConfiguration {
+        provider_id: ProviderId::new(),
+        kind: ExternalDataKind::WeatherForecast,
+        adapter: "administrator_weather_json_v1".to_owned(),
+        endpoint: Url::parse("https://weather.example.test/v1/run")?,
+        credential_secret_reference: Some("secret:weather/test".to_owned()),
+        request_timeout_milliseconds: 500,
+        cache_ttl_seconds: 300,
+        maximum_stale_seconds: 900,
+        license: ExternalDataLicense {
+            identifier: "operator-supplied".to_owned(),
+            attribution: "Fixture weather".to_owned(),
+            source_url: Url::parse("https://weather.example.test/license")?,
+            redistribution_permitted: false,
+        },
+        enabled: true,
+    })
+}
 
 #[tokio::test]
 async fn configured_adapter_caches_provenance_and_serves_stale_data_when_degraded()

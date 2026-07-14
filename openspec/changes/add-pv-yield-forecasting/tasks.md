@@ -18,7 +18,7 @@
 - [x] 3.1 Extend provider-neutral capabilities and application ports with forecast, observed, and reanalysis weather runs while preserving existing insolation and regional-supply behavior.
 - [x] 3.2 Implement normalized run validation for issue/fetch time, horizon, location coverage, interval ordering, irradiance/environmental units, required fields, uncertainty, provenance, and licensing.
 - [x] 3.3 Extend provider cache and circuit-breaker services to select fresh or policy-permitted stale immutable runs without relabeling forecast data as observations.
-- [ ] 3.4 Implement one administrator-configured weather adapter path plus deterministic provider fixtures without bundling restricted credentials or licensed data.
+- [x] 3.4 Implement one administrator-configured weather adapter path plus deterministic provider fixtures without bundling restricted credentials or licensed data.
 - [ ] 3.5 Add provider contract tests for valid normalization, malformed/overlapping intervals, unsupported units, missing irradiance, revisions, stale fallback, open circuits, location mismatch, and provider-independent domain output.
 
 ## 4. Deterministic Yield Model
