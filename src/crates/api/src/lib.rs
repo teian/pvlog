@@ -33,6 +33,7 @@ mod authorization;
 mod connectors;
 mod dashboard;
 mod equipment_catalog;
+mod forecasting;
 mod identities;
 mod inverters;
 mod local_password;
@@ -65,6 +66,10 @@ pub use dashboard::{
 };
 pub use equipment_catalog::{
     CatalogPageResponse, EquipmentCatalogApiError, equipment_catalog_router,
+};
+pub use forecasting::{
+    ForecastApiError, ForecastApiUseCases, ForecastInputCompletenessResponse, ForecastLossInput,
+    ForecastResourceScope, ForecastSettingsInput, ForecastSettingsResponse, forecasting_router,
 };
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,

@@ -94,6 +94,10 @@ name = "analytics-endpoints"
 path = "../../../tests/rust/api/analytics_endpoints.rs"
 
 [[test]]
+name = "forecast-endpoints"
+path = "../../../tests/rust/api/forecast_endpoints.rs"
+
+[[test]]
 name = "notification-endpoints"
 path = "../../../tests/rust/api/notification_endpoints.rs"
 
