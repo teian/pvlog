@@ -1,8 +1,9 @@
 use std::error::Error;
 
 use pvlog_domain::{
-    EstimateRange, GeographicPoint, IrradiancePoint, SurfaceOrientation, UtcTimestamp,
-    WattsPerSquareMetre, plane_of_array_irradiance, solar_position,
+    BasisPoints, EstimateRange, ForecastLossFactors, GeographicPoint, IrradiancePoint,
+    MilliDegreesCelsius, StringDcInput, SurfaceOrientation, UnsignedBasisPoints, UtcTimestamp,
+    Watts, WattsPerSquareMetre, calculate_string_dc, plane_of_array_irradiance, solar_position,
 };
 
 #[test]
@@ -21,6 +22,45 @@ fn berlin_solstice_reference_positions_are_stable() -> Result<(), Box<dyn Error>
         (winter.zenith_millidegrees, winter.azimuth_millidegrees),
         (76_910, 193_125)
     );
+    Ok(())
+}
+
+#[test]
+fn string_dc_applies_temperature_losses_calibration_and_physical_cap() -> Result<(), Box<dyn Error>>
+{
+    let losses = ForecastLossFactors {
+        soiling: UnsignedBasisPoints::new(200)?,
+        shading: UnsignedBasisPoints::new(100)?,
+        mismatch: UnsignedBasisPoints::new(100)?,
+        wiring: UnsignedBasisPoints::new(100)?,
+        unavailability: UnsignedBasisPoints::new(50)?,
+    };
+    let estimate = calculate_string_dc(StringDcInput {
+        nameplate_power: Watts::new(8_000),
+        plane_of_array: EstimateRange {
+            central: WattsPerSquareMetre::new(1_000),
+            lower: Some(WattsPerSquareMetre::new(900)),
+            upper: Some(WattsPerSquareMetre::new(1_100)),
+        },
+        ambient_temperature: MilliDegreesCelsius::new(20_000),
+        peak_power_temperature_coefficient_ppm_per_celsius: Some(-3_500),
+        losses,
+        calibration: BasisPoints::new(250)?,
+    })?;
+    assert_eq!(estimate.module_temperature.central.value(), 51_250);
+    assert_eq!(estimate.power.central.value(), 7_046);
+    assert!(!estimate.was_physically_capped);
+
+    let capped = calculate_string_dc(StringDcInput {
+        nameplate_power: Watts::new(8_000),
+        plane_of_array: EstimateRange::without_uncertainty(WattsPerSquareMetre::new(2_000)),
+        ambient_temperature: MilliDegreesCelsius::new(-20_000),
+        peak_power_temperature_coefficient_ppm_per_celsius: Some(-4_000),
+        losses: ForecastLossFactors::default(),
+        calibration: BasisPoints::new(0)?,
+    })?;
+    assert_eq!(capped.power.central.value(), 10_000);
+    assert!(capped.was_physically_capped);
     Ok(())
 }
 

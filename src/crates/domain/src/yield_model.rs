@@ -1,6 +1,9 @@
 //! Deterministic version-1 PV yield model primitives.
 
-use crate::{EstimateRange, GeographicPoint, IrradiancePoint, UtcTimestamp, WattsPerSquareMetre};
+use crate::{
+    BasisPoints, EstimateRange, ForecastLossFactors, GeographicPoint, IrradiancePoint,
+    MilliDegreesCelsius, UtcTimestamp, Watts, WattsPerSquareMetre,
+};
 use std::f64::consts::PI;
 use thiserror::Error;
 
@@ -124,6 +127,146 @@ pub fn plane_of_array_irradiance(
     })
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StringDcInput {
+    pub nameplate_power: Watts,
+    pub plane_of_array: EstimateRange<WattsPerSquareMetre>,
+    pub ambient_temperature: MilliDegreesCelsius,
+    pub peak_power_temperature_coefficient_ppm_per_celsius: Option<i32>,
+    pub losses: ForecastLossFactors,
+    pub calibration: BasisPoints,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct StringDcEstimate {
+    pub module_temperature: EstimateRange<MilliDegreesCelsius>,
+    pub power: EstimateRange<Watts>,
+    pub was_physically_capped: bool,
+}
+
+/// Calculates v1 module temperature and string DC output with fixed-point loss application.
+///
+/// Module temperature uses ambient + 25 C at 800 W/m2. Loss factors are applied
+/// multiplicatively, then calibration, and the result is capped at 125% of DC nameplate.
+///
+/// # Errors
+///
+/// Returns an error for non-positive nameplate capacity or arithmetic overflow.
+pub fn calculate_string_dc(input: StringDcInput) -> Result<StringDcEstimate, YieldModelError> {
+    if input.nameplate_power.value() <= 0 {
+        return Err(YieldModelError::InvalidNameplatePower);
+    }
+    let module_temperature = EstimateRange {
+        central: module_temperature(input.ambient_temperature, input.plane_of_array.central)?,
+        lower: input
+            .plane_of_array
+            .lower
+            .map(|value| module_temperature(input.ambient_temperature, value))
+            .transpose()?,
+        upper: input
+            .plane_of_array
+            .upper
+            .map(|value| module_temperature(input.ambient_temperature, value))
+            .transpose()?,
+    };
+    let maximum = checked_ratio(input.nameplate_power.value(), 12_500, 10_000)?;
+    let calculate = |irradiance, temperature| {
+        dc_value(
+            input.nameplate_power,
+            irradiance,
+            temperature,
+            input.peak_power_temperature_coefficient_ppm_per_celsius,
+            input.losses,
+            input.calibration,
+            maximum,
+        )
+    };
+    let central = calculate(input.plane_of_array.central, module_temperature.central)?;
+    let lower = match (input.plane_of_array.lower, module_temperature.lower) {
+        (Some(irradiance), Some(temperature)) => Some(calculate(irradiance, temperature)?),
+        _ => None,
+    };
+    let upper = match (input.plane_of_array.upper, module_temperature.upper) {
+        (Some(irradiance), Some(temperature)) => Some(calculate(irradiance, temperature)?),
+        _ => None,
+    };
+    Ok(StringDcEstimate {
+        was_physically_capped: central.value() == maximum
+            || lower.is_some_and(|value| value.value() == maximum)
+            || upper.is_some_and(|value| value.value() == maximum),
+        module_temperature,
+        power: EstimateRange {
+            central,
+            lower,
+            upper,
+        },
+    })
+}
+
+fn module_temperature(
+    ambient: MilliDegreesCelsius,
+    irradiance: WattsPerSquareMetre,
+) -> Result<MilliDegreesCelsius, YieldModelError> {
+    let rise = i64::from(irradiance.value())
+        .checked_mul(25_000)
+        .ok_or(YieldModelError::ArithmeticOverflow)?
+        / 800;
+    let value = i64::from(ambient.value())
+        .checked_add(rise)
+        .ok_or(YieldModelError::ArithmeticOverflow)?;
+    Ok(MilliDegreesCelsius::new(
+        i32::try_from(value).map_err(|_| YieldModelError::ArithmeticOverflow)?,
+    ))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn dc_value(
+    nameplate: Watts,
+    irradiance: WattsPerSquareMetre,
+    temperature: MilliDegreesCelsius,
+    coefficient_ppm: Option<i32>,
+    losses: ForecastLossFactors,
+    calibration: BasisPoints,
+    maximum: i64,
+) -> Result<Watts, YieldModelError> {
+    let mut value = checked_ratio(nameplate.value(), i64::from(irradiance.value()), 1_000)?;
+    let delta_millicelsius = i64::from(temperature.value()) - 25_000;
+    let coefficient = i64::from(coefficient_ppm.unwrap_or(0));
+    let temperature_factor = 1_000_000_i64
+        .checked_add(
+            coefficient
+                .checked_mul(delta_millicelsius)
+                .ok_or(YieldModelError::ArithmeticOverflow)?
+                / 1_000,
+        )
+        .ok_or(YieldModelError::ArithmeticOverflow)?
+        .max(0);
+    value = checked_ratio(value, temperature_factor, 1_000_000)?;
+    for loss in [
+        losses.soiling,
+        losses.shading,
+        losses.mismatch,
+        losses.wiring,
+        losses.unavailability,
+    ] {
+        value = checked_ratio(value, 10_000 - i64::from(loss.value()), 10_000)?;
+    }
+    value = checked_ratio(value, 10_000 + i64::from(calibration.value()), 10_000)?;
+    Ok(Watts::new(value.clamp(0, maximum)))
+}
+
+fn checked_ratio(value: i64, numerator: i64, denominator: i64) -> Result<i64, YieldModelError> {
+    let product = i128::from(value)
+        .checked_mul(i128::from(numerator))
+        .ok_or(YieldModelError::ArithmeticOverflow)?;
+    let rounded = if product >= 0 {
+        product + i128::from(denominator / 2)
+    } else {
+        product - i128::from(denominator / 2)
+    } / i128::from(denominator);
+    i64::try_from(rounded).map_err(|_| YieldModelError::ArithmeticOverflow)
+}
+
 fn transpose_value(
     global: WattsPerSquareMetre,
     direct: WattsPerSquareMetre,
@@ -170,4 +313,8 @@ pub enum YieldModelError {
     InvalidSurfaceOrientation,
     #[error("plane-of-array conversion requires GHI, DNI, and DHI")]
     MissingTranspositionInput,
+    #[error("string DC nameplate power must be positive")]
+    InvalidNameplatePower,
+    #[error("yield model fixed-point arithmetic overflowed")]
+    ArithmeticOverflow,
 }
