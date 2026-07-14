@@ -25,10 +25,11 @@ pub use equipment_catalog::{
 };
 pub use forecasting::{
     CalculationBasis, EstimateRange, ForecastCompleteness, ForecastCompletenessReason,
-    ForecastSettingsId, GeographicPoint, IrradiancePoint, MetresPerSecondMilli, ModelVersion,
-    NormalizedWeatherPoint, NormalizedWeatherRun, SpatialCoverage, UnsignedBasisPoints,
-    WattsPerSquareMetre, WeatherDataKind, WeatherDataProvenance, WeatherDataRunId,
-    YieldCalculationResult, YieldCalculationRunId, YieldResultId, YieldScope,
+    ForecastConfigurationDigest, ForecastDigestError, ForecastInputSnapshot, ForecastLossFactors,
+    ForecastSettings, ForecastSettingsId, GeographicPoint, IrradiancePoint, MetresPerSecondMilli,
+    ModelVersion, NormalizedWeatherPoint, NormalizedWeatherRun, SpatialCoverage,
+    UnsignedBasisPoints, WattsPerSquareMetre, WeatherDataKind, WeatherDataProvenance,
+    WeatherDataRunId, YieldCalculationResult, YieldCalculationRunId, YieldResultId, YieldScope,
 };
 pub use identifiers::{
     AccountId, AlertEventId, AlertRuleId, ApiCredentialId, AuditEventId, ChannelId, ConnectorId,

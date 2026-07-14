@@ -2,8 +2,9 @@ use serde::{Deserialize, Serialize};
 use time::Date;
 
 use crate::{
-    AccountId, ChannelId, CurrencyCode, EquipmentId, IanaTimezone, InverterId, Money, StringId,
-    SystemId, TariffId, ValidationError, Visibility, Watts,
+    AccountId, ChannelId, CurrencyCode, EquipmentId, ForecastInputSnapshot, ForecastSettings,
+    IanaTimezone, InverterId, Money, SolarModuleSpecificationSnapshot, StringId, SystemId,
+    TariffId, ValidationError, Visibility, Watts,
 };
 
 /// Half-open effective date range where an omitted end means indefinitely active.
@@ -121,10 +122,23 @@ pub struct PvString {
     pub panel_count: u32,
     pub panel_manufacturer: Option<String>,
     pub panel_model: Option<String>,
+    pub module_peak_power: Option<Watts>,
     pub rated_power: Watts,
+    pub module_specification_snapshot: Option<SolarModuleSpecificationSnapshot>,
     pub orientation_degrees: Option<u16>,
     pub tilt_degrees: Option<u8>,
     pub period: EffectivePeriod,
+    pub forecast_settings: Option<ForecastSettings>,
+}
+
+impl PvString {
+    /// Captures the configured forecast inputs when explicit effective settings exist.
+    #[must_use]
+    pub fn forecast_input_snapshot(&self) -> Option<ForecastInputSnapshot> {
+        self.forecast_settings
+            .clone()
+            .map(|settings| ForecastInputSnapshot::from_pv_string(self, settings))
+    }
 }
 
 /// System lifecycle independent from public visibility.

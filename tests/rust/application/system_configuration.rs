@@ -65,10 +65,13 @@ async fn configuration_rejects_overlapping_periods_and_invalid_channel_bounds()
             panel_count: 20,
             panel_manufacturer: None,
             panel_model: None,
+            module_peak_power: None,
             rated_power: Watts::new(8_000),
+            module_specification_snapshot: None,
             orientation_degrees: Some(180),
             tilt_degrees: Some(35),
             period: pvlog_domain::EffectivePeriod::new(date!(2026 - 01 - 01), None)?,
+            forecast_settings: None,
         }],
     };
     service

@@ -1,12 +1,14 @@
 use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize, de};
+use thiserror::Error;
 use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    IdentifierError, InverterId, MilliDegreesCelsius, ProviderId, StringId, SystemId, TimeRange,
-    UtcTimestamp, WattHours, Watts,
+    BasisPoints, EffectivePeriod, IdentifierError, InverterId, MilliDegreesCelsius, ProviderId,
+    PvString, SolarModuleSpecificationSnapshot, StringId, SystemId, TimeRange, UtcTimestamp,
+    ValidationError, WattHours, Watts,
 };
 
 macro_rules! forecast_identifier {
@@ -118,21 +120,65 @@ impl MetresPerSecondMilli {
 }
 
 /// Unsigned ratio in basis points, used for fractions such as cloud cover and coverage.
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 #[serde(transparent)]
-pub struct UnsignedBasisPoints(pub u16);
+pub struct UnsignedBasisPoints(u16);
 
 impl UnsignedBasisPoints {
     pub const MAX: u16 = 10_000;
 
-    #[must_use]
-    pub const fn new_unchecked(value: u16) -> Self {
-        Self(value)
+    /// Creates a percentage-like fraction between zero and 100 percent.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the value exceeds 10,000 basis points.
+    pub fn new(value: u16) -> Result<Self, ValidationError> {
+        if value <= Self::MAX {
+            Ok(Self(value))
+        } else {
+            Err(ValidationError::new(
+                "unsigned_basis_points_out_of_range",
+                "basis_points",
+                "unsigned basis points must be between 0 and 10000",
+            ))
+        }
     }
 
     #[must_use]
     pub const fn value(self) -> u16 {
         self.0
+    }
+}
+
+impl<'de> Deserialize<'de> for UnsignedBasisPoints {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Self::new(u16::deserialize(deserializer)?).map_err(de::Error::custom)
+    }
+}
+
+/// Independently configurable loss fractions applied by the yield model.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+pub struct ForecastLossFactors {
+    pub soiling: UnsignedBasisPoints,
+    pub shading: UnsignedBasisPoints,
+    pub mismatch: UnsignedBasisPoints,
+    pub wiring: UnsignedBasisPoints,
+    pub unavailability: UnsignedBasisPoints,
+}
+
+impl Default for ForecastLossFactors {
+    fn default() -> Self {
+        let zero = UnsignedBasisPoints(0);
+        Self {
+            soiling: zero,
+            shading: zero,
+            mismatch: zero,
+            wiring: zero,
+            unavailability: zero,
+        }
     }
 }
 
@@ -227,6 +273,88 @@ pub struct NormalizedWeatherRun {
 pub struct ModelVersion {
     pub identifier: String,
     pub revision: u16,
+}
+
+/// Effective-dated yield assumptions kept separate from confirmed equipment identity.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ForecastSettings {
+    pub id: ForecastSettingsId,
+    pub period: EffectivePeriod,
+    pub model_version: ModelVersion,
+    pub losses: ForecastLossFactors,
+    pub calibration: BasisPoints,
+}
+
+/// Canonical, reproducible inputs selected for one string calculation.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct ForecastInputSnapshot {
+    pub schema_version: u16,
+    pub string_id: StringId,
+    pub inverter_id: InverterId,
+    pub string_period: EffectivePeriod,
+    pub module_count: u32,
+    pub module_manufacturer: Option<String>,
+    pub module_model: Option<String>,
+    pub module_peak_power: Option<Watts>,
+    pub total_peak_power: Watts,
+    pub orientation_degrees: Option<u16>,
+    pub tilt_degrees: Option<u8>,
+    pub module_specification_snapshot: Option<SolarModuleSpecificationSnapshot>,
+    pub settings: ForecastSettings,
+}
+
+impl ForecastInputSnapshot {
+    pub const SCHEMA_VERSION: u16 = 1;
+
+    /// Captures the effective confirmed values from a configured PV string.
+    #[must_use]
+    pub fn from_pv_string(string: &PvString, settings: ForecastSettings) -> Self {
+        Self {
+            schema_version: Self::SCHEMA_VERSION,
+            string_id: string.id,
+            inverter_id: string.inverter_id,
+            string_period: string.period,
+            module_count: string.panel_count,
+            module_manufacturer: string.panel_manufacturer.clone(),
+            module_model: string.panel_model.clone(),
+            module_peak_power: string.module_peak_power,
+            total_peak_power: string.rated_power,
+            orientation_degrees: string.orientation_degrees,
+            tilt_degrees: string.tilt_degrees,
+            module_specification_snapshot: string.module_specification_snapshot.clone(),
+            settings,
+        }
+    }
+
+    /// Hashes the canonical serialized snapshot for persistence and result provenance.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if a future snapshot field cannot be represented as canonical JSON.
+    pub fn digest(&self) -> Result<ForecastConfigurationDigest, ForecastDigestError> {
+        let canonical = serde_json::to_vec(self).map_err(ForecastDigestError::Serialize)?;
+        Ok(ForecastConfigurationDigest(
+            *blake3::hash(&canonical).as_bytes(),
+        ))
+    }
+}
+
+/// Stable BLAKE3 digest of a versioned forecast input snapshot.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq, Serialize)]
+#[serde(transparent)]
+pub struct ForecastConfigurationDigest([u8; 32]);
+
+impl ForecastConfigurationDigest {
+    #[must_use]
+    pub const fn bytes(self) -> [u8; 32] {
+        self.0
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ForecastDigestError {
+    #[error("forecast input snapshot cannot be serialized")]
+    Serialize(serde_json::Error),
 }
 
 /// Whether modeled yield represents a future forecast or a historical expectation.
