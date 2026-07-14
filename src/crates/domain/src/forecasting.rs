@@ -2,6 +2,7 @@ use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Deserializer, Serialize, de};
 use thiserror::Error;
+use time::Date;
 use url::Url;
 use uuid::Uuid;
 
@@ -379,9 +380,12 @@ pub enum YieldScope {
 #[serde(rename_all = "snake_case")]
 pub enum ForecastCompletenessReason {
     MissingSystemLocation,
+    MissingModuleIdentity,
     MissingOrientation,
     MissingTilt,
     MissingModuleCapacity,
+    MissingModuleSpecification,
+    MissingForecastSettings,
     MissingWeatherInput,
     UnsupportedWeatherInput,
     IncompatibleInputRun,
@@ -390,6 +394,7 @@ pub enum ForecastCompletenessReason {
     InsufficientActualCoverage,
     MissingActualTelemetry,
     NonPositiveExpectedEnergy,
+    NoEffectiveEquipment,
 }
 
 /// Completeness and effective capacity included in a modeled result.
@@ -403,6 +408,36 @@ pub enum ForecastCompleteness {
     Unavailable {
         reasons: Vec<ForecastCompletenessReason>,
     },
+}
+
+/// Effective capacity and forecast readiness for one PV string.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct EffectiveStringCapacity {
+    pub string_id: StringId,
+    pub total_peak_power: Watts,
+    pub forecast_ready: bool,
+    pub incomplete_reasons: Vec<ForecastCompletenessReason>,
+}
+
+/// Effective aggregate DC capacity for one inverter and its selected strings.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct EffectiveInverterCapacity {
+    pub inverter_id: InverterId,
+    pub total_peak_power: Watts,
+    pub forecast_ready_peak_power: Watts,
+    pub strings: Vec<EffectiveStringCapacity>,
+}
+
+/// Effective system DC capacity snapshot at one date and its next configuration boundary.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct EffectiveSystemCapacity {
+    pub system_id: SystemId,
+    pub effective_at: Date,
+    pub next_configuration_boundary: Option<Date>,
+    pub total_peak_power: Watts,
+    pub forecast_ready_peak_power: Watts,
+    pub inverters: Vec<EffectiveInverterCapacity>,
+    pub completeness: ForecastCompleteness,
 }
 
 /// Versioned interval output that never aliases modeled values to measured telemetry.

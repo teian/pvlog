@@ -1,10 +1,14 @@
+use std::collections::BTreeSet;
+
 use serde::{Deserialize, Serialize};
 use time::Date;
 
 use crate::{
-    AccountId, ChannelId, CurrencyCode, EquipmentId, ForecastInputSnapshot, ForecastSettings,
-    IanaTimezone, InverterId, Money, SolarModuleSpecificationSnapshot, StringId, SystemId,
-    TariffId, ValidationError, Visibility, Watts,
+    AccountId, ChannelId, CurrencyCode, EffectiveInverterCapacity, EffectiveStringCapacity,
+    EffectiveSystemCapacity, EquipmentId, ForecastCompleteness, ForecastCompletenessReason,
+    ForecastInputSnapshot, ForecastSettings, IanaTimezone, InverterId, Money,
+    SolarModuleSpecificationSnapshot, StringId, SystemId, TariffId, ValidationError, Visibility,
+    Watts,
 };
 
 /// Half-open effective date range where an omitted end means indefinitely active.
@@ -97,6 +101,179 @@ impl PvSystem {
         }
         Ok(())
     }
+
+    /// Selects the equipment configuration effective on `date` and aggregates DC capacity.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for overlapping active versions, non-positive nameplate capacity, or
+    /// arithmetic overflow.
+    pub fn effective_capacity_snapshot(
+        &self,
+        date: Date,
+    ) -> Result<EffectiveSystemCapacity, ValidationError> {
+        let mut seen_inverters = BTreeSet::new();
+        let mut system_capacity = 0_i64;
+        let mut ready_capacity = 0_i64;
+        let mut missing_reasons = BTreeSet::new();
+        let mut inverters = Vec::new();
+
+        for inverter in self
+            .inverters
+            .iter()
+            .filter(|inverter| inverter.period.contains(date))
+        {
+            if !seen_inverters.insert(inverter.id) {
+                return Err(ValidationError::new(
+                    "overlapping_inverter_configuration",
+                    "inverters.period",
+                    "multiple versions of one inverter are effective on the same date",
+                ));
+            }
+
+            let mut seen_strings = BTreeSet::new();
+            let mut inverter_capacity = 0_i64;
+            let mut inverter_ready_capacity = 0_i64;
+            let mut strings = Vec::new();
+            for string in inverter
+                .strings
+                .iter()
+                .filter(|string| string.period.contains(date))
+            {
+                if !seen_strings.insert(string.id) {
+                    return Err(ValidationError::new(
+                        "overlapping_string_configuration",
+                        "inverters.strings.period",
+                        "multiple versions of one PV string are effective on the same date",
+                    ));
+                }
+                let capacity = string.rated_power.value();
+                if capacity <= 0 {
+                    return Err(ValidationError::new(
+                        "invalid_string_capacity",
+                        "inverters.strings.rated_power",
+                        "effective PV string peak power must be positive",
+                    ));
+                }
+                inverter_capacity = checked_capacity_add(inverter_capacity, capacity)?;
+
+                let reasons = self.forecast_incomplete_reasons(string, date);
+                let forecast_ready = reasons.is_empty();
+                if forecast_ready {
+                    inverter_ready_capacity =
+                        checked_capacity_add(inverter_ready_capacity, capacity)?;
+                } else {
+                    missing_reasons.extend(reasons.iter().copied());
+                }
+                strings.push(EffectiveStringCapacity {
+                    string_id: string.id,
+                    total_peak_power: string.rated_power,
+                    forecast_ready,
+                    incomplete_reasons: reasons,
+                });
+            }
+
+            system_capacity = checked_capacity_add(system_capacity, inverter_capacity)?;
+            ready_capacity = checked_capacity_add(ready_capacity, inverter_ready_capacity)?;
+            inverters.push(EffectiveInverterCapacity {
+                inverter_id: inverter.id,
+                total_peak_power: Watts::new(inverter_capacity),
+                forecast_ready_peak_power: Watts::new(inverter_ready_capacity),
+                strings,
+            });
+        }
+
+        if inverters.is_empty() || system_capacity == 0 {
+            missing_reasons.insert(ForecastCompletenessReason::NoEffectiveEquipment);
+        }
+        let completeness = if missing_reasons.is_empty() {
+            ForecastCompleteness::Complete
+        } else if ready_capacity > 0 {
+            ForecastCompleteness::Partial {
+                reasons: missing_reasons.into_iter().collect(),
+            }
+        } else {
+            ForecastCompleteness::Unavailable {
+                reasons: missing_reasons.into_iter().collect(),
+            }
+        };
+
+        Ok(EffectiveSystemCapacity {
+            system_id: self.id,
+            effective_at: date,
+            next_configuration_boundary: self
+                .effective_configuration_boundaries()
+                .into_iter()
+                .find(|boundary| *boundary > date),
+            total_peak_power: Watts::new(system_capacity),
+            forecast_ready_peak_power: Watts::new(ready_capacity),
+            inverters,
+            completeness,
+        })
+    }
+
+    /// Returns sorted unique equipment and forecast-setting effective-date boundaries.
+    #[must_use]
+    pub fn effective_configuration_boundaries(&self) -> Vec<Date> {
+        let mut boundaries = BTreeSet::new();
+        for inverter in &self.inverters {
+            boundaries.insert(inverter.period.valid_from);
+            boundaries.extend(inverter.period.valid_until);
+            for string in &inverter.strings {
+                boundaries.insert(string.period.valid_from);
+                boundaries.extend(string.period.valid_until);
+                if let Some(settings) = &string.forecast_settings {
+                    boundaries.insert(settings.period.valid_from);
+                    boundaries.extend(settings.period.valid_until);
+                }
+            }
+        }
+        boundaries.into_iter().collect()
+    }
+
+    fn forecast_incomplete_reasons(
+        &self,
+        string: &PvString,
+        date: Date,
+    ) -> Vec<ForecastCompletenessReason> {
+        let mut reasons = BTreeSet::new();
+        if self.latitude_microdegrees.is_none() || self.longitude_microdegrees.is_none() {
+            reasons.insert(ForecastCompletenessReason::MissingSystemLocation);
+        }
+        if string.panel_manufacturer.is_none() || string.panel_model.is_none() {
+            reasons.insert(ForecastCompletenessReason::MissingModuleIdentity);
+        }
+        if string.panel_count == 0 || string.module_peak_power.is_none() {
+            reasons.insert(ForecastCompletenessReason::MissingModuleCapacity);
+        }
+        if string.module_specification_snapshot.is_none() {
+            reasons.insert(ForecastCompletenessReason::MissingModuleSpecification);
+        }
+        if string.orientation_degrees.is_none() {
+            reasons.insert(ForecastCompletenessReason::MissingOrientation);
+        }
+        if string.tilt_degrees.is_none() {
+            reasons.insert(ForecastCompletenessReason::MissingTilt);
+        }
+        if string
+            .forecast_settings
+            .as_ref()
+            .is_none_or(|settings| !settings.period.contains(date))
+        {
+            reasons.insert(ForecastCompletenessReason::MissingForecastSettings);
+        }
+        reasons.into_iter().collect()
+    }
+}
+
+fn checked_capacity_add(current: i64, value: i64) -> Result<i64, ValidationError> {
+    current.checked_add(value).ok_or_else(|| {
+        ValidationError::new(
+            "capacity_overflow",
+            "inverters.strings.rated_power",
+            "effective PV capacity exceeds the supported range",
+        )
+    })
 }
 
 /// Effective-dated inverter contained by one photovoltaic system aggregate.

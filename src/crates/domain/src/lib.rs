@@ -24,12 +24,13 @@ pub use equipment_catalog::{
     SolarModuleSpecification, SolarModuleSpecificationSnapshot, TemperatureRange,
 };
 pub use forecasting::{
-    CalculationBasis, EstimateRange, ForecastCompleteness, ForecastCompletenessReason,
-    ForecastConfigurationDigest, ForecastDigestError, ForecastInputSnapshot, ForecastLossFactors,
-    ForecastSettings, ForecastSettingsId, GeographicPoint, IrradiancePoint, MetresPerSecondMilli,
-    ModelVersion, NormalizedWeatherPoint, NormalizedWeatherRun, SpatialCoverage,
-    UnsignedBasisPoints, WattsPerSquareMetre, WeatherDataKind, WeatherDataProvenance,
-    WeatherDataRunId, YieldCalculationResult, YieldCalculationRunId, YieldResultId, YieldScope,
+    CalculationBasis, EffectiveInverterCapacity, EffectiveStringCapacity, EffectiveSystemCapacity,
+    EstimateRange, ForecastCompleteness, ForecastCompletenessReason, ForecastConfigurationDigest,
+    ForecastDigestError, ForecastInputSnapshot, ForecastLossFactors, ForecastSettings,
+    ForecastSettingsId, GeographicPoint, IrradiancePoint, MetresPerSecondMilli, ModelVersion,
+    NormalizedWeatherPoint, NormalizedWeatherRun, SpatialCoverage, UnsignedBasisPoints,
+    WattsPerSquareMetre, WeatherDataKind, WeatherDataProvenance, WeatherDataRunId,
+    YieldCalculationResult, YieldCalculationRunId, YieldResultId, YieldScope,
 };
 pub use identifiers::{
     AccountId, AlertEventId, AlertRuleId, ApiCredentialId, AuditEventId, ChannelId, ConnectorId,
