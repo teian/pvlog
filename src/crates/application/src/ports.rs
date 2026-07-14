@@ -115,6 +115,25 @@ pub trait InsolationProvider: Send + Sync {
     ) -> Result<Vec<InsolationPoint>, PortError>;
 }
 
+/// Provider-neutral request for one immutable normalized weather run.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct WeatherDataRequest {
+    pub system_id: SystemId,
+    pub kind: pvlog_domain::WeatherDataKind,
+    pub range: TimeRange,
+    pub spatial_coverage: pvlog_domain::SpatialCoverage,
+    pub issued_before: Option<UtcTimestamp>,
+}
+
+/// External weather boundary that preserves forecast, observation, and reanalysis identity.
+#[async_trait]
+pub trait WeatherDataProvider: Send + Sync {
+    async fn query(
+        &self,
+        request: &WeatherDataRequest,
+    ) -> Result<pvlog_domain::NormalizedWeatherRun, PortError>;
+}
+
 /// Regional electricity supply/demand sample in watts.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SupplyPoint {

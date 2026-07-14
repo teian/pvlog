@@ -179,6 +179,9 @@ pub enum ProviderCapability {
     DevicePolling,
     Insolation,
     RegionalSupply,
+    WeatherForecast,
+    WeatherObserved,
+    WeatherReanalysis,
     NotificationDelivery,
 }
 

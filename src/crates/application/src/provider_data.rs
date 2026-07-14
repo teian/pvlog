@@ -1,7 +1,10 @@
 //! Provider-neutral contracts for optional insolation and regional supply data.
 
 use async_trait::async_trait;
-use pvlog_domain::{ProviderId, SystemId, TimeRange, UtcTimestamp};
+use pvlog_domain::{
+    NormalizedWeatherRun, ProviderId, SpatialCoverage, SystemId, TimeRange, UtcTimestamp,
+    WeatherDataKind,
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use url::Url;
@@ -14,6 +17,9 @@ use std::sync::{Arc, Mutex};
 pub enum ExternalDataKind {
     Insolation,
     RegionalSupply,
+    WeatherForecast,
+    WeatherObserved,
+    WeatherReanalysis,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -107,15 +113,19 @@ pub enum ExternalDataCacheEntry {
         points: Vec<SupplyPoint>,
         provenance: ExternalDataProvenance,
     },
+    Weather {
+        run: NormalizedWeatherRun,
+        provenance: ExternalDataProvenance,
+    },
 }
 
 impl ExternalDataCacheEntry {
     #[must_use]
     pub const fn provenance(&self) -> &ExternalDataProvenance {
         match self {
-            Self::Insolation { provenance, .. } | Self::RegionalSupply { provenance, .. } => {
-                provenance
-            }
+            Self::Insolation { provenance, .. }
+            | Self::RegionalSupply { provenance, .. }
+            | Self::Weather { provenance, .. } => provenance,
         }
     }
 }
@@ -142,6 +152,13 @@ pub enum ExternalDataRequest {
     RegionalSupply {
         region_key: String,
         range: TimeRange,
+    },
+    Weather {
+        system_id: SystemId,
+        kind: WeatherDataKind,
+        range: TimeRange,
+        spatial_coverage: SpatialCoverage,
+        issued_before: Option<UtcTimestamp>,
     },
 }
 

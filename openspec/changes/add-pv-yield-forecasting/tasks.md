@@ -15,7 +15,7 @@
 
 ## 3. Weather Provider Normalization
 
-- [ ] 3.1 Extend provider-neutral capabilities and application ports with forecast, observed, and reanalysis weather runs while preserving existing insolation and regional-supply behavior.
+- [x] 3.1 Extend provider-neutral capabilities and application ports with forecast, observed, and reanalysis weather runs while preserving existing insolation and regional-supply behavior.
 - [ ] 3.2 Implement normalized run validation for issue/fetch time, horizon, location coverage, interval ordering, irradiance/environmental units, required fields, uncertainty, provenance, and licensing.
 - [ ] 3.3 Extend provider cache and circuit-breaker services to select fresh or policy-permitted stale immutable runs without relabeling forecast data as observations.
 - [ ] 3.4 Implement one administrator-configured weather adapter path plus deterministic provider fixtures without bundling restricted credentials or licensed data.

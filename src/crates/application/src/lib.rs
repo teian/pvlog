@@ -122,8 +122,8 @@ pub use pagination::{CursorPosition, PageCursorCodec, PaginationError};
 pub use ports::{
     AuthorizationRequest, Clock, CredentialService, EntityRepository, IdentityClaims,
     IdentityService, InsolationPoint, InsolationProvider, JobQueue, PortError, SecretResolver,
-    SupplyPoint, SupplyProvider, Transaction, UnitOfWork, WebhookRequest, WebhookResponse,
-    WebhookSender,
+    SupplyPoint, SupplyProvider, Transaction, UnitOfWork, WeatherDataProvider, WeatherDataRequest,
+    WebhookRequest, WebhookResponse, WebhookSender,
 };
 pub use provider_data::{
     CircuitBreaker, CircuitBreakerPolicy, CircuitState, ConfiguredExternalDataAdapter,
