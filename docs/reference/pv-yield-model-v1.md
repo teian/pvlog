@@ -25,3 +25,17 @@ Generation performance is actual divided by historical expected energy. Forecast
 actual divided by the previously issued forecast. Both require configured actual-coverage and
 quality thresholds plus a positive modeled denominator. Ratios are calculated only at an exact
 measurement scope; aggregate actual energy is never allocated down to an inverter or string.
+
+Nameplate capacity is confirmed effective DC module capacity, not a modeled or measured energy
+value. Forecast-ready capacity is reported separately from total effective capacity whenever an
+input gap excludes a string. Inverter efficiency remains AC output divided by DC input and must not
+be labeled as either generation performance or forecast realization.
+
+Lower and upper yield values retain propagated input uncertainty and use the same unit, interval,
+configuration digest, and model revision as the central value. Loss and calibration factors are
+effective-dated modeling inputs; they do not mutate equipment identity or actual telemetry.
+
+Normalized provider provenance includes adapter, source URL, fetch time, attribution, and license
+identifier. A policy-permitted stale run keeps its original issue and fetch times. Provider outage
+may make modeled output unavailable, but cannot block ingestion or convert forecast weather into
+observed weather.

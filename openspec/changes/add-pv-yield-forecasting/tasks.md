@@ -59,6 +59,6 @@
 ## 8. Deployment, Documentation, and Release Validation
 
 - [x] 8.1 Add documented provider-neutral runtime/Compose configuration for adapter endpoints, secret references, polling, horizons, stale policy, model defaults, feature gating, retention, and worker concurrency.
-- [ ] 8.2 Document nameplate capacity, forecast generation, historical expected generation, actual generation, forecast realization, generation performance, inverter efficiency, uncertainty, calibration, provider licensing, and outage behavior.
+- [x] 8.2 Document nameplate capacity, forecast generation, historical expected generation, actual generation, forecast realization, generation performance, inverter efficiency, uncertainty, calibration, provider licensing, and outage behavior.
 - [ ] 8.3 Add deterministic backfill/recalculation commands with dry-run, bounded account/range selection, progress, cancellation/retry, and rollback guidance.
 - [ ] 8.4 Run warning-free Rust checks and focused tests, SQLite/PostgreSQL profiles, frontend lint/typecheck/tests/build, Playwright, OpenAPI lint/compare/coverage, provider/model fixtures, security checks, and production embedded-UI validation.

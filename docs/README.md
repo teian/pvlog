@@ -8,6 +8,7 @@ Documentation version: 1.0
 - [Operator and recovery guide](guides/operator-recovery.md)
 - [Uploader integration and coverage](guides/uploader-integration.md)
 - [Equipment catalog and custom equipment](guides/equipment-catalog.md)
+- [PV yield forecasting and performance](guides/pv-yield-forecasting.md)
 - [API and domain reference](reference/api-domain-reference.md)
 - [Telemetry segment format](architecture/telemetry-segment-format.md)
 - [Certified capacity report](operations/capacity-report.md)
