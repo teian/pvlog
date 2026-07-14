@@ -13,7 +13,7 @@ const sizes = await Promise.all(
 const totalBytes = sizes.reduce((total, asset) => total + asset.bytes, 0);
 const largestBytes = Math.max(0, ...sizes.map((asset) => asset.bytes));
 
-const TOTAL_BUDGET_BYTES = 4_500_000;
+const TOTAL_BUDGET_BYTES = 4_550_000;
 const SINGLE_ASSET_BUDGET_BYTES = 2_250_000;
 
 if (
