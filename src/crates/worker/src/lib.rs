@@ -2,7 +2,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
 use pvlog_domain::{JobId, ProviderId, SystemId, TimeRange, WeatherDataRunId};
@@ -104,6 +104,101 @@ pub enum YieldJobOutcome {
     Completed,
     RetryAt(i64),
     DeadLetter,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct YieldMetricsSnapshot {
+    pub provider_fresh_runs: u64,
+    pub provider_stale_runs: u64,
+    pub provider_failures: u64,
+    pub forecast_age_milliseconds: Option<u64>,
+    pub calculation_lag_milliseconds: Option<u64>,
+    pub calculations_completed: u64,
+    pub calculations_failed: u64,
+    pub invalidation_backlog: u64,
+    pub complete_results: u64,
+    pub partial_results: u64,
+    pub unavailable_results: u64,
+    pub model_identifier: Option<String>,
+    pub model_revision: Option<u16>,
+    pub dead_letters: u64,
+}
+
+#[derive(Debug, Default)]
+pub struct YieldOperationalMetrics {
+    snapshot: Mutex<YieldMetricsSnapshot>,
+}
+
+impl YieldOperationalMetrics {
+    pub fn record_provider_result(&self, freshness: pvlog_application::ExternalDataFreshness) {
+        if let Ok(mut snapshot) = self.snapshot.lock() {
+            match freshness {
+                pvlog_application::ExternalDataFreshness::Fresh => {
+                    snapshot.provider_fresh_runs = snapshot.provider_fresh_runs.saturating_add(1);
+                }
+                pvlog_application::ExternalDataFreshness::StaleDegraded => {
+                    snapshot.provider_stale_runs = snapshot.provider_stale_runs.saturating_add(1);
+                }
+            }
+        }
+    }
+
+    pub fn record_provider_failure(&self) {
+        if let Ok(mut snapshot) = self.snapshot.lock() {
+            snapshot.provider_failures = snapshot.provider_failures.saturating_add(1);
+        }
+    }
+
+    pub fn record_calculation(
+        &self,
+        completed: bool,
+        lag_milliseconds: u64,
+        completeness: &pvlog_domain::ForecastCompleteness,
+        model: &pvlog_domain::ModelVersion,
+    ) {
+        if let Ok(mut snapshot) = self.snapshot.lock() {
+            snapshot.calculation_lag_milliseconds = Some(lag_milliseconds);
+            if completed {
+                snapshot.calculations_completed = snapshot.calculations_completed.saturating_add(1);
+            } else {
+                snapshot.calculations_failed = snapshot.calculations_failed.saturating_add(1);
+            }
+            match completeness {
+                pvlog_domain::ForecastCompleteness::Complete => {
+                    snapshot.complete_results = snapshot.complete_results.saturating_add(1);
+                }
+                pvlog_domain::ForecastCompleteness::Partial { .. } => {
+                    snapshot.partial_results = snapshot.partial_results.saturating_add(1);
+                }
+                pvlog_domain::ForecastCompleteness::Unavailable { .. } => {
+                    snapshot.unavailable_results = snapshot.unavailable_results.saturating_add(1);
+                }
+            }
+            snapshot.model_identifier = Some(model.identifier.clone());
+            snapshot.model_revision = Some(model.revision);
+        }
+    }
+
+    pub fn set_queue_diagnostics(
+        &self,
+        invalidation_backlog: u64,
+        dead_letters: u64,
+        forecast_age_milliseconds: Option<u64>,
+    ) {
+        if let Ok(mut snapshot) = self.snapshot.lock() {
+            snapshot.invalidation_backlog = invalidation_backlog;
+            snapshot.dead_letters = dead_letters;
+            snapshot.forecast_age_milliseconds = forecast_age_milliseconds;
+        }
+    }
+
+    #[must_use]
+    pub fn snapshot(&self) -> YieldMetricsSnapshot {
+        self.snapshot.lock().map_or_else(
+            |_| YieldMetricsSnapshot::default(),
+            |snapshot| snapshot.clone(),
+        )
+    }
 }
 
 pub struct YieldJobCoordinator {
