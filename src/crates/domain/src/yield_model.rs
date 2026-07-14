@@ -1,8 +1,9 @@
 //! Deterministic version-1 PV yield model primitives.
 
 use crate::{
-    BasisPoints, EstimateRange, ForecastLossFactors, GeographicPoint, IrradiancePoint,
-    MilliDegreesCelsius, UtcTimestamp, Watts, WattsPerSquareMetre,
+    BasisPoints, EstimateRange, ForecastCompleteness, ForecastCompletenessReason,
+    ForecastLossFactors, GeographicPoint, InverterId, IrradiancePoint, MilliDegreesCelsius,
+    StringId, SystemId, UnsignedBasisPoints, UtcTimestamp, Watts, WattsPerSquareMetre,
 };
 use std::f64::consts::PI;
 use thiserror::Error;
@@ -142,6 +143,206 @@ pub struct StringDcEstimate {
     pub module_temperature: EstimateRange<MilliDegreesCelsius>,
     pub power: EstimateRange<Watts>,
     pub was_physically_capped: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StringYieldContribution {
+    pub string_id: StringId,
+    pub nameplate_power: Watts,
+    pub power: Option<EstimateRange<Watts>>,
+    pub unavailable_reasons: Vec<ForecastCompletenessReason>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct InverterYieldEstimate {
+    pub inverter_id: InverterId,
+    pub power: Option<EstimateRange<Watts>>,
+    pub included_capacity: Watts,
+    pub total_effective_capacity: Watts,
+    pub completeness: ForecastCompleteness,
+    pub clipped: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SystemYieldEstimate {
+    pub system_id: SystemId,
+    pub power: Option<EstimateRange<Watts>>,
+    pub included_capacity: Watts,
+    pub total_effective_capacity: Watts,
+    pub completeness: ForecastCompleteness,
+}
+
+/// Aggregates string DC, applies inverter efficiency, and clips AC output.
+///
+/// # Errors
+///
+/// Returns an error for invalid capacity or arithmetic overflow.
+pub fn aggregate_inverter_yield(
+    inverter_id: InverterId,
+    strings: &[StringYieldContribution],
+    efficiency: UnsignedBasisPoints,
+    maximum_ac_power: Watts,
+) -> Result<InverterYieldEstimate, YieldModelError> {
+    if maximum_ac_power.value() <= 0 {
+        return Err(YieldModelError::InvalidInverterCapacity);
+    }
+    let mut total_capacity = 0_i64;
+    let mut included_capacity = 0_i64;
+    let mut power = EstimateAccumulator::default();
+    let mut reasons = Vec::new();
+    for string in strings {
+        if string.nameplate_power.value() < 0 {
+            return Err(YieldModelError::InvalidNameplatePower);
+        }
+        total_capacity = checked_add(total_capacity, string.nameplate_power.value())?;
+        if let Some(estimate) = string.power {
+            included_capacity = checked_add(included_capacity, string.nameplate_power.value())?;
+            power.add(estimate)?;
+        } else {
+            reasons.extend(string.unavailable_reasons.iter().copied());
+        }
+    }
+    if included_capacity == 0 {
+        reasons.push(ForecastCompletenessReason::NoEffectiveEquipment);
+        normalize_reasons(&mut reasons);
+        return Ok(InverterYieldEstimate {
+            inverter_id,
+            power: None,
+            included_capacity: Watts::new(0),
+            total_effective_capacity: Watts::new(total_capacity),
+            completeness: ForecastCompleteness::Unavailable { reasons },
+            clipped: false,
+        });
+    }
+    if included_capacity < total_capacity {
+        reasons.push(ForecastCompletenessReason::PartialEffectiveCapacity);
+    }
+    normalize_reasons(&mut reasons);
+    let convert = |value: i64| -> Result<Watts, YieldModelError> {
+        Ok(Watts::new(
+            checked_ratio(value, i64::from(efficiency.value()), 10_000)?
+                .min(maximum_ac_power.value()),
+        ))
+    };
+    let unclipped = checked_ratio(power.central, i64::from(efficiency.value()), 10_000)?;
+    Ok(InverterYieldEstimate {
+        inverter_id,
+        power: Some(power.finish(convert)?),
+        included_capacity: Watts::new(included_capacity),
+        total_effective_capacity: Watts::new(total_capacity),
+        completeness: completeness(reasons),
+        clipped: unclipped > maximum_ac_power.value(),
+    })
+}
+
+/// Aggregates inverter AC output while preserving included and excluded capacity.
+///
+/// # Errors
+///
+/// Returns an error on arithmetic overflow.
+pub fn aggregate_system_yield(
+    system_id: SystemId,
+    inverters: &[InverterYieldEstimate],
+) -> Result<SystemYieldEstimate, YieldModelError> {
+    let mut total_capacity = 0_i64;
+    let mut included_capacity = 0_i64;
+    let mut power = EstimateAccumulator::default();
+    let mut reasons = Vec::new();
+    for inverter in inverters {
+        total_capacity = checked_add(total_capacity, inverter.total_effective_capacity.value())?;
+        included_capacity = checked_add(included_capacity, inverter.included_capacity.value())?;
+        if let Some(estimate) = inverter.power {
+            power.add(estimate)?;
+        }
+        match &inverter.completeness {
+            ForecastCompleteness::Complete => {}
+            ForecastCompleteness::Partial { reasons: item }
+            | ForecastCompleteness::Unavailable { reasons: item } => reasons.extend(item),
+        }
+    }
+    if included_capacity == 0 {
+        reasons.push(ForecastCompletenessReason::NoEffectiveEquipment);
+        normalize_reasons(&mut reasons);
+        return Ok(SystemYieldEstimate {
+            system_id,
+            power: None,
+            included_capacity: Watts::new(0),
+            total_effective_capacity: Watts::new(total_capacity),
+            completeness: ForecastCompleteness::Unavailable { reasons },
+        });
+    }
+    if included_capacity < total_capacity {
+        reasons.push(ForecastCompletenessReason::PartialEffectiveCapacity);
+    }
+    normalize_reasons(&mut reasons);
+    Ok(SystemYieldEstimate {
+        system_id,
+        power: Some(power.finish(|value| Ok(Watts::new(value)))?),
+        included_capacity: Watts::new(included_capacity),
+        total_effective_capacity: Watts::new(total_capacity),
+        completeness: completeness(reasons),
+    })
+}
+
+struct EstimateAccumulator {
+    central: i64,
+    lower: Option<i64>,
+    upper: Option<i64>,
+}
+
+impl Default for EstimateAccumulator {
+    fn default() -> Self {
+        Self {
+            central: 0,
+            lower: Some(0),
+            upper: Some(0),
+        }
+    }
+}
+
+impl EstimateAccumulator {
+    fn add(&mut self, estimate: EstimateRange<Watts>) -> Result<(), YieldModelError> {
+        self.central = checked_add(self.central, estimate.central.value())?;
+        self.lower = sum_optional(self.lower, estimate.lower)?;
+        self.upper = sum_optional(self.upper, estimate.upper)?;
+        Ok(())
+    }
+
+    fn finish(
+        self,
+        convert: impl Fn(i64) -> Result<Watts, YieldModelError>,
+    ) -> Result<EstimateRange<Watts>, YieldModelError> {
+        Ok(EstimateRange {
+            central: convert(self.central)?,
+            lower: self.lower.map(&convert).transpose()?,
+            upper: self.upper.map(convert).transpose()?,
+        })
+    }
+}
+
+fn sum_optional(total: Option<i64>, value: Option<Watts>) -> Result<Option<i64>, YieldModelError> {
+    match (total, value) {
+        (Some(total), Some(value)) => Ok(Some(checked_add(total, value.value())?)),
+        _ => Ok(None),
+    }
+}
+
+fn checked_add(left: i64, right: i64) -> Result<i64, YieldModelError> {
+    left.checked_add(right)
+        .ok_or(YieldModelError::ArithmeticOverflow)
+}
+
+fn normalize_reasons(reasons: &mut Vec<ForecastCompletenessReason>) {
+    reasons.sort_unstable();
+    reasons.dedup();
+}
+
+fn completeness(reasons: Vec<ForecastCompletenessReason>) -> ForecastCompleteness {
+    if reasons.is_empty() {
+        ForecastCompleteness::Complete
+    } else {
+        ForecastCompleteness::Partial { reasons }
+    }
 }
 
 /// Calculates v1 module temperature and string DC output with fixed-point loss application.
@@ -317,4 +518,6 @@ pub enum YieldModelError {
     InvalidNameplatePower,
     #[error("yield model fixed-point arithmetic overflowed")]
     ArithmeticOverflow,
+    #[error("inverter maximum AC capacity must be positive")]
+    InvalidInverterCapacity,
 }

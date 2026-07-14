@@ -2,8 +2,10 @@ use std::error::Error;
 
 use pvlog_domain::{
     BasisPoints, EstimateRange, ForecastLossFactors, GeographicPoint, IrradiancePoint,
-    MilliDegreesCelsius, StringDcInput, SurfaceOrientation, UnsignedBasisPoints, UtcTimestamp,
-    Watts, WattsPerSquareMetre, calculate_string_dc, plane_of_array_irradiance, solar_position,
+    MilliDegreesCelsius, StringDcInput, StringId, StringYieldContribution, SurfaceOrientation,
+    SystemId, UnsignedBasisPoints, UtcTimestamp, Watts, WattsPerSquareMetre,
+    aggregate_inverter_yield, aggregate_system_yield, calculate_string_dc,
+    plane_of_array_irradiance, solar_position,
 };
 
 #[test]
@@ -22,6 +24,50 @@ fn berlin_solstice_reference_positions_are_stable() -> Result<(), Box<dyn Error>
         (winter.zenith_millidegrees, winter.azimuth_millidegrees),
         (76_910, 193_125)
     );
+    Ok(())
+}
+
+#[test]
+fn inverter_and_system_aggregation_clip_and_preserve_partial_capacity() -> Result<(), Box<dyn Error>>
+{
+    let inverter = aggregate_inverter_yield(
+        pvlog_domain::InverterId::new(),
+        &[
+            StringYieldContribution {
+                string_id: StringId::new(),
+                nameplate_power: Watts::new(6_000),
+                power: Some(EstimateRange {
+                    central: Watts::new(5_500),
+                    lower: Some(Watts::new(5_000)),
+                    upper: Some(Watts::new(6_000)),
+                }),
+                unavailable_reasons: vec![],
+            },
+            StringYieldContribution {
+                string_id: StringId::new(),
+                nameplate_power: Watts::new(2_000),
+                power: None,
+                unavailable_reasons: vec![pvlog_domain::ForecastCompletenessReason::MissingTilt],
+            },
+        ],
+        UnsignedBasisPoints::new(9_700)?,
+        Watts::new(5_000),
+    )?;
+    assert_eq!(
+        inverter.power.as_ref().map(|value| value.central.value()),
+        Some(5_000)
+    );
+    assert_eq!(inverter.included_capacity.value(), 6_000);
+    assert_eq!(inverter.total_effective_capacity.value(), 8_000);
+    assert!(inverter.clipped);
+
+    let system = aggregate_system_yield(SystemId::new(), &[inverter])?;
+    assert_eq!(
+        system.power.as_ref().map(|value| value.central.value()),
+        Some(5_000)
+    );
+    assert_eq!(system.included_capacity.value(), 6_000);
+    assert_eq!(system.total_effective_capacity.value(), 8_000);
     Ok(())
 }
 

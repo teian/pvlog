@@ -74,7 +74,8 @@ pub use telemetry::{
 pub use time::{IanaTimezone, UtcTimestamp};
 pub use validation::ValidationError;
 pub use yield_model::{
-    SolarPosition, StringDcEstimate, StringDcInput, SurfaceOrientation, YIELD_MODEL_V1_IDENTIFIER,
-    YIELD_MODEL_V1_REVISION, YieldModelError, calculate_string_dc, plane_of_array_irradiance,
-    solar_position,
+    InverterYieldEstimate, SolarPosition, StringDcEstimate, StringDcInput, StringYieldContribution,
+    SurfaceOrientation, SystemYieldEstimate, YIELD_MODEL_V1_IDENTIFIER, YIELD_MODEL_V1_REVISION,
+    YieldModelError, aggregate_inverter_yield, aggregate_system_yield, calculate_string_dc,
+    plane_of_array_irradiance, solar_position,
 };
