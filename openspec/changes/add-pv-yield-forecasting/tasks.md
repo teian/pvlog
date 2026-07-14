@@ -54,7 +54,7 @@
 - [x] 7.3 Add responsive forward forecast charts and summaries with issue time, horizon, uncertainty, freshness, provider attribution, configuration/model version, and partial/unavailable states.
 - [x] 7.4 Add expected-versus-actual and forecast-realization views that distinguish generation performance from inverter efficiency and never render missing values as zero.
 - [x] 7.5 Add keyboard-accessible data tables, textual summaries, non-color cues, localized units/dates, loading/empty/error states, and matching forecast/performance exports.
-- [ ] 7.6 Add English/German component and Playwright tests for complete, partial, stale, unavailable, configuration-gap, boundary, recalculation, underperformance, and table-alternative workflows.
+- [x] 7.6 Add English/German component and Playwright tests for complete, partial, stale, unavailable, configuration-gap, boundary, recalculation, underperformance, and table-alternative workflows.
 
 ## 8. Deployment, Documentation, and Release Validation
 
