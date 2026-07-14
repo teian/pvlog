@@ -5,10 +5,10 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use pvlog_domain::{JobId, ProviderId, SystemId, WeatherDataRunId};
+use pvlog_domain::{JobId, ProviderId, SystemId, TimeRange, WeatherDataRunId};
 use pvlog_storage::{
     DatabaseTarget, JobRecord, JobRetryDisposition, OperationalRepository,
-    OperationalRepositoryError, ProbeError, probe_database,
+    OperationalRepositoryError, ProbeError, YieldResultRepository, probe_database,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -27,6 +27,7 @@ pub async fn run_once(target: &DatabaseTarget) -> Result<(), ProbeError> {
 
 const WEATHER_POLL_JOB: &str = "weather_provider_poll";
 const YIELD_CALCULATION_JOB: &str = "yield_forecast_calculation";
+const YIELD_REBUILD_JOB: &str = "yield_interval_rebuild";
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct WeatherPollJobPayload {
@@ -43,6 +44,14 @@ pub struct YieldCalculationJobPayload {
     pub range_start: i64,
     pub range_end: i64,
     pub configuration_digest: [u8; 32],
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct YieldRebuildJobPayload {
+    pub system_id: SystemId,
+    pub range_start: i64,
+    pub range_end: i64,
+    pub invalidation_ids: Vec<uuid::Uuid>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,6 +91,11 @@ pub trait YieldJobHandler: Send + Sync {
     async fn calculate_yield(
         &self,
         payload: YieldCalculationJobPayload,
+    ) -> Result<(), YieldJobExecutionError>;
+
+    async fn rebuild_yield_intervals(
+        &self,
+        payload: YieldRebuildJobPayload,
     ) -> Result<(), YieldJobExecutionError>;
 }
 
@@ -153,6 +167,60 @@ impl YieldJobCoordinator {
             .await
     }
 
+    /// Coalesces intersecting pending invalidations into one bounded rebuild job.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for invalid range conversion, repository access, or job persistence.
+    pub async fn enqueue_pending_rebuild(
+        &self,
+        invalidations: &dyn YieldResultRepository,
+        system_id: SystemId,
+        range: TimeRange,
+        limit: u32,
+        now: i64,
+    ) -> Result<Option<JobId>, YieldJobError> {
+        let mut pending = invalidations
+            .pending_invalidations(system_id, range, limit)
+            .await?;
+        if pending.is_empty() {
+            return Ok(None);
+        }
+        pending.sort_by_key(|item| (item.range.start, item.range.end, item.id));
+        let start = pending
+            .iter()
+            .map(|item| item.range.start.epoch_millis())
+            .min()
+            .ok_or(YieldJobError::InvalidPayload)?;
+        let end = pending
+            .iter()
+            .map(|item| item.range.end.epoch_millis())
+            .max()
+            .ok_or(YieldJobError::InvalidPayload)?;
+        let invalidation_ids = pending.iter().map(|item| item.id).collect::<Vec<_>>();
+        let idempotency_key = format!(
+            "yield-rebuild:{system_id}:{start}:{end}:{}",
+            invalidation_ids
+                .iter()
+                .map(uuid::Uuid::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        );
+        self.enqueue(
+            YIELD_REBUILD_JOB,
+            YieldRebuildJobPayload {
+                system_id,
+                range_start: i64::try_from(start).map_err(|_| YieldJobError::InvalidPayload)?,
+                range_end: i64::try_from(end).map_err(|_| YieldJobError::InvalidPayload)?,
+                invalidation_ids,
+            },
+            idempotency_key,
+            now,
+        )
+        .await
+        .map(Some)
+    }
+
     async fn enqueue<T: Serialize>(
         &self,
         kind: &str,
@@ -222,6 +290,11 @@ impl YieldJobCoordinator {
                     .calculate_yield(serde_json::from_value(lease.job.payload.clone())?)
                     .await
             }
+            YIELD_REBUILD_JOB => {
+                handler
+                    .rebuild_yield_intervals(serde_json::from_value(lease.job.payload.clone())?)
+                    .await
+            }
             _ => Err(YieldJobExecutionError {
                 safe_code: "unsupported_job_kind",
             }),
@@ -281,6 +354,8 @@ pub enum YieldJobError {
     CoordinatorClosed,
     #[error("yield job persistence failed: {0}")]
     Repository(#[from] OperationalRepositoryError),
+    #[error("yield result persistence failed: {0}")]
+    YieldRepository(#[from] pvlog_storage::YieldResultRepositoryError),
     #[error("yield job payload serialization failed: {0}")]
     Json(#[from] serde_json::Error),
 }
