@@ -12,11 +12,17 @@ postgres = ["pvlog-storage/postgres"]
 sqlite = ["pvlog-storage/sqlite"]
 
 [dependencies]
+async-trait.workspace = true
+blake3.workspace = true
 pvlog-application = { path = "../application" }
 pvlog-domain = { path = "../domain" }
 pvlog-storage = { path = "../storage", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+uuid.workspace = true
 
 [lib]
 path = "src/lib.rs"
