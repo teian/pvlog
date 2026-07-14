@@ -25,6 +25,11 @@ macro_rules! forecast_identifier {
                 Self(Uuid::now_v7())
             }
 
+            /// Validates and wraps an existing `UUIDv7` value.
+            ///
+            /// # Errors
+            ///
+            /// Returns an error when `value` is not UUID version 7.
             pub fn from_uuid(value: Uuid) -> Result<Self, IdentifierError> {
                 if value.get_version_num() == 7 {
                     Ok(Self(value))
