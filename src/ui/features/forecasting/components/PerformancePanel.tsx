@@ -57,13 +57,13 @@ export function PerformancePanel({
       <div className="grid gap-4 xl:grid-cols-2">
         <PerformanceMetricCard
           range={range}
-          series={performance}
+          {...(performance === undefined ? {} : { series: performance })}
           systemId={systemId}
           type="generation_performance"
         />
         <PerformanceMetricCard
           range={range}
-          series={realization}
+          {...(realization === undefined ? {} : { series: realization })}
           systemId={systemId}
           type="forecast_realization"
         />

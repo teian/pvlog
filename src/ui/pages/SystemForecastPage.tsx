@@ -73,7 +73,9 @@ export function SystemForecastPage() {
       </div>
       <div className="grid gap-4 xl:grid-cols-2">
         <ForecastCompletenessPanel
-          completeness={completeness.data}
+          {...(completeness.data === undefined
+            ? {}
+            : { completeness: completeness.data })}
           error={completeness.isError}
           loading={completeness.isPending}
         />
@@ -82,23 +84,27 @@ export function SystemForecastPage() {
           error={settings.isError}
           loading={settings.isPending}
           systemId={systemId}
-          versioned={settings.data}
+          {...(settings.data === undefined ? {} : { versioned: settings.data })}
         />
       </div>
       <ForecastYieldPanel
         endEpochMillis={forwardRange.endEpochMillis}
         error={forecast.isError}
         loading={forecast.isPending}
-        series={forecast.data}
+        {...(forecast.data === undefined ? {} : { series: forecast.data })}
         startEpochMillis={forwardRange.startEpochMillis}
         systemId={systemId}
       />
       <PerformancePanel
         error={performance.isError || realization.isError}
         loading={performance.isPending || realization.isPending}
-        performance={performance.data}
+        {...(performance.data === undefined
+          ? {}
+          : { performance: performance.data })}
         range={historyRange}
-        realization={realization.data}
+        {...(realization.data === undefined
+          ? {}
+          : { realization: realization.data })}
         systemId={systemId}
       />
     </section>
