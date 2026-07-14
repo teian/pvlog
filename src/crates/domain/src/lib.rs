@@ -3,6 +3,7 @@
 #![forbid(unsafe_code)]
 
 mod equipment_catalog;
+mod forecasting;
 mod identifiers;
 mod identity;
 mod measurements;
@@ -21,6 +22,13 @@ pub use equipment_catalog::{
     InverterSpecificationSnapshot, InverterTopology, MpptInputSpecification,
     PvStringModuleComposition, SolarCellTechnology, SolarModuleCatalogEntry,
     SolarModuleSpecification, SolarModuleSpecificationSnapshot, TemperatureRange,
+};
+pub use forecasting::{
+    CalculationBasis, EstimateRange, ForecastCompleteness, ForecastCompletenessReason,
+    ForecastSettingsId, GeographicPoint, IrradiancePoint, MetresPerSecondMilli, ModelVersion,
+    NormalizedWeatherPoint, NormalizedWeatherRun, SpatialCoverage, UnsignedBasisPoints,
+    WattsPerSquareMetre, WeatherDataKind, WeatherDataProvenance, WeatherDataRunId,
+    YieldCalculationResult, YieldCalculationRunId, YieldResultId, YieldScope,
 };
 pub use identifiers::{
     AccountId, AlertEventId, AlertRuleId, ApiCredentialId, AuditEventId, ChannelId, ConnectorId,

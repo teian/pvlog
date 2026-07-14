@@ -1,6 +1,6 @@
 ## 1. Forecast Domain and Effective Configuration
 
-- [ ] 1.1 Add forecast/input/calculation identifiers, normalized weather-run types, forecast-versus-observed classifications, explicit units, uncertainty ranges, completeness reasons, and versioned calculation result models.
+- [x] 1.1 Add forecast/input/calculation identifiers, normalized weather-run types, forecast-versus-observed classifications, explicit units, uncertainty ranges, completeness reasons, and versioned calculation result models.
 - [ ] 1.2 Extend effective PV string configuration with bounded fixed-point loss/calibration settings and a canonical forecast-input snapshot/digest without changing confirmed equipment identity or actual telemetry.
 - [ ] 1.3 Implement effective-dated string-to-inverter-to-system DC nameplate aggregation with configuration-boundary and incomplete-input reporting.
 - [ ] 1.4 Add domain tests for forecast setting bounds, stable digests, effective-period selection, catalog-customized snapshots, capacity aggregation, missing inputs, overflow, and deterministic serialization.
