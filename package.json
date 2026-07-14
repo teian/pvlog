@@ -19,6 +19,7 @@
     "lint:styles": "stylelint 'src/ui/**/*.css'",
     "openapi:compare": "node tests/contract/openapi/compare.mjs tests/fixtures/openapi/pvlog-v1.generated.yaml",
     "openapi:analytics": "node tests/contract/openapi/analytics-examples.mjs",
+    "openapi:forecasting": "node tests/contract/openapi/forecasting.mjs",
     "openapi:lint": "redocly lint --config .redocly.yaml openapi/pvlog-v1.yaml",
     "openapi:routes": "node tests/contract/openapi/route-coverage.mjs",
     "catalog:validate": "ajv validate --spec=draft2020 -c ajv-formats -s assets/equipment-catalog/catalog-v1.schema.json -d assets/equipment-catalog/catalog-v1.json",

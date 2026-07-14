@@ -326,26 +326,39 @@ pub fn forecasting_router(
     service: Arc<dyn ForecastApiUseCases>,
     authorizer: Arc<dyn ModernRequestAuthorizer>,
 ) -> Router {
-    const SETTINGS_ROUTES: [&str; 4] = [
-        "/api/v1/accounts/{account_id}/forecast-settings",
-        "/api/v1/accounts/{account_id}/systems/{system_id}/forecast-settings",
-        "/api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/forecast-settings",
-        "/api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/strings/{string_id}/forecast-settings",
-    ];
-    const COMPLETENESS_ROUTES: [&str; 4] = [
-        "/api/v1/accounts/{account_id}/forecast-input-completeness",
-        "/api/v1/accounts/{account_id}/systems/{system_id}/forecast-input-completeness",
-        "/api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/forecast-input-completeness",
-        "/api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/strings/{string_id}/forecast-input-completeness",
-    ];
-    let mut router = Router::new();
-    for route in SETTINGS_ROUTES {
-        router = router.route(route, get(settings).put(update_settings));
-    }
-    for route in COMPLETENESS_ROUTES {
-        router = router.route(route, get(input_completeness));
-    }
-    router = router
+    Router::new()
+        .route(
+            "/api/v1/accounts/{account_id}/forecast-settings",
+            get(settings).put(update_settings),
+        )
+        .route(
+            "/api/v1/accounts/{account_id}/systems/{system_id}/forecast-settings",
+            get(settings).put(update_settings),
+        )
+        .route(
+            "/api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/forecast-settings",
+            get(settings).put(update_settings),
+        )
+        .route(
+            "/api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/strings/{string_id}/forecast-settings",
+            get(settings).put(update_settings),
+        )
+        .route(
+            "/api/v1/accounts/{account_id}/forecast-input-completeness",
+            get(input_completeness),
+        )
+        .route(
+            "/api/v1/accounts/{account_id}/systems/{system_id}/forecast-input-completeness",
+            get(input_completeness),
+        )
+        .route(
+            "/api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/forecast-input-completeness",
+            get(input_completeness),
+        )
+        .route(
+            "/api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/strings/{string_id}/forecast-input-completeness",
+            get(input_completeness),
+        )
         .route(
             "/api/v1/accounts/{account_id}/systems/{system_id}/forecast-runs",
             get(forecast_runs),
@@ -357,11 +370,11 @@ pub fn forecasting_router(
         .route(
             "/api/v1/accounts/{account_id}/systems/{system_id}/yield-performance",
             get(performance_series),
-        );
-    router.with_state(ForecastState {
-        service,
-        authorizer,
-    })
+        )
+        .with_state(ForecastState {
+            service,
+            authorizer,
+        })
 }
 
 #[derive(Clone, Copy, Debug, Deserialize)]

@@ -44,7 +44,7 @@
 - [x] 6.2 Add bounded forecast-run and forecast/expected series resources with explicit scope, resolution, issue time, versions, provenance, freshness, uncertainty, coverage, partial-capacity, and unavailable metadata.
 - [x] 6.3 Add aggregated performance and forecast-realization resources that align actual/model intervals and refuse unsupported child-scope ratios.
 - [x] 6.4 Extend analysis export with forecast, expected, actual, and performance values plus the same units, interval semantics, versions, coverage, uncertainty, and attribution shown by queries.
-- [ ] 6.5 Update the committed OpenAPI contract, generated fixture, examples, operation coverage, problem types, security, pagination/bounds, and backward-compatibility checks for all forecast resources.
+- [x] 6.5 Update the committed OpenAPI contract, generated fixture, examples, operation coverage, problem types, security, pagination/bounds, and backward-compatibility checks for all forecast resources.
 - [ ] 6.6 Add API/contract tests for authorization, bounds, ETags, effective settings, run selection, stale/unavailable providers, partial aggregation, model boundaries, exports, generic failures, and continued ingestion availability.
 
 ## 7. Accessible Web Experience

@@ -27,13 +27,20 @@ const examples =
 assert.equal(examples.csv.value.format, "csv");
 assert.equal(examples.csv.value.timezone, "Europe/Berlin");
 assert.equal(examples.queuedJson.value.asynchronous, true);
+assert.equal(examples.modeledCsv.value.includePartial, true);
+assert.ok(examples.modeledCsv.value.fields.includes("generation_performance"));
 assert.ok(exportOperation.responses["202"], "large exports must document jobs");
 
-const csv = exportOperation.responses["200"].content["text/csv"].example;
+const csv =
+  exportOperation.responses["200"].content["text/csv"].examples.telemetry.value;
 assert.equal(
   csv.split("\n", 1)[0],
   "timestamp_epoch_millis,field,value,unit,coverage_basis_points,quality_flags,resolution,timezone",
 );
+const modeledCsv =
+  exportOperation.responses["200"].content["text/csv"].examples.modeled.value;
+assert.ok(modeledCsv.startsWith("interval_start,interval_end,"));
+assert.ok(modeledCsv.includes("provider_attribution"));
 
 const qualityKinds =
   document.components.schemas.DataQualityIssue.properties.kind.enum;

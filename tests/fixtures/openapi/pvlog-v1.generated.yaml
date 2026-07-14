@@ -23,6 +23,8 @@ tags:
     description: Canonical observation ingestion and correction
   - name: Analytics
     description: Resolution-aware time series, statistics, and data quality
+  - name: Forecasting
+    description: Versioned PV yield settings, weather runs, modeled series, and performance
   - name: Exports
     description: Synchronous and asynchronous analysis exports
   - name: Notifications
@@ -785,6 +787,313 @@ paths:
           "204": { description: Deletion accepted },
           "409": { $ref: "#/components/responses/ConflictProblem" },
         }
+  /api/v1/accounts/{account_id}/forecast-settings:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }]
+    get:
+      operationId: getAccountForecastSettings
+      summary: Read effective account forecast defaults
+      description: Returns the effective-dated account defaults without exposing provider secrets.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/ForecastSettingsResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "503": { $ref: "#/components/responses/ForecastUnavailableProblem" }
+    put:
+      operationId: updateAccountForecastSettings
+      summary: Replace effective account forecast defaults
+      description: Writes bounded effective-dated defaults when the supplied ETag version still matches.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:write] }, { sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody: { $ref: "#/components/requestBodies/ForecastSettings" }
+      responses:
+        "200": { $ref: "#/components/responses/ForecastSettingsResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "412": { $ref: "#/components/responses/PreconditionProblem" }
+        "422": { $ref: "#/components/responses/ForecastValidationProblem" }
+        "428": { $ref: "#/components/responses/PreconditionProblem" }
+        "503": { $ref: "#/components/responses/ForecastUnavailableProblem" }
+  /api/v1/accounts/{account_id}/systems/{system_id}/forecast-settings:
+    parameters:
+      - { $ref: "#/components/parameters/AccountId" }
+      - { $ref: "#/components/parameters/NestedSystemId" }
+    get:
+      operationId: getSystemForecastSettings
+      summary: Read effective system forecast settings
+      description: Returns the effective settings inherited or overridden for this system.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/ForecastSettingsResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+    put:
+      operationId: updateSystemForecastSettings
+      summary: Replace effective system forecast settings
+      description: Writes an effective-dated system override protected by If-Match.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:write] }, { sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody: { $ref: "#/components/requestBodies/ForecastSettings" }
+      responses:
+        "200": { $ref: "#/components/responses/ForecastSettingsResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "412": { $ref: "#/components/responses/PreconditionProblem" }
+        "422": { $ref: "#/components/responses/ForecastValidationProblem" }
+        "428": { $ref: "#/components/responses/PreconditionProblem" }
+  /api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/forecast-settings:
+    parameters:
+      - { $ref: "#/components/parameters/AccountId" }
+      - { $ref: "#/components/parameters/NestedSystemId" }
+      - { $ref: "#/components/parameters/InverterId" }
+    get:
+      operationId: getInverterForecastSettings
+      summary: Read effective inverter forecast settings
+      description: Returns the effective settings inherited or overridden for this inverter.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/ForecastSettingsResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+    put:
+      operationId: updateInverterForecastSettings
+      summary: Replace effective inverter forecast settings
+      description: Writes an effective-dated inverter override protected by If-Match.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:write] }, { sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody: { $ref: "#/components/requestBodies/ForecastSettings" }
+      responses:
+        "200": { $ref: "#/components/responses/ForecastSettingsResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "412": { $ref: "#/components/responses/PreconditionProblem" }
+        "422": { $ref: "#/components/responses/ForecastValidationProblem" }
+        "428": { $ref: "#/components/responses/PreconditionProblem" }
+  /api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/strings/{string_id}/forecast-settings:
+    parameters:
+      - { $ref: "#/components/parameters/AccountId" }
+      - { $ref: "#/components/parameters/NestedSystemId" }
+      - { $ref: "#/components/parameters/InverterId" }
+      - { $ref: "#/components/parameters/StringId" }
+    get:
+      operationId: getStringForecastSettings
+      summary: Read effective PV-string forecast settings
+      description: Returns the effective loss, calibration, and model settings for one PV string.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/ForecastSettingsResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+    put:
+      operationId: updateStringForecastSettings
+      summary: Replace effective PV-string forecast settings
+      description: Writes an effective-dated string override while retaining historical settings.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:write] }, { sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/IfMatch" }]
+      requestBody: { $ref: "#/components/requestBodies/ForecastSettings" }
+      responses:
+        "200": { $ref: "#/components/responses/ForecastSettingsResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "412": { $ref: "#/components/responses/PreconditionProblem" }
+        "422": { $ref: "#/components/responses/ForecastValidationProblem" }
+        "428": { $ref: "#/components/responses/PreconditionProblem" }
+  /api/v1/accounts/{account_id}/forecast-input-completeness:
+    parameters: [{ $ref: "#/components/parameters/AccountId" }]
+    get:
+      operationId: getAccountForecastInputCompleteness
+      summary: Inspect account forecast-input completeness
+      description: Reports included and missing capacity with stable actionable reasons across the account.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/ForecastCompletenessResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/accounts/{account_id}/systems/{system_id}/forecast-input-completeness:
+    parameters:
+      - { $ref: "#/components/parameters/AccountId" }
+      - { $ref: "#/components/parameters/NestedSystemId" }
+    get:
+      operationId: getSystemForecastInputCompleteness
+      summary: Inspect system forecast-input completeness
+      description: Reports included and missing system capacity without substituting absent values.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/ForecastCompletenessResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/forecast-input-completeness:
+    parameters:
+      - { $ref: "#/components/parameters/AccountId" }
+      - { $ref: "#/components/parameters/NestedSystemId" }
+      - { $ref: "#/components/parameters/InverterId" }
+    get:
+      operationId: getInverterForecastInputCompleteness
+      summary: Inspect inverter forecast-input completeness
+      description: Reports which inverter inputs and child-string capacity are forecast ready.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/ForecastCompletenessResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/accounts/{account_id}/systems/{system_id}/inverters/{inverter_id}/strings/{string_id}/forecast-input-completeness:
+    parameters:
+      - { $ref: "#/components/parameters/AccountId" }
+      - { $ref: "#/components/parameters/NestedSystemId" }
+      - { $ref: "#/components/parameters/InverterId" }
+      - { $ref: "#/components/parameters/StringId" }
+    get:
+      operationId: getStringForecastInputCompleteness
+      summary: Inspect PV-string forecast-input completeness
+      description: Reports whether location, geometry, module capacity, and settings are complete.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200": { $ref: "#/components/responses/ForecastCompletenessResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/accounts/{account_id}/systems/{system_id}/forecast-runs:
+    parameters:
+      - { $ref: "#/components/parameters/AccountId" }
+      - { $ref: "#/components/parameters/NestedSystemId" }
+      - { $ref: "#/components/parameters/StartEpochMillis" }
+      - { $ref: "#/components/parameters/EndEpochMillis" }
+      - name: issuedBeforeEpochMillis
+        in: query
+        schema: { type: integer, format: int64 }
+      - name: kind
+        in: query
+        schema: { enum: [forecast, observed, reanalysis], default: forecast }
+      - name: limit
+        in: query
+        schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+    get:
+      operationId: listForecastRuns
+      summary: List immutable weather input runs
+      description: Selects a bounded run history by data kind, validity range, and optional issue-time cutoff.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200":
+          description: Ordered bounded run list
+          content:
+            application/json:
+              schema:
+                {
+                  type: array,
+                  maxItems: 100,
+                  items: { $ref: "#/components/schemas/ForecastRun" },
+                }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ForecastValidationProblem" }
+        "503": { $ref: "#/components/responses/ForecastUnavailableProblem" }
+  /api/v1/accounts/{account_id}/systems/{system_id}/yield-series:
+    parameters:
+      - { $ref: "#/components/parameters/AccountId" }
+      - { $ref: "#/components/parameters/NestedSystemId" }
+      - { $ref: "#/components/parameters/StartEpochMillis" }
+      - { $ref: "#/components/parameters/EndEpochMillis" }
+      - { $ref: "#/components/parameters/YieldResolution" }
+      - { $ref: "#/components/parameters/YieldMaximumPoints" }
+      - { $ref: "#/components/parameters/InverterScopeId" }
+      - { $ref: "#/components/parameters/StringScopeId" }
+      - name: basis
+        in: query
+        schema: { enum: [forecast, expected], default: forecast }
+      - name: weatherRunId
+        in: query
+        schema: { $ref: "#/components/schemas/UuidV7" }
+      - name: includePartial
+        in: query
+        schema: { type: boolean, default: false }
+    get:
+      operationId: getYieldSeries
+      summary: Query bounded forecast or expected-generation series
+      description: Returns immutable modeled values separately from measured telemetry and fails closed unless partial results are requested.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200":
+          description: Modeled yield with run, model, uncertainty, freshness, and capacity coverage
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/YieldSeries" }
+              examples:
+                partialForecast:
+                  value:
+                    scope:
+                      {
+                        kind: system,
+                        account_id: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70,
+                        system_id: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f71,
+                      }
+                    basis: forecast
+                    resolution: hour
+                    issueTime: 1780000000000
+                    weatherRunId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f72
+                    calculationRunId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f73
+                    modelIdentifier: pvwatts-compatible
+                    modelRevision: 1
+                    configurationDigest: "0000000000000000000000000000000000000000000000000000000000000000"
+                    freshness: fresh
+                    provenance:
+                      providerId: weather-example
+                      adapter: normalized-json
+                      sourceUrl: https://weather.example/forecast
+                      licenseIdentifier: example-license
+                      attribution: Weather Example
+                      fetchedAt: 1780000001000
+                    includedCapacityWatts: 4000
+                    totalEffectiveCapacityWatts: 8000
+                    completeness:
+                      { partial: { reasons: [partial_effective_capacity] } }
+                    unavailableReasons: []
+                    points: []
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "413": { $ref: "#/components/responses/QueryTooLargeProblem" }
+        "422": { $ref: "#/components/responses/ForecastValidationProblem" }
+        "503": { $ref: "#/components/responses/ForecastUnavailableProblem" }
+  /api/v1/accounts/{account_id}/systems/{system_id}/yield-performance:
+    parameters:
+      - { $ref: "#/components/parameters/AccountId" }
+      - { $ref: "#/components/parameters/NestedSystemId" }
+      - { $ref: "#/components/parameters/StartEpochMillis" }
+      - { $ref: "#/components/parameters/EndEpochMillis" }
+      - { $ref: "#/components/parameters/YieldResolution" }
+      - { $ref: "#/components/parameters/YieldMaximumPoints" }
+      - { $ref: "#/components/parameters/InverterScopeId" }
+      - { $ref: "#/components/parameters/StringScopeId" }
+      - name: metric
+        in: query
+        schema:
+          {
+            enum: [generation_performance, forecast_realization],
+            default: generation_performance,
+          }
+      - name: weatherRunId
+        in: query
+        schema: { $ref: "#/components/schemas/UuidV7" }
+    get:
+      operationId: getYieldPerformance
+      summary: Compare aligned actual and modeled generation
+      description: Child-scope ratios are unavailable unless actual generation is measured at that exact scope; aggregate actual values are never allocated downward.
+      tags: [Forecasting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200":
+          description: Aligned performance or forecast-realization series
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/PerformanceSeries" } },
+            }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "413": { $ref: "#/components/responses/QueryTooLargeProblem" }
+        "422": { $ref: "#/components/responses/ForecastValidationProblem" }
+        "503": { $ref: "#/components/responses/ForecastUnavailableProblem" }
   /api/v1/systems/{system_id}/series:
     parameters:
       - $ref: "#/components/parameters/NestedSystemId"
@@ -914,8 +1223,9 @@ paths:
       summary: Export an analysis query as CSV or JSON
       description: >-
         Returns a bounded export synchronously or queues a durable job. CSV uses
-        stable headers timestamp_epoch_millis, field, value, unit,
-        coverage_basis_points, quality_flags, resolution, and timezone.
+        stable half-open interval columns and preserves units, lower/central/upper
+        estimates, model and configuration versions, coverage, uncertainty,
+        freshness, and provider attribution for modeled fields.
       tags: [Exports]
       security: [{ bearerAuth: [exports:write] }]
       requestBody:
@@ -936,6 +1246,25 @@ paths:
                     format: csv,
                     asynchronous: false,
                   }
+              modeledCsv:
+                value:
+                  startEpochMillis: 1780000000000
+                  endEpochMillis: 1780086400000
+                  fields:
+                    [
+                      forecast_power,
+                      forecast_energy,
+                      generation_energy,
+                      expected_energy,
+                      generation_performance,
+                      forecast_realization,
+                    ]
+                  resolution: hour
+                  timezone: UTC
+                  maximumPoints: 48
+                  format: csv
+                  asynchronous: false
+                  includePartial: true
               queuedJson:
                 value:
                   {
@@ -957,12 +1286,28 @@ paths:
                 schema: { type: string },
                 example: attachment; filename="generation.csv",
               }
+            X-PVLog-Weather-Run-Id:
+              { schema: { $ref: "#/components/schemas/UuidV7" } }
+            X-PVLog-Calculation-Run-Id:
+              { schema: { $ref: "#/components/schemas/UuidV7" } }
+            X-PVLog-Model-Version:
+              { schema: { type: string }, example: pvwatts-compatible@1 }
+            X-PVLog-Coverage-Basis-Points:
+              { schema: { type: integer, minimum: 0, maximum: 10000 } }
+            X-PVLog-Uncertainty-Available: { schema: { type: boolean } }
+            X-PVLog-Interval-Semantics: { schema: { const: half_open } }
+            X-PVLog-Provider-Attribution: { schema: { type: string } }
           content:
             text/csv:
               schema: { type: string }
-              example: |-
-                timestamp_epoch_millis,field,value,unit,coverage_basis_points,quality_flags,resolution,timezone
-                1774738800000,generation_power,4200,watts,10000,0,hour,Europe/Berlin
+              examples:
+                telemetry:
+                  value: |-
+                    timestamp_epoch_millis,field,value,unit,coverage_basis_points,quality_flags,resolution,timezone
+                    1774738800000,generation_power,4200,watts,10000,0,hour,Europe/Berlin
+                modeled:
+                  value: |-
+                    interval_start,interval_end,forecast_power_watts,forecast_power_lower_watts,forecast_power_upper_watts,forecast_energy_watt_hours,actual_energy_watt_hours,expected_energy_watt_hours,generation_performance_basis_points,forecast_realization_basis_points,coverage_basis_points,model_version,provider_attribution
             application/json:
               schema: { $ref: "#/components/schemas/SeriesQueryResult" }
         "202":
@@ -1724,6 +2069,28 @@ components:
         required: true,
         schema: { $ref: "#/components/schemas/UuidV7" },
       }
+    InverterId:
+      name: inverter_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UuidV7" }
+    StringId:
+      name: string_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UuidV7" }
+    InverterScopeId:
+      name: inverterId
+      in: query
+      required: false
+      schema: { $ref: "#/components/schemas/UuidV7" }
+      description: Selects an inverter scope; required when stringId is supplied.
+    StringScopeId:
+      name: stringId
+      in: query
+      required: false
+      schema: { $ref: "#/components/schemas/UuidV7" }
+      description: Selects a measured PV-string scope together with inverterId.
     ObservationId:
       {
         name: observation_id,
@@ -1796,12 +2163,43 @@ components:
         schema: { type: integer, minimum: 1, maximum: 10000, default: 2000 },
         description: Hard per-series point budget; responses may include at most two documented boundary points.,
       }
+    YieldResolution:
+      name: resolution
+      in: query
+      required: false
+      schema: { enum: [15m, hour, day], default: hour }
+      description: Modeled values use half-open UTC intervals at the selected resolution.
+    YieldMaximumPoints:
+      name: maximumPoints
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 10000, default: 2000 }
+      description: Hard modeled-series point bound; oversized requests fail instead of downsampling silently.
   requestBodies:
     ManagedResource:
       content:
         application/json:
           schema: { type: object, additionalProperties: true }
           example: { name: Example resource }
+    ForecastSettings:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ForecastSettingsInput" }
+          examples:
+            effectiveLosses:
+              value:
+                effectiveFrom: 1780000000000
+                effectiveTo: null
+                modelIdentifier: pvwatts-compatible
+                modelRevision: 1
+                losses:
+                  soilingBasisPoints: 200
+                  shadingBasisPoints: 300
+                  mismatchBasisPoints: 100
+                  wiringBasisPoints: 100
+                  unavailabilityBasisPoints: 50
+                calibrationBasisPoints: 0
   responses:
     Problem:
       description: Request rejected with a standards-based problem detail
@@ -1845,6 +2243,40 @@ components:
               { schema: { $ref: "#/components/schemas/Problem" } },
           },
       }
+    ForecastSettingsResponse:
+      description: Effective forecast settings with an optimistic-concurrency validator
+      headers:
+        ETag:
+          { schema: { type: string }, description: Quoted settings version. }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ForecastSettings" }
+    ForecastCompletenessResponse:
+      description: Effective forecast-input completeness with a configuration validator
+      headers:
+        ETag:
+          {
+            schema: { type: string },
+            description: Quoted effective-configuration version.,
+          }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ForecastInputCompleteness" }
+    ForecastValidationProblem:
+      description: Forecast field, range, resolution, scope, or partial-result policy is invalid
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/ForecastProblem" }
+    QueryTooLargeProblem:
+      description: The modeled range would exceed the documented point or time bound
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
+    ForecastUnavailableProblem:
+      description: No permitted fresh or explicitly stale weather run can satisfy this request
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
     PreconditionProblem:
       {
         description: ETag precondition failed,
@@ -2514,6 +2946,356 @@ components:
                 },
             },
         }
+    ForecastScope:
+      oneOf:
+        - type: object
+          additionalProperties: false
+          required: [kind, account_id]
+          properties:
+            kind: { const: account }
+            account_id: { $ref: "#/components/schemas/UuidV7" }
+        - type: object
+          additionalProperties: false
+          required: [kind, account_id, system_id]
+          properties:
+            kind: { const: system }
+            account_id: { $ref: "#/components/schemas/UuidV7" }
+            system_id: { $ref: "#/components/schemas/UuidV7" }
+        - type: object
+          additionalProperties: false
+          required: [kind, account_id, system_id, inverter_id]
+          properties:
+            kind: { const: inverter }
+            account_id: { $ref: "#/components/schemas/UuidV7" }
+            system_id: { $ref: "#/components/schemas/UuidV7" }
+            inverter_id: { $ref: "#/components/schemas/UuidV7" }
+        - type: object
+          additionalProperties: false
+          required: [kind, account_id, system_id, inverter_id, string_id]
+          properties:
+            kind: { const: string }
+            account_id: { $ref: "#/components/schemas/UuidV7" }
+            system_id: { $ref: "#/components/schemas/UuidV7" }
+            inverter_id: { $ref: "#/components/schemas/UuidV7" }
+            string_id: { $ref: "#/components/schemas/UuidV7" }
+    ForecastLosses:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          soilingBasisPoints,
+          shadingBasisPoints,
+          mismatchBasisPoints,
+          wiringBasisPoints,
+          unavailabilityBasisPoints,
+        ]
+      properties:
+        soilingBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+        shadingBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+        mismatchBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+        wiringBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+        unavailabilityBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+    ForecastSettingsInput:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          effectiveFrom,
+          effectiveTo,
+          modelIdentifier,
+          modelRevision,
+          losses,
+          calibrationBasisPoints,
+        ]
+      properties:
+        effectiveFrom: { type: integer, format: int64 }
+        effectiveTo: { type: [integer, "null"], format: int64 }
+        modelIdentifier: { type: string, minLength: 1, maxLength: 64 }
+        modelRevision: { type: integer, minimum: 1, maximum: 65535 }
+        losses: { $ref: "#/components/schemas/ForecastLosses" }
+        calibrationBasisPoints: { type: integer, minimum: -5000, maximum: 5000 }
+    ForecastSettings:
+      allOf:
+        - { $ref: "#/components/schemas/ForecastSettingsInput" }
+        - type: object
+          additionalProperties: false
+          required: [scope, version]
+          properties:
+            scope: { $ref: "#/components/schemas/ForecastScope" }
+            version: { type: integer, format: int64, minimum: 1 }
+    ForecastCompletenessReason:
+      enum:
+        - missing_system_location
+        - missing_module_identity
+        - missing_orientation
+        - missing_tilt
+        - missing_module_capacity
+        - missing_module_specification
+        - missing_forecast_settings
+        - missing_weather_input
+        - unsupported_weather_input
+        - incompatible_input_run
+        - partial_effective_capacity
+        - insufficient_weather_coverage
+        - insufficient_actual_coverage
+        - missing_actual_telemetry
+        - non_positive_expected_energy
+        - no_effective_equipment
+    ForecastCompleteness:
+      oneOf:
+        - const: complete
+        - type: object
+          additionalProperties: false
+          required: [partial]
+          properties:
+            partial:
+              type: object
+              additionalProperties: false
+              required: [reasons]
+              properties:
+                reasons:
+                  {
+                    type: array,
+                    items:
+                      {
+                        $ref: "#/components/schemas/ForecastCompletenessReason",
+                      },
+                  }
+        - type: object
+          additionalProperties: false
+          required: [unavailable]
+          properties:
+            unavailable:
+              type: object
+              additionalProperties: false
+              required: [reasons]
+              properties:
+                reasons:
+                  {
+                    type: array,
+                    items:
+                      {
+                        $ref: "#/components/schemas/ForecastCompletenessReason",
+                      },
+                  }
+    ForecastInputCompleteness:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          scope,
+          effectiveAt,
+          includedCapacityWatts,
+          totalEffectiveCapacityWatts,
+          complete,
+          reasons,
+          version,
+        ]
+      properties:
+        scope: { $ref: "#/components/schemas/ForecastScope" }
+        effectiveAt: { type: integer, format: int64 }
+        includedCapacityWatts: { type: integer, format: int64, minimum: 0 }
+        totalEffectiveCapacityWatts:
+          { type: integer, format: int64, minimum: 0 }
+        complete: { type: boolean }
+        reasons:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/ForecastCompletenessReason" },
+          }
+        version: { type: integer, format: int64, minimum: 1 }
+    ForecastProvenance:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          providerId,
+          adapter,
+          sourceUrl,
+          licenseIdentifier,
+          attribution,
+          fetchedAt,
+        ]
+      properties:
+        providerId: { type: string, minLength: 1 }
+        adapter: { type: string, minLength: 1 }
+        sourceUrl: { type: string, format: uri }
+        licenseIdentifier: { type: string, minLength: 1 }
+        attribution: { type: string, minLength: 1 }
+        fetchedAt: { type: integer, format: int64 }
+    ForecastRun:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          systemId,
+          kind,
+          issuedAt,
+          validFrom,
+          validTo,
+          resolutionSeconds,
+          freshness,
+          provenance,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        kind: { enum: [forecast, observed, reanalysis] }
+        issuedAt: { type: [integer, "null"], format: int64 }
+        validFrom: { type: integer, format: int64 }
+        validTo: { type: integer, format: int64 }
+        resolutionSeconds: { type: integer, minimum: 1 }
+        freshness: { enum: [fresh, stale, unavailable] }
+        provenance: { $ref: "#/components/schemas/ForecastProvenance" }
+    YieldSeriesPoint:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          intervalStart,
+          intervalEnd,
+          centralPowerWatts,
+          lowerPowerWatts,
+          upperPowerWatts,
+          centralEnergyWattHours,
+          lowerEnergyWattHours,
+          upperEnergyWattHours,
+          coverageBasisPoints,
+          completeness,
+        ]
+      properties:
+        intervalStart: { type: integer, format: int64 }
+        intervalEnd: { type: integer, format: int64 }
+        centralPowerWatts: { type: [integer, "null"], format: int64 }
+        lowerPowerWatts: { type: [integer, "null"], format: int64 }
+        upperPowerWatts: { type: [integer, "null"], format: int64 }
+        centralEnergyWattHours: { type: [integer, "null"], format: int64 }
+        lowerEnergyWattHours: { type: [integer, "null"], format: int64 }
+        upperEnergyWattHours: { type: [integer, "null"], format: int64 }
+        coverageBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+        completeness: { $ref: "#/components/schemas/ForecastCompleteness" }
+    YieldSeries:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          scope,
+          basis,
+          resolution,
+          issueTime,
+          weatherRunId,
+          calculationRunId,
+          modelIdentifier,
+          modelRevision,
+          configurationDigest,
+          freshness,
+          provenance,
+          includedCapacityWatts,
+          totalEffectiveCapacityWatts,
+          completeness,
+          unavailableReasons,
+          points,
+        ]
+      properties:
+        scope: { $ref: "#/components/schemas/ForecastScope" }
+        basis: { enum: [forecast, expected] }
+        resolution: { enum: [fifteen_minutes, hour, day] }
+        issueTime: { type: [integer, "null"], format: int64 }
+        weatherRunId: { $ref: "#/components/schemas/UuidV7" }
+        calculationRunId: { $ref: "#/components/schemas/UuidV7" }
+        modelIdentifier: { type: string }
+        modelRevision: { type: integer, minimum: 1 }
+        configurationDigest: { type: string, pattern: "^[0-9a-f]{64}$" }
+        freshness: { enum: [fresh, stale, unavailable] }
+        provenance: { $ref: "#/components/schemas/ForecastProvenance" }
+        includedCapacityWatts: { type: integer, format: int64, minimum: 0 }
+        totalEffectiveCapacityWatts:
+          { type: integer, format: int64, minimum: 0 }
+        completeness: { $ref: "#/components/schemas/ForecastCompleteness" }
+        unavailableReasons:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/ForecastCompletenessReason" },
+          }
+        points:
+          {
+            type: array,
+            maxItems: 10000,
+            items: { $ref: "#/components/schemas/YieldSeriesPoint" },
+          }
+    PerformancePoint:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          intervalStart,
+          intervalEnd,
+          actualEnergyWattHours,
+          modeledEnergyWattHours,
+          ratioBasisPoints,
+          actualCoverageBasisPoints,
+          modeledCoverageBasisPoints,
+          unavailableReason,
+        ]
+      properties:
+        intervalStart: { type: integer, format: int64 }
+        intervalEnd: { type: integer, format: int64 }
+        actualEnergyWattHours: { type: [integer, "null"], format: int64 }
+        modeledEnergyWattHours: { type: [integer, "null"], format: int64 }
+        ratioBasisPoints: { type: [integer, "null"], minimum: 0 }
+        actualCoverageBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+        modeledCoverageBasisPoints:
+          { type: integer, minimum: 0, maximum: 10000 }
+        unavailableReason:
+          oneOf:
+            - { $ref: "#/components/schemas/ForecastCompletenessReason" }
+            - { type: "null" }
+    PerformanceSeries:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          scope,
+          metric,
+          basis,
+          resolution,
+          issueTime,
+          weatherRunId,
+          calculationRunId,
+          modelIdentifier,
+          modelRevision,
+          configurationDigest,
+          freshness,
+          provenance,
+          points,
+        ]
+      properties:
+        scope: { $ref: "#/components/schemas/ForecastScope" }
+        metric: { enum: [generation_performance, forecast_realization] }
+        basis: { enum: [expected, forecast] }
+        resolution: { enum: [fifteen_minutes, hour, day] }
+        issueTime: { type: [integer, "null"], format: int64 }
+        weatherRunId: { $ref: "#/components/schemas/UuidV7" }
+        calculationRunId: { $ref: "#/components/schemas/UuidV7" }
+        modelIdentifier: { type: string }
+        modelRevision: { type: integer, minimum: 1 }
+        configurationDigest: { type: string, pattern: "^[0-9a-f]{64}$" }
+        freshness: { enum: [fresh, stale, unavailable] }
+        provenance: { $ref: "#/components/schemas/ForecastProvenance" }
+        points:
+          {
+            type: array,
+            maxItems: 10000,
+            items: { $ref: "#/components/schemas/PerformancePoint" },
+          }
+    ForecastProblem:
+      allOf:
+        - { $ref: "#/components/schemas/Problem" }
+        - type: object
+          required: [field]
+          properties:
+            field: { type: string }
     SeriesQueryResult:
       type: object
       additionalProperties: false
@@ -2538,6 +3320,11 @@ components:
               [
                 generation_power,
                 generation_energy,
+                forecast_power,
+                forecast_energy,
+                expected_energy,
+                generation_performance,
+                forecast_realization,
                 consumption_power,
                 consumption_energy,
                 grid_power,
@@ -2631,12 +3418,26 @@ components:
         startEpochMillis: { type: integer, format: int64 }
         endEpochMillis: { type: integer, format: int64 }
         fields:
-          {
-            type: array,
-            minItems: 1,
-            uniqueItems: true,
-            items: { type: string },
-          }
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            enum:
+              - generation_power
+              - generation_energy
+              - forecast_power
+              - forecast_energy
+              - expected_energy
+              - generation_performance
+              - forecast_realization
+              - consumption_power
+              - consumption_energy
+              - grid_power
+              - battery_power
+              - battery_state_of_charge
+              - temperature
+              - extended
+              - provenance
         resolution:
           { enum: [auto, raw, 15m, hour, day, month, year], default: auto }
         timezone: { type: string, default: UTC }
@@ -2644,6 +3445,8 @@ components:
           { type: integer, minimum: 1, maximum: 10000, default: 2000 }
         format: { enum: [csv, json] }
         asynchronous: { type: boolean, default: false }
+        weatherRunId: { $ref: "#/components/schemas/UuidV7" }
+        includePartial: { type: boolean, default: false }
     QueuedJob:
       type: object
       additionalProperties: false
