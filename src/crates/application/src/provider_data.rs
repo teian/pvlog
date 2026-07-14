@@ -39,6 +39,7 @@ pub struct ExternalDataConfiguration {
     pub credential_secret_reference: Option<String>,
     pub request_timeout_milliseconds: u32,
     pub cache_ttl_seconds: u32,
+    pub maximum_stale_seconds: u32,
     pub license: ExternalDataLicense,
     pub enabled: bool,
 }
@@ -63,6 +64,9 @@ impl ExternalDataConfiguration {
         if self.cache_ttl_seconds == 0 {
             return Err(ProviderConfigurationError::InvalidCacheTtl);
         }
+        if self.maximum_stale_seconds > 86_400 * 30 {
+            return Err(ProviderConfigurationError::InvalidStalePolicy);
+        }
         if self.license.identifier.trim().is_empty() || self.license.attribution.trim().is_empty() {
             return Err(ProviderConfigurationError::MissingLicenseMetadata);
         }
@@ -80,6 +84,8 @@ pub enum ProviderConfigurationError {
     InvalidTimeout,
     #[error("provider cache TTL must be positive")]
     InvalidCacheTtl,
+    #[error("provider maximum stale age cannot exceed 30 days")]
+    InvalidStalePolicy,
     #[error("provider license identifier and attribution are required")]
     MissingLicenseMetadata,
 }
@@ -229,8 +235,17 @@ where
         if !self.configuration.enabled {
             return Err(PortError::Unavailable);
         }
+        if !request_matches_kind(self.configuration.kind, request) {
+            return Err(PortError::Rejected(
+                "provider capability does not match the requested data classification".to_owned(),
+            ));
+        }
         let now = self.clock.now();
-        let cached = self.cache.get(key).await?;
+        let cached = self
+            .cache
+            .get(key)
+            .await?
+            .filter(|entry| entry_matches_request(entry, request));
         if cached
             .as_ref()
             .is_some_and(|entry| entry.provenance().valid_until >= now)
@@ -246,9 +261,16 @@ where
             .map_err(|_| PortError::Unavailable)?
             .allow(now);
         if !allowed {
-            return stale_or_unavailable(cached);
+            return stale_or_unavailable(cached, now, self.configuration.maximum_stale_seconds);
         }
         if let Ok(entry) = self.adapter.fetch(&self.configuration, request, now).await {
+            if !entry_matches_request(&entry, request) {
+                self.circuit
+                    .lock()
+                    .map_err(|_| PortError::Unavailable)?
+                    .record_failure(now);
+                return stale_or_unavailable(cached, now, self.configuration.maximum_stale_seconds);
+            }
             self.cache.put(key, &entry).await?;
             self.circuit
                 .lock()
@@ -263,20 +285,87 @@ where
                 .lock()
                 .map_err(|_| PortError::Unavailable)?
                 .record_failure(now);
-            stale_or_unavailable(cached)
+            stale_or_unavailable(cached, now, self.configuration.maximum_stale_seconds)
         }
     }
 }
 
 fn stale_or_unavailable(
     cached: Option<ExternalDataCacheEntry>,
+    now: UtcTimestamp,
+    maximum_stale_seconds: u32,
 ) -> Result<ExternalDataResult, PortError> {
-    cached.map_or(Err(PortError::Unavailable), |entry| {
-        Ok(ExternalDataResult {
-            entry,
-            freshness: ExternalDataFreshness::StaleDegraded,
+    cached
+        .filter(|entry| {
+            entry.provenance().valid_until.epoch_millis()
+                + i128::from(maximum_stale_seconds) * 1_000
+                >= now.epoch_millis()
         })
-    })
+        .map_or(Err(PortError::Unavailable), |entry| {
+            Ok(ExternalDataResult {
+                entry,
+                freshness: ExternalDataFreshness::StaleDegraded,
+            })
+        })
+}
+
+const fn request_matches_kind(kind: ExternalDataKind, request: &ExternalDataRequest) -> bool {
+    matches!(
+        (kind, request),
+        (
+            ExternalDataKind::Insolation,
+            ExternalDataRequest::Insolation { .. }
+        ) | (
+            ExternalDataKind::RegionalSupply,
+            ExternalDataRequest::RegionalSupply { .. }
+        ) | (
+            ExternalDataKind::WeatherForecast,
+            ExternalDataRequest::Weather {
+                kind: WeatherDataKind::Forecast,
+                ..
+            }
+        ) | (
+            ExternalDataKind::WeatherObserved,
+            ExternalDataRequest::Weather {
+                kind: WeatherDataKind::Observed,
+                ..
+            }
+        ) | (
+            ExternalDataKind::WeatherReanalysis,
+            ExternalDataRequest::Weather {
+                kind: WeatherDataKind::Reanalysis,
+                ..
+            }
+        )
+    )
+}
+
+fn entry_matches_request(entry: &ExternalDataCacheEntry, request: &ExternalDataRequest) -> bool {
+    match (entry, request) {
+        (ExternalDataCacheEntry::Insolation { .. }, ExternalDataRequest::Insolation { .. })
+        | (
+            ExternalDataCacheEntry::RegionalSupply { .. },
+            ExternalDataRequest::RegionalSupply { .. },
+        ) => true,
+        (
+            ExternalDataCacheEntry::Weather { run, .. },
+            ExternalDataRequest::Weather {
+                kind,
+                range,
+                spatial_coverage,
+                issued_before,
+                ..
+            },
+        ) => {
+            run.kind == *kind
+                && run.spatial_coverage == *spatial_coverage
+                && run.valid_range.start <= range.start
+                && run.valid_range.end >= range.end
+                && issued_before
+                    .is_none_or(|cutoff| run.issued_at.is_none_or(|issued| issued <= cutoff))
+        }
+        _ => false,
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

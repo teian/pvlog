@@ -54,6 +54,7 @@ fn configuration() -> Result<ExternalDataConfiguration, url::ParseError> {
         credential_secret_reference: Some("secret:providers/solar".to_owned()),
         request_timeout_milliseconds: 2_000,
         cache_ttl_seconds: 900,
+        maximum_stale_seconds: 3_600,
         license: ExternalDataLicense {
             identifier: "operator-supplied".to_owned(),
             attribution: "Example data owner".to_owned(),

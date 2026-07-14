@@ -124,6 +124,7 @@ fn configuration() -> Result<ExternalDataConfiguration, url::ParseError> {
         credential_secret_reference: None,
         request_timeout_milliseconds: 500,
         cache_ttl_seconds: 1,
+        maximum_stale_seconds: 300,
         license: ExternalDataLicense {
             identifier: "operator-supplied".to_owned(),
             attribution: "Example".to_owned(),
