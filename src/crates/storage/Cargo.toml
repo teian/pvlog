@@ -73,6 +73,10 @@ name = "account-configuration-repositories"
 path = "../../../tests/rust/storage/account_configuration_repositories.rs"
 
 [[test]]
+name = "yield-forecast-repositories"
+path = "../../../tests/rust/storage/yield_forecast_repositories.rs"
+
+[[test]]
 name = "system-lifecycle-repositories"
 path = "../../../tests/rust/storage/system_lifecycle_repositories.rs"
 
