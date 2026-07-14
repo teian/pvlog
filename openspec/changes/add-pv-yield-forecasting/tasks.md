@@ -49,7 +49,7 @@
 
 ## 7. Accessible Web Experience
 
-- [ ] 7.1 Add Zod-validated forecast/settings/performance clients and TanStack Query hooks that preserve modeled-versus-measured types and invalidate affected resources after settings changes.
+- [x] 7.1 Add Zod-validated forecast/settings/performance clients and TanStack Query hooks that preserve modeled-versus-measured types and invalidate affected resources after settings changes.
 - [ ] 7.2 Add localized forecast-input completeness and effective-dated loss/calibration administration linked to existing system and string configuration.
 - [ ] 7.3 Add responsive forward forecast charts and summaries with issue time, horizon, uncertainty, freshness, provider attribution, configuration/model version, and partial/unavailable states.
 - [ ] 7.4 Add expected-versus-actual and forecast-realization views that distinguish generation performance from inverter efficiency and never render missing values as zero.
