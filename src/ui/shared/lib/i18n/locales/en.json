@@ -442,6 +442,58 @@
     "verified": "Test ingestion was accepted and verified.",
     "verifyTitle": "Verify ingestion"
   },
+  "forecasting": {
+    "notAvailable": "Not available",
+    "completeness": {
+      "actionRequired": "Configuration required",
+      "capacity": "{{included}} of {{total}} kWp included ({{percent}}%)",
+      "configureEquipment": "Open system and string configuration",
+      "description": "Checks location, module, orientation, capacity, and modeling inputs for the effective period.",
+      "errorDescription": "Readiness details are temporarily unavailable.",
+      "errorTitle": "Could not load forecast readiness",
+      "noGaps": "All required forecast inputs are present.",
+      "ready": "Forecast ready",
+      "title": "Forecast input readiness"
+    },
+    "reasons": {
+      "incompatible_input_run": "The weather run is incompatible with this configuration.",
+      "insufficient_actual_coverage": "Actual generation coverage is insufficient.",
+      "insufficient_weather_coverage": "Weather coverage is insufficient.",
+      "missing_actual_telemetry": "Actual generation telemetry is missing.",
+      "missing_forecast_settings": "Forecast loss and calibration settings are missing.",
+      "missing_module_capacity": "A PV string is missing module capacity.",
+      "missing_module_identity": "A PV string is missing its module identity.",
+      "missing_module_specification": "A module specification is incomplete.",
+      "missing_orientation": "A PV string is missing its orientation.",
+      "missing_system_location": "The system location is missing.",
+      "missing_tilt": "A PV string is missing its tilt.",
+      "missing_weather_input": "No suitable weather input is available.",
+      "no_effective_equipment": "No effective PV equipment exists for this period.",
+      "non_positive_expected_energy": "Expected generation is not positive for this interval.",
+      "partial_effective_capacity": "Only part of the effective nameplate capacity can be modeled.",
+      "unsupported_weather_input": "The weather input contains unsupported data."
+    },
+    "settings": {
+      "calibrationBasisPoints": "Calibration (basis points)",
+      "description": "Apply bounded losses and calibration from the selected effective time without changing measured telemetry or confirmed equipment.",
+      "effectiveFrom": "Effective from (epoch milliseconds)",
+      "effectiveTo": "Effective until (optional epoch milliseconds)",
+      "errorDescription": "Effective settings are temporarily unavailable.",
+      "errorTitle": "Could not load forecast settings",
+      "mismatchBasisPoints": "Mismatch loss (basis points)",
+      "model": "Model identifier",
+      "revision": "Model revision",
+      "save": "Save forecast settings",
+      "saveError": "The settings could not be saved. Reload and try again.",
+      "saved": "Settings saved; affected forecasts will be recalculated.",
+      "saving": "Saving…",
+      "shadingBasisPoints": "Shading loss (basis points)",
+      "soilingBasisPoints": "Soiling loss (basis points)",
+      "title": "Effective loss and calibration settings",
+      "unavailabilityBasisPoints": "Unavailability loss (basis points)",
+      "wiringBasisPoints": "Wiring loss (basis points)"
+    }
+  },
   "shell": {
     "closeNavigation": "Close navigation",
     "openNavigation": "Open navigation",

@@ -442,6 +442,58 @@
     "verified": "Die Testdaten wurden angenommen und bestätigt.",
     "verifyTitle": "Datenerfassung prüfen"
   },
+  "forecasting": {
+    "notAvailable": "Nicht verfügbar",
+    "completeness": {
+      "actionRequired": "Konfiguration erforderlich",
+      "capacity": "{{included}} von {{total}} kWp einbezogen ({{percent}} %)",
+      "configureEquipment": "Anlagen- und String-Konfiguration öffnen",
+      "description": "Prüft Standort, Module, Ausrichtung, Leistung und Modellparameter für den wirksamen Zeitraum.",
+      "errorDescription": "Die Angaben zur Bereitschaft sind vorübergehend nicht verfügbar.",
+      "errorTitle": "Prognosebereitschaft konnte nicht geladen werden",
+      "noGaps": "Alle erforderlichen Prognoseeingaben sind vorhanden.",
+      "ready": "Prognosebereit",
+      "title": "Bereitschaft der Prognoseeingaben"
+    },
+    "reasons": {
+      "incompatible_input_run": "Der Wetterlauf ist mit dieser Konfiguration nicht kompatibel.",
+      "insufficient_actual_coverage": "Die Abdeckung der Ist-Erzeugung ist unzureichend.",
+      "insufficient_weather_coverage": "Die Wetterabdeckung ist unzureichend.",
+      "missing_actual_telemetry": "Telemetrie zur Ist-Erzeugung fehlt.",
+      "missing_forecast_settings": "Einstellungen für Verluste und Kalibrierung fehlen.",
+      "missing_module_capacity": "Bei einem PV-String fehlt die Modulleistung.",
+      "missing_module_identity": "Bei einem PV-String fehlt die Modulidentität.",
+      "missing_module_specification": "Eine Modulspezifikation ist unvollständig.",
+      "missing_orientation": "Bei einem PV-String fehlt die Ausrichtung.",
+      "missing_system_location": "Der Anlagenstandort fehlt.",
+      "missing_tilt": "Bei einem PV-String fehlt die Neigung.",
+      "missing_weather_input": "Es sind keine geeigneten Wetterdaten verfügbar.",
+      "no_effective_equipment": "Für diesen Zeitraum gibt es keine wirksame PV-Ausrüstung.",
+      "non_positive_expected_energy": "Die erwartete Erzeugung ist in diesem Intervall nicht positiv.",
+      "partial_effective_capacity": "Nur ein Teil der wirksamen Nennleistung kann modelliert werden.",
+      "unsupported_weather_input": "Die Wetterdaten enthalten nicht unterstützte Werte."
+    },
+    "settings": {
+      "calibrationBasisPoints": "Kalibrierung (Basispunkte)",
+      "description": "Begrenzte Verluste und Kalibrierung ab dem gewählten Zeitpunkt anwenden, ohne Messdaten oder bestätigte Geräte zu verändern.",
+      "effectiveFrom": "Wirksam ab (Epoch-Millisekunden)",
+      "effectiveTo": "Wirksam bis (optionale Epoch-Millisekunden)",
+      "errorDescription": "Die wirksamen Einstellungen sind vorübergehend nicht verfügbar.",
+      "errorTitle": "Prognoseeinstellungen konnten nicht geladen werden",
+      "mismatchBasisPoints": "Mismatch-Verlust (Basispunkte)",
+      "model": "Modellkennung",
+      "revision": "Modellrevision",
+      "save": "Prognoseeinstellungen speichern",
+      "saveError": "Die Einstellungen konnten nicht gespeichert werden. Bitte neu laden und erneut versuchen.",
+      "saved": "Einstellungen gespeichert; betroffene Prognosen werden neu berechnet.",
+      "saving": "Wird gespeichert…",
+      "shadingBasisPoints": "Verschattungsverlust (Basispunkte)",
+      "soilingBasisPoints": "Verschmutzungsverlust (Basispunkte)",
+      "title": "Wirksame Verlust- und Kalibrierungseinstellungen",
+      "unavailabilityBasisPoints": "Nichtverfügbarkeitsverlust (Basispunkte)",
+      "wiringBasisPoints": "Verkabelungsverlust (Basispunkte)"
+    }
+  },
   "shell": {
     "closeNavigation": "Navigation schließen",
     "openNavigation": "Navigation öffnen",
