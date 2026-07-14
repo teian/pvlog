@@ -202,6 +202,8 @@ pub trait OperationalRepository: Send + Sync {
         &self,
         limit: u32,
     ) -> Result<Vec<JobRecord>, OperationalRepositoryError>;
+    async fn cancel_job(&self, id: JobId, now: i64) -> Result<bool, OperationalRepositoryError>;
+    async fn requeue_job(&self, id: JobId, now: i64) -> Result<bool, OperationalRepositoryError>;
 }
 
 #[cfg(feature = "sqlite")]
@@ -444,6 +446,18 @@ impl OperationalRepository for SqliteOperationalRepository {
             .bind(i64::from(limit.min(1_000))).fetch_all(&mut *c).await?;
         rows.iter().map(sqlite_job).collect()
     }
+    async fn cancel_job(&self, id: JobId, now: i64) -> Result<bool, OperationalRepositoryError> {
+        let mut w = self.account.acquire_writer().await?;
+        let result = sqlx::query("UPDATE account_jobs SET state='cancelled',lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,completed_at=?,updated_at=? WHERE id=? AND state NOT IN ('completed','cancelled')")
+            .bind(now).bind(now).bind(blob(id.as_uuid())).execute(w.connection()).await?;
+        Ok(result.rows_affected() == 1)
+    }
+    async fn requeue_job(&self, id: JobId, now: i64) -> Result<bool, OperationalRepositoryError> {
+        let mut w = self.account.acquire_writer().await?;
+        let result = sqlx::query("UPDATE account_jobs SET state='pending',attempt_count=0,available_at=?,lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,safe_error_code=NULL,safe_error_detail=NULL,completed_at=NULL,updated_at=? WHERE id=? AND state IN ('dead_letter','failed','cancelled')")
+            .bind(now).bind(now).bind(blob(id.as_uuid())).execute(w.connection()).await?;
+        Ok(result.rows_affected() == 1)
+    }
 }
 
 #[cfg(feature = "postgres")]
@@ -651,6 +665,20 @@ impl OperationalRepository for PostgresOperationalRepository {
             .bind(self.account_id.as_uuid()).bind(i64::from(limit.min(1_000))).fetch_all(&mut c).await?;
         c.close().await?;
         rows.iter().map(pg_job).collect()
+    }
+    async fn cancel_job(&self, id: JobId, now: i64) -> Result<bool, OperationalRepositoryError> {
+        let mut c = self.connection().await?;
+        let result = sqlx::query("UPDATE jobs.account_jobs SET state='cancelled',lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,completed_at=$1,updated_at=$1 WHERE account_id=$2 AND id=$3 AND state NOT IN ('completed','cancelled')")
+            .bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).execute(&mut c).await?;
+        c.close().await?;
+        Ok(result.rows_affected() == 1)
+    }
+    async fn requeue_job(&self, id: JobId, now: i64) -> Result<bool, OperationalRepositoryError> {
+        let mut c = self.connection().await?;
+        let result = sqlx::query("UPDATE jobs.account_jobs SET state='pending',attempt_count=0,available_at=$1,lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,safe_error_code=NULL,safe_error_detail=NULL,completed_at=NULL,updated_at=$1 WHERE account_id=$2 AND id=$3 AND state IN ('dead_letter','failed','cancelled')")
+            .bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).execute(&mut c).await?;
+        c.close().await?;
+        Ok(result.rows_affected() == 1)
     }
 }
 

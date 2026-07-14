@@ -100,6 +100,50 @@ fn dotenv_and_toml_configuration_are_loaded_together() -> Result<(), Box<dyn Err
     Ok(())
 }
 
+#[test]
+fn forecast_recalculation_dry_run_is_deterministic_and_bounded() -> Result<(), Box<dyn Error>> {
+    let arguments = [
+        "forecast",
+        "recalculate",
+        "--account-id",
+        "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70",
+        "--system-id",
+        "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f71",
+        "--start-epoch-millis",
+        "1780000000000",
+        "--end-epoch-millis",
+        "1780086400000",
+        "--dry-run",
+    ];
+    let first = configured_command(&[]).args(arguments).output()?;
+    let second = configured_command(&[]).args(arguments).output()?;
+    assert!(first.status.success());
+    assert_eq!(first.stdout, second.stdout);
+    let body: serde_json::Value = serde_json::from_slice(&first.stdout)?;
+    assert_eq!(
+        body["state"].as_str().unwrap_or_default().split(':').next(),
+        Some("dry_run")
+    );
+
+    let invalid = configured_command(&[])
+        .args([
+            "forecast",
+            "recalculate",
+            "--account-id",
+            "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70",
+            "--system-id",
+            "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f71",
+            "--start-epoch-millis",
+            "1780000000000",
+            "--end-epoch-millis",
+            "1811705600001",
+            "--dry-run",
+        ])
+        .output()?;
+    assert!(!invalid.status.success());
+    Ok(())
+}
+
 fn run_migrations(settings: &[(&str, &str)]) -> Result<(), Box<dyn Error>> {
     for action in ["plan", "apply", "status"] {
         let status = configured_command(settings)

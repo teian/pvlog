@@ -296,6 +296,17 @@ async fn verify_contract(
             .iter()
             .any(|item| item.id == dead.id)
     );
+    assert!(repository.requeue_job(dead.id, retry_at + 2).await?);
+    assert_eq!(
+        repository.job(dead.id).await?.map(|job| job.state),
+        Some("pending".to_owned())
+    );
+    assert!(repository.cancel_job(dead.id, retry_at + 3).await?);
+    assert_eq!(
+        repository.job(dead.id).await?.map(|job| job.state),
+        Some("cancelled".to_owned())
+    );
+    assert!(repository.requeue_job(dead.id, retry_at + 4).await?);
 
     assert!(matches!(
         repository.rollups(system_id, base, base).await,

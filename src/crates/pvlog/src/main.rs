@@ -28,9 +28,12 @@ use pvlog_application::{
     SystemLifecycleRepository, SystemLifecycleService, SystemLifecycleUseCases,
     UserLifecycleRepository, UserLifecycleService, UserLifecycleUseCases,
 };
+use pvlog_domain::{AccountId, JobId, SystemId, TimeRange, UtcTimestamp};
 use pvlog_storage::{
-    DatabaseMigrationStatus, DatabaseTarget, MigrationError, MigrationPlanItem, ProbeError,
-    apply_migrations, migration_plan, migration_status, probe_database,
+    DatabaseMigrationStatus, DatabaseTarget, MigrationError, MigrationPlanItem,
+    OperationalRepository, ProbeError, YieldInvalidationReason, YieldInvalidationRecord,
+    YieldInvalidationState, YieldResultRepository, apply_migrations, migration_plan,
+    migration_status, probe_database,
 };
 use secrecy::ExposeSecret as _;
 use serde::Serialize;
@@ -121,6 +124,50 @@ enum Command {
     },
     /// Verify an operator bundle without restoring it.
     Verify { bundle: PathBuf },
+    /// Plan, enqueue, inspect, cancel, or retry deterministic yield recalculation jobs.
+    Forecast {
+        #[command(subcommand)]
+        action: ForecastCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+enum ForecastCommand {
+    /// Recalculate one bounded system range.
+    Recalculate {
+        #[arg(long)]
+        account_id: String,
+        #[arg(long)]
+        system_id: String,
+        #[arg(long)]
+        start_epoch_millis: i64,
+        #[arg(long)]
+        end_epoch_millis: i64,
+        /// Print the deterministic plan without changing storage.
+        #[arg(long)]
+        dry_run: bool,
+    },
+    /// Report durable job progress.
+    Progress {
+        #[arg(long)]
+        account_id: String,
+        #[arg(long)]
+        job_id: String,
+    },
+    /// Cancel a pending, retrying, leased, or failed job.
+    Cancel {
+        #[arg(long)]
+        account_id: String,
+        #[arg(long)]
+        job_id: String,
+    },
+    /// Requeue a failed, dead-lettered, or cancelled job from attempt zero.
+    Retry {
+        #[arg(long)]
+        account_id: String,
+        #[arg(long)]
+        job_id: String,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -173,6 +220,7 @@ async fn main() -> Result<(), StartupError> {
             print_json(&import_bundle(&target, &bundle, dry_run)?)
         }
         Command::Verify { bundle } => print_json(&verify_bundle(&bundle)?),
+        Command::Forecast { action } => run_forecast_command(&target, action).await,
     };
     if let Some(providers) = telemetry {
         providers
@@ -185,6 +233,249 @@ async fn main() -> Result<(), StartupError> {
             .map_err(|error| StartupError::Telemetry(error.to_string()))?;
     }
     result
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ForecastOperationOutput {
+    action: &'static str,
+    account_id: String,
+    job_id: Option<String>,
+    state: String,
+    start_epoch_millis: Option<i64>,
+    end_epoch_millis: Option<i64>,
+}
+
+async fn run_forecast_command(
+    target: &DatabaseTarget,
+    action: ForecastCommand,
+) -> Result<(), StartupError> {
+    match action {
+        ForecastCommand::Recalculate {
+            account_id,
+            system_id,
+            start_epoch_millis,
+            end_epoch_millis,
+            dry_run,
+        } => {
+            let account_id = parse_account_id(&account_id)?;
+            let system_id = parse_system_id(&system_id)?;
+            let range = forecast_range(start_epoch_millis, end_epoch_millis)?;
+            let invalidation_id = deterministic_invalidation_id(
+                account_id,
+                system_id,
+                start_epoch_millis,
+                end_epoch_millis,
+            );
+            if dry_run {
+                return print_json(&ForecastOperationOutput {
+                    action: "recalculate",
+                    account_id: account_id.to_string(),
+                    job_id: None,
+                    state: format!("dry_run:{invalidation_id}"),
+                    start_epoch_millis: Some(start_epoch_millis),
+                    end_epoch_millis: Some(end_epoch_millis),
+                });
+            }
+            let now = command_now()?;
+            let (operations, results) = forecast_repositories(target, account_id).await?;
+            let key = format!(
+                "operator-recalculation:{system_id}:{start_epoch_millis}:{end_epoch_millis}"
+            );
+            results
+                .insert_invalidation(&YieldInvalidationRecord {
+                    id: invalidation_id,
+                    system_id,
+                    range,
+                    reason: YieldInvalidationReason::ModelVersion,
+                    state: YieldInvalidationState::Pending,
+                    idempotency_key: key,
+                    created_at: now,
+                    completed_at: None,
+                })
+                .await
+                .map_err(|error| StartupError::ForecastOperation(error.to_string()))?;
+            let coordinator = pvlog_worker::YieldJobCoordinator::new(
+                operations,
+                pvlog_worker::YieldJobPolicy::default(),
+            )
+            .map_err(|error| StartupError::ForecastOperation(error.to_string()))?;
+            let job_id = coordinator
+                .enqueue_pending_rebuild(results.as_ref(), system_id, range, 1, now)
+                .await
+                .map_err(|error| StartupError::ForecastOperation(error.to_string()))?
+                .ok_or_else(|| {
+                    StartupError::ForecastOperation("recalculation was not enqueued".to_owned())
+                })?;
+            print_json(&ForecastOperationOutput {
+                action: "recalculate",
+                account_id: account_id.to_string(),
+                job_id: Some(job_id.to_string()),
+                state: "pending".to_owned(),
+                start_epoch_millis: Some(start_epoch_millis),
+                end_epoch_millis: Some(end_epoch_millis),
+            })
+        }
+        ForecastCommand::Progress { account_id, job_id } => {
+            let account_id = parse_account_id(&account_id)?;
+            let job_id = parse_job_id(&job_id)?;
+            let (operations, _) = forecast_repositories(target, account_id).await?;
+            let job = operations
+                .job(job_id)
+                .await
+                .map_err(|error| StartupError::ForecastOperation(error.to_string()))?
+                .ok_or_else(|| StartupError::ForecastOperation("job was not found".to_owned()))?;
+            print_json(&ForecastOperationOutput {
+                action: "progress",
+                account_id: account_id.to_string(),
+                job_id: Some(job_id.to_string()),
+                state: format!("{}:{}/{}", job.state, job.attempt_count, job.max_attempts),
+                start_epoch_millis: None,
+                end_epoch_millis: None,
+            })
+        }
+        ForecastCommand::Cancel { account_id, job_id } => {
+            mutate_forecast_job(target, &account_id, &job_id, false).await
+        }
+        ForecastCommand::Retry { account_id, job_id } => {
+            mutate_forecast_job(target, &account_id, &job_id, true).await
+        }
+    }
+}
+
+async fn mutate_forecast_job(
+    target: &DatabaseTarget,
+    account_id: &str,
+    job_id: &str,
+    retry: bool,
+) -> Result<(), StartupError> {
+    let account_id = parse_account_id(account_id)?;
+    let job_id = parse_job_id(job_id)?;
+    let (operations, _) = forecast_repositories(target, account_id).await?;
+    let changed = if retry {
+        operations.requeue_job(job_id, command_now()?).await
+    } else {
+        operations.cancel_job(job_id, command_now()?).await
+    }
+    .map_err(|error| StartupError::ForecastOperation(error.to_string()))?;
+    if !changed {
+        return Err(StartupError::ForecastOperation(
+            "job state does not allow this transition".to_owned(),
+        ));
+    }
+    print_json(&ForecastOperationOutput {
+        action: if retry { "retry" } else { "cancel" },
+        account_id: account_id.to_string(),
+        job_id: Some(job_id.to_string()),
+        state: if retry { "pending" } else { "cancelled" }.to_owned(),
+        start_epoch_millis: None,
+        end_epoch_millis: None,
+    })
+}
+
+async fn forecast_repositories(
+    target: &DatabaseTarget,
+    account_id: AccountId,
+) -> Result<
+    (
+        Arc<dyn OperationalRepository>,
+        Box<dyn YieldResultRepository>,
+    ),
+    StartupError,
+> {
+    match target {
+        DatabaseTarget::Sqlite {
+            management_path,
+            accounts_dir,
+        } => {
+            let router = pvlog_storage::SqliteAccountPoolRouter::new(
+                management_path.clone(),
+                accounts_dir.clone(),
+                pvlog_storage::SqliteAccountPoolConfig::default(),
+            )
+            .map_err(|error| StartupError::ForecastOperation(error.to_string()))?;
+            let account = router
+                .route(account_id)
+                .await
+                .map_err(|error| StartupError::ForecastOperation(error.to_string()))?;
+            Ok((
+                Arc::new(pvlog_storage::SqliteOperationalRepository::new(
+                    management_path.clone(),
+                    account.clone(),
+                )),
+                Box::new(pvlog_storage::SqliteYieldResultRepository::new(account)),
+            ))
+        }
+        DatabaseTarget::Postgres { url } => Ok((
+            Arc::new(pvlog_storage::PostgresOperationalRepository::new(
+                url.clone(),
+                account_id,
+            )),
+            Box::new(pvlog_storage::PostgresYieldResultRepository::new(
+                url.clone(),
+                account_id,
+            )),
+        )),
+    }
+}
+
+fn forecast_range(start: i64, end: i64) -> Result<TimeRange, StartupError> {
+    const MAXIMUM_RANGE_MILLIS: i64 = 366 * 86_400_000;
+    if end <= start || end.saturating_sub(start) > MAXIMUM_RANGE_MILLIS {
+        return Err(StartupError::ForecastOperation(
+            "range must be non-empty and no longer than 366 days".to_owned(),
+        ));
+    }
+    TimeRange::new(
+        UtcTimestamp::from_epoch_millis(start)
+            .map_err(|error| StartupError::ForecastOperation(error.to_string()))?,
+        UtcTimestamp::from_epoch_millis(end)
+            .map_err(|error| StartupError::ForecastOperation(error.to_string()))?,
+    )
+    .map_err(|error| StartupError::ForecastOperation(error.to_string()))
+}
+
+fn parse_account_id(value: &str) -> Result<AccountId, StartupError> {
+    AccountId::from_uuid(parse_uuid(value)?)
+        .map_err(|error| StartupError::ForecastOperation(error.to_string()))
+}
+
+fn parse_system_id(value: &str) -> Result<SystemId, StartupError> {
+    SystemId::from_uuid(parse_uuid(value)?)
+        .map_err(|error| StartupError::ForecastOperation(error.to_string()))
+}
+
+fn parse_job_id(value: &str) -> Result<JobId, StartupError> {
+    JobId::from_uuid(parse_uuid(value)?)
+        .map_err(|error| StartupError::ForecastOperation(error.to_string()))
+}
+
+fn parse_uuid(value: &str) -> Result<uuid::Uuid, StartupError> {
+    uuid::Uuid::parse_str(value)
+        .map_err(|_| StartupError::ForecastOperation("identifier is not a UUID".to_owned()))
+}
+
+fn deterministic_invalidation_id(
+    account_id: AccountId,
+    system_id: SystemId,
+    start: i64,
+    end: i64,
+) -> uuid::Uuid {
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(account_id.as_uuid().as_bytes());
+    hasher.update(system_id.as_uuid().as_bytes());
+    hasher.update(&start.to_be_bytes());
+    hasher.update(&end.to_be_bytes());
+    let mut bytes = [0_u8; 16];
+    bytes.copy_from_slice(&hasher.finalize().as_bytes()[..16]);
+    bytes[6] = (bytes[6] & 0x0f) | 0x70;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    uuid::Uuid::from_bytes(bytes)
+}
+
+fn command_now() -> Result<i64, StartupError> {
+    i64::try_from(SystemClock.now().epoch_millis())
+        .map_err(|_| StartupError::ForecastOperation("current time is out of range".to_owned()))
 }
 
 fn init_observability(
@@ -838,6 +1129,8 @@ fn argon2_credentials(config: &RuntimeConfig) -> Argon2CredentialService {
 enum StartupError {
     #[error(transparent)]
     Config(#[from] ConfigError),
+    #[error("forecast operation failed: {0}")]
+    ForecastOperation(String),
     #[error(transparent)]
     Storage(#[from] ProbeError),
     #[error(transparent)]

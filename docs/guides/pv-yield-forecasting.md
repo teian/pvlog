@@ -71,3 +71,41 @@ The deterministic equations and rounding rules are documented in
 [PV yield model v1](../reference/pv-yield-model-v1.md). Runtime controls and
 failure behavior are documented in the
 [Compose guide](../../deploy/compose/README.md#pv-yield-forecasting).
+
+## Bounded recalculation commands
+
+Preview a deterministic single-account, single-system range before writing any
+invalidation or job. Epoch ranges are half-open and limited to 366 days:
+
+```sh
+pvlog forecast recalculate \
+  --account-id 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70 \
+  --system-id 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f71 \
+  --start-epoch-millis 1780000000000 \
+  --end-epoch-millis 1780086400000 \
+  --dry-run
+```
+
+Remove `--dry-run` to insert an idempotent model-version invalidation and a
+coalesced rebuild job. Repeating the same account, system, and range returns the
+same durable work rather than duplicating it. The JSON response contains the
+job ID used by the remaining commands:
+
+```sh
+pvlog forecast progress --account-id ACCOUNT_UUID --job-id JOB_UUID
+pvlog forecast cancel --account-id ACCOUNT_UUID --job-id JOB_UUID
+pvlog forecast retry --account-id ACCOUNT_UUID --job-id JOB_UUID
+```
+
+Progress reports the durable state and `attempt/max-attempts`. Cancellation is
+cooperative: it removes queued work and prevents a leased job from recording
+completion, but an external weather request already in flight may finish.
+Retry is allowed only for failed, dead-lettered, or cancelled work and resets
+the attempt counter.
+
+Recalculation never mutates actual telemetry or deletes an earlier immutable
+calculation run. To roll back a bad settings/model deployment, restore the prior
+effective settings or model revision, preview the affected range, enqueue a new
+recalculation, and verify the active projection before retention removes
+unreferenced working runs. Issued/referenced forecasts remain preserved for
+historical audit and performance comparison.
