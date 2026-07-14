@@ -4,7 +4,7 @@ use crate::{
     DataQualityIssue, EnergyStatistics, QueryPlanRequest, SeriesQueryResult, StatisticsPeriod,
 };
 use async_trait::async_trait;
-use pvlog_domain::{JobId, SystemId, UserId};
+use pvlog_domain::{JobId, SystemId, UserId, WeatherDataRunId, YieldCalculationRunId};
 use thiserror::Error;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -20,6 +20,27 @@ pub struct AnalysisExportRequest {
     pub query: QueryPlanRequest,
     pub format: AnalysisExportFormat,
     pub asynchronous: bool,
+    pub modeled_selection: Option<ModeledAnalysisExportSelection>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModeledAnalysisExportSelection {
+    pub weather_run_id: Option<WeatherDataRunId>,
+    pub include_partial: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModeledAnalysisExportMetadata {
+    pub weather_run_id: WeatherDataRunId,
+    pub calculation_run_id: YieldCalculationRunId,
+    pub model_identifier: String,
+    pub model_revision: u16,
+    pub configuration_digest: String,
+    pub provider_attribution: String,
+    pub freshness: String,
+    pub coverage_basis_points: u16,
+    pub uncertainty_available: bool,
+    pub interval_semantics: String,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -28,6 +49,7 @@ pub enum AnalysisExportResult {
         content_type: String,
         filename: String,
         bytes: Vec<u8>,
+        modeled_metadata: Option<Box<ModeledAnalysisExportMetadata>>,
     },
     Queued {
         job_id: JobId,

@@ -7,10 +7,10 @@ use axum::{
 use pvlog_api::analytics_router;
 use pvlog_application::{
     AnalysisExportRequest, AnalysisExportResult, DataQualityIssue, EnergyStatistics,
-    ModernAnalyticsError, ModernAnalyticsUseCases, QueryResolution, SeriesQueryResult,
-    StatisticsPeriod,
+    ModeledAnalysisExportMetadata, ModernAnalyticsError, ModernAnalyticsUseCases, QueryResolution,
+    SeriesField, SeriesQueryResult, StatisticsPeriod,
 };
-use pvlog_domain::{JobId, SystemId, UserId};
+use pvlog_domain::{JobId, SystemId, UserId, WeatherDataRunId, YieldCalculationRunId};
 use std::{error::Error, sync::Arc};
 use tower::ServiceExt as _;
 
@@ -46,6 +46,14 @@ async fn analytics_routes_cover_queries_and_both_export_modes() -> Result<(), Bo
         synchronous
             .headers()
             .contains_key(header::CONTENT_DISPOSITION)
+    );
+    assert_eq!(
+        synchronous.headers()["x-pvlog-model-version"],
+        "pvwatts-compatible@1"
+    );
+    assert_eq!(
+        synchronous.headers()["x-pvlog-provider-attribution"],
+        "Weather Example"
     );
 
     let asynchronous = app.oneshot(export_request(system, true)?).await?;
@@ -93,7 +101,7 @@ fn export_request(
         ))
         .header(header::CONTENT_TYPE, "application/json")
         .body(Body::from(format!(
-            r#"{{"startEpochMillis":0,"endEpochMillis":3600000,"fields":["generation_power"],"format":"csv","asynchronous":{asynchronous}}}"#
+            r#"{{"startEpochMillis":0,"endEpochMillis":3600000,"fields":["forecast_power","forecast_energy","generation_energy","expected_energy","generation_performance","forecast_realization"],"includePartial":true,"format":"csv","asynchronous":{asynchronous}}}"#
         )))
 }
 
@@ -156,6 +164,23 @@ impl ModernAnalyticsUseCases for Stub {
         &self,
         request: AnalysisExportRequest,
     ) -> Result<AnalysisExportResult, ModernAnalyticsError> {
+        for field in [
+            SeriesField::ForecastPower,
+            SeriesField::ForecastEnergy,
+            SeriesField::GenerationEnergy,
+            SeriesField::ExpectedEnergy,
+            SeriesField::GenerationPerformance,
+            SeriesField::ForecastRealization,
+        ] {
+            assert!(request.query.fields.contains(&field));
+        }
+        assert_eq!(
+            request
+                .modeled_selection
+                .as_ref()
+                .map(|selection| selection.include_partial),
+            Some(true)
+        );
         if request.asynchronous {
             Ok(AnalysisExportResult::Queued {
                 job_id: JobId::new(),
@@ -164,7 +189,19 @@ impl ModernAnalyticsUseCases for Stub {
             Ok(AnalysisExportResult::Ready {
                 content_type: "text/csv; charset=utf-8".to_owned(),
                 filename: "generation.csv".to_owned(),
-                bytes: b"timestamp,generation_power_watts\n".to_vec(),
+                bytes: b"interval_start,interval_end,forecast_power_watts,forecast_power_lower_watts,forecast_power_upper_watts,forecast_energy_watt_hours,actual_energy_watt_hours,expected_energy_watt_hours,generation_performance_basis_points,forecast_realization_basis_points,coverage_basis_points,model_version,provider_attribution\n".to_vec(),
+                modeled_metadata: Some(Box::new(ModeledAnalysisExportMetadata {
+                    weather_run_id: WeatherDataRunId::new(),
+                    calculation_run_id: YieldCalculationRunId::new(),
+                    model_identifier: "pvwatts-compatible".to_owned(),
+                    model_revision: 1,
+                    configuration_digest: "09".repeat(32),
+                    provider_attribution: "Weather Example".to_owned(),
+                    freshness: "fresh".to_owned(),
+                    coverage_basis_points: 9_500,
+                    uncertainty_available: true,
+                    interval_semantics: "half_open".to_owned(),
+                })),
             })
         }
     }

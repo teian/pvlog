@@ -7,11 +7,12 @@ use axum::{
     routing::{get, post},
 };
 use pvlog_application::{
-    AnalysisExportFormat, AnalysisExportRequest, AnalysisExportResult, ModernAnalyticsError,
+    AnalysisExportFormat, AnalysisExportRequest, AnalysisExportResult,
+    ModeledAnalysisExportMetadata, ModeledAnalysisExportSelection, ModernAnalyticsError,
     ModernAnalyticsUseCases, QueryPlanRequest, QueryResolution, RequestedResolution, SeriesField,
     StatisticsPeriod,
 };
-use pvlog_domain::{SystemId, UserId};
+use pvlog_domain::{SystemId, UserId, WeatherDataRunId};
 use serde::Deserialize;
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -68,6 +69,8 @@ struct ExportBody {
     maximum_points: Option<u32>,
     format: String,
     asynchronous: Option<bool>,
+    weather_run_id: Option<WeatherDataRunId>,
+    include_partial: Option<bool>,
 }
 
 async fn time_series(
@@ -136,6 +139,7 @@ async fn export(
         "json" => AnalysisExportFormat::Json,
         _ => return Err(AnalyticsApiError::Invalid),
     };
+    let modeled_selection = modeled_selection(&body);
     let parameters = SeriesParameters {
         start_epoch_millis: body.start_epoch_millis,
         end_epoch_millis: body.end_epoch_millis,
@@ -154,6 +158,7 @@ async fn export(
             query: query_request(parameters)?,
             format,
             asynchronous: body.asynchronous.unwrap_or(false),
+            modeled_selection,
         })
         .await?
     {
@@ -161,7 +166,8 @@ async fn export(
             content_type,
             filename,
             bytes,
-        } => download_response(&content_type, &filename, bytes),
+            modeled_metadata,
+        } => download_response(&content_type, &filename, bytes, modeled_metadata.as_deref()),
         AnalysisExportResult::Queued { job_id } => Ok((
             StatusCode::ACCEPTED,
             Json(serde_json::json!({ "jobId": job_id })),
@@ -204,6 +210,11 @@ fn parse_field(value: &str) -> Result<SeriesField, AnalyticsApiError> {
     match value {
         "generation_power" => Ok(SeriesField::GenerationPower),
         "generation_energy" => Ok(SeriesField::GenerationEnergy),
+        "forecast_power" => Ok(SeriesField::ForecastPower),
+        "forecast_energy" => Ok(SeriesField::ForecastEnergy),
+        "expected_energy" => Ok(SeriesField::ExpectedEnergy),
+        "generation_performance" => Ok(SeriesField::GenerationPerformance),
+        "forecast_realization" => Ok(SeriesField::ForecastRealization),
         "consumption_power" => Ok(SeriesField::ConsumptionPower),
         "consumption_energy" => Ok(SeriesField::ConsumptionEnergy),
         "grid_power" => Ok(SeriesField::GridPower),
@@ -249,6 +260,7 @@ fn download_response(
     content_type: &str,
     filename: &str,
     bytes: Vec<u8>,
+    modeled_metadata: Option<&ModeledAnalysisExportMetadata>,
 ) -> Result<Response, AnalyticsApiError> {
     let mut response = Response::new(Body::from(bytes));
     *response.status_mut() = StatusCode::OK;
@@ -261,7 +273,70 @@ fn download_response(
         HeaderValue::from_str(&format!("attachment; filename=\"{filename}\""))
             .map_err(|_| AnalyticsApiError::Invalid)?,
     );
+    if let Some(metadata) = modeled_metadata {
+        insert_modeled_export_headers(response.headers_mut(), metadata);
+    }
     Ok(response)
+}
+
+fn modeled_selection(body: &ExportBody) -> Option<ModeledAnalysisExportSelection> {
+    let has_modeled_field = body.fields.iter().any(|field| {
+        matches!(
+            field.as_str(),
+            "forecast_power"
+                | "forecast_energy"
+                | "expected_energy"
+                | "generation_performance"
+                | "forecast_realization"
+        )
+    });
+    has_modeled_field.then_some(ModeledAnalysisExportSelection {
+        weather_run_id: body.weather_run_id,
+        include_partial: body.include_partial.unwrap_or(false),
+    })
+}
+
+fn insert_modeled_export_headers(
+    headers: &mut axum::http::HeaderMap,
+    metadata: &ModeledAnalysisExportMetadata,
+) {
+    for (name, value) in [
+        (
+            "x-pvlog-weather-run-id",
+            metadata.weather_run_id.to_string(),
+        ),
+        (
+            "x-pvlog-calculation-run-id",
+            metadata.calculation_run_id.to_string(),
+        ),
+        (
+            "x-pvlog-model-version",
+            format!("{}@{}", metadata.model_identifier, metadata.model_revision),
+        ),
+        (
+            "x-pvlog-coverage-basis-points",
+            metadata.coverage_basis_points.to_string(),
+        ),
+        (
+            "x-pvlog-uncertainty-available",
+            metadata.uncertainty_available.to_string(),
+        ),
+        (
+            "x-pvlog-interval-semantics",
+            metadata.interval_semantics.clone(),
+        ),
+        (
+            "x-pvlog-provider-attribution",
+            metadata.provider_attribution.clone(),
+        ),
+    ] {
+        if let (Ok(name), Ok(value)) = (
+            axum::http::HeaderName::from_bytes(name.as_bytes()),
+            HeaderValue::from_str(&value),
+        ) {
+            headers.insert(name, value);
+        }
+    }
 }
 
 enum AnalyticsApiError {

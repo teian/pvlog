@@ -48,7 +48,8 @@ pub use alert_rules::{
     CreateAlertRule, UpdateAlertRule, evaluate_alert,
 };
 pub use analytics_api::{
-    AnalysisExportFormat, AnalysisExportRequest, AnalysisExportResult, ModernAnalyticsError,
+    AnalysisExportFormat, AnalysisExportRequest, AnalysisExportResult,
+    ModeledAnalysisExportMetadata, ModeledAnalysisExportSelection, ModernAnalyticsError,
     ModernAnalyticsUseCases,
 };
 pub use api_token::{ApiToken, ApiTokenError, ApiTokenRecord, ApiTokenRepository, ApiTokenService};

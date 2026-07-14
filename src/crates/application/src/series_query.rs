@@ -164,11 +164,17 @@ fn validate_series(
 const fn unit_for(field: SeriesField) -> SeriesUnit {
     match field {
         SeriesField::GenerationPower
+        | SeriesField::ForecastPower
         | SeriesField::ConsumptionPower
         | SeriesField::GridPower
         | SeriesField::BatteryPower => SeriesUnit::Watts,
-        SeriesField::GenerationEnergy | SeriesField::ConsumptionEnergy => SeriesUnit::WattHours,
-        SeriesField::BatteryStateOfCharge => SeriesUnit::BasisPoints,
+        SeriesField::GenerationEnergy
+        | SeriesField::ForecastEnergy
+        | SeriesField::ExpectedEnergy
+        | SeriesField::ConsumptionEnergy => SeriesUnit::WattHours,
+        SeriesField::BatteryStateOfCharge
+        | SeriesField::GenerationPerformance
+        | SeriesField::ForecastRealization => SeriesUnit::BasisPoints,
         SeriesField::Temperature => SeriesUnit::MilliDegreesCelsius,
         SeriesField::Extended | SeriesField::Provenance => SeriesUnit::Integer,
     }

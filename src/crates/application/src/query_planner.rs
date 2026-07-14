@@ -15,6 +15,11 @@ const MILLIS_PER_DAY: u64 = 24 * MILLIS_PER_HOUR;
 pub enum SeriesField {
     GenerationPower,
     GenerationEnergy,
+    ForecastPower,
+    ForecastEnergy,
+    ExpectedEnergy,
+    GenerationPerformance,
+    ForecastRealization,
     ConsumptionPower,
     ConsumptionEnergy,
     GridPower,
