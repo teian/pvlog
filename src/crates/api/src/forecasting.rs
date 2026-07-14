@@ -843,6 +843,16 @@ struct ForecastValidationProblem {
     field: &'static str,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ForecastHttpProblem {
+    #[serde(rename = "type")]
+    problem_type: &'static str,
+    title: &'static str,
+    status: u16,
+    detail: &'static str,
+}
+
 impl IntoResponse for ForecastApiError {
     fn into_response(self) -> Response {
         let validation = match self {
@@ -869,17 +879,55 @@ impl IntoResponse for ForecastApiError {
             );
             return response;
         }
-        match self {
-            Self::InvalidPath | Self::NotFound => StatusCode::NOT_FOUND,
-            Self::QueryTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
-            Self::Forbidden => StatusCode::FORBIDDEN,
-            Self::PreconditionRequired => StatusCode::PRECONDITION_REQUIRED,
-            Self::Conflict => StatusCode::PRECONDITION_FAILED,
-            Self::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
+        let (status, title, detail) = match self {
+            Self::InvalidPath | Self::NotFound => (
+                StatusCode::NOT_FOUND,
+                "forecast_not_found",
+                "The requested forecast resource was not found.",
+            ),
+            Self::QueryTooLarge => (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                "forecast_query_too_large",
+                "The forecast query exceeds the documented range or point bound.",
+            ),
+            Self::Forbidden => (
+                StatusCode::FORBIDDEN,
+                "forecast_forbidden",
+                "The principal cannot access this forecast resource.",
+            ),
+            Self::PreconditionRequired => (
+                StatusCode::PRECONDITION_REQUIRED,
+                "forecast_precondition_required",
+                "A valid If-Match settings version is required.",
+            ),
+            Self::Conflict => (
+                StatusCode::PRECONDITION_FAILED,
+                "forecast_version_conflict",
+                "The forecast settings version no longer matches.",
+            ),
+            Self::Unavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "forecast_unavailable",
+                "No permitted weather run can currently satisfy this request.",
+            ),
             Self::Validation(_, _) | Self::InvalidQuery(_) | Self::UnsupportedScope => {
                 unreachable!()
             }
-        }
-        .into_response()
+        };
+        let mut response = (
+            status,
+            Json(ForecastHttpProblem {
+                problem_type: "https://pvlog.example/problems/forecast",
+                title,
+                status: status.as_u16(),
+                detail,
+            }),
+        )
+            .into_response();
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/problem+json"),
+        );
+        response
     }
 }

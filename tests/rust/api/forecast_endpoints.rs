@@ -12,12 +12,16 @@ use pvlog_api::{
     ForecastRunResponse, ForecastSettingsInput, ForecastSettingsResponse, ModernRequestAuthorizer,
     PerformanceMetric, PerformancePointResponse, PerformanceQuery, PerformanceSeriesResponse,
     RequestAuthorizationError, RequestPrincipal, YieldSeriesPointResponse, YieldSeriesQuery,
-    YieldSeriesResolution, YieldSeriesResponse, forecasting_router,
+    YieldSeriesResponse, forecasting_router, telemetry_router,
+};
+use pvlog_application::{
+    BatchIngestionMode, BatchIngestionResult, CorrectObservation, ModernTelemetryError,
+    ModernTelemetryUseCases, NormalizeObservation, VersionedObservation, normalize_observation,
 };
 use pvlog_domain::{
-    AccountId, CalculationBasis, ForecastCompleteness, ForecastCompletenessReason, InverterId,
-    Permission, PrincipalId, StringId, SystemId, UserId, WeatherDataKind, WeatherDataRunId,
-    YieldCalculationRunId,
+    AccountId, CanonicalObservation, ForecastCompleteness, ForecastCompletenessReason, InverterId,
+    ObservationId, Permission, PrincipalId, StringId, SystemId, UserId, WeatherDataKind,
+    WeatherDataRunId, YieldCalculationRunId,
 };
 use tower::ServiceExt as _;
 
@@ -247,6 +251,110 @@ async fn performance_aligns_actual_and_modeled_energy_without_allocating_to_chil
     Ok(())
 }
 
+#[tokio::test]
+async fn run_selection_staleness_model_boundaries_and_etag_conflicts_are_explicit()
+-> Result<(), Box<dyn Error>> {
+    let fixture = Fixture::new();
+    let app = fixture.app();
+    let stale = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/accounts/{}/systems/{}/forecast-runs?startEpochMillis=1000&endEpochMillis=3601000&issuedBeforeEpochMillis=800&limit=10",
+                    fixture.account_id, fixture.system
+                ))
+                .body(Body::empty())?,
+        )
+        .await?;
+    let body = to_bytes(stale.into_body(), 16_384).await?;
+    let json: serde_json::Value = serde_json::from_slice(&body)?;
+    assert_eq!(json[0]["freshness"], "stale");
+
+    let selected_run = WeatherDataRunId::new();
+    let selected = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/accounts/{}/systems/{}/yield-series?startEpochMillis=1000&endEpochMillis=3601000&basis=expected&resolution=hour&maximumPoints=2&weatherRunId={selected_run}",
+                    fixture.account_id, fixture.system
+                ))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(selected.status(), StatusCode::OK);
+    let body = to_bytes(selected.into_body(), 16_384).await?;
+    let json: serde_json::Value = serde_json::from_slice(&body)?;
+    assert_eq!(json["weatherRunId"], selected_run.to_string());
+    assert_eq!(json["modelRevision"], 2);
+    assert_eq!(json["basis"], "expected");
+
+    let conflict = app
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(fixture.string_settings_path())
+                .header("content-type", "application/json")
+                .header("if-match", "\"3\"")
+                .body(Body::from(valid_settings()))?,
+        )
+        .await?;
+    assert_eq!(conflict.status(), StatusCode::PRECONDITION_FAILED);
+    assert_eq!(
+        conflict.headers()["content-type"],
+        "application/problem+json"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn provider_failure_is_safe_and_does_not_interrupt_telemetry_ingestion()
+-> Result<(), Box<dyn Error>> {
+    let fixture = Fixture::new();
+    let authorizer = Arc::new(Authorizer {
+        account: fixture.account_id,
+        user: fixture.user,
+    });
+    let app = forecasting_router(Arc::new(UnavailableStub), authorizer)
+        .merge(telemetry_router(Arc::new(TelemetryStub)))
+        .layer(Extension(RequestPrincipal::User(fixture.user)));
+    let unavailable = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/accounts/{}/systems/{}/forecast-runs?startEpochMillis=1000&endEpochMillis=3601000",
+                    fixture.account_id, fixture.system
+                ))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(unavailable.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(
+        unavailable.headers()["content-type"],
+        "application/problem+json"
+    );
+    let body = to_bytes(unavailable.into_body(), 16_384).await?;
+    let json: serde_json::Value = serde_json::from_slice(&body)?;
+    assert_eq!(json["title"], "forecast_unavailable");
+
+    let telemetry = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/systems/{}/observations", fixture.system))
+                .header("content-type", "application/json")
+                .header("idempotency-key", "forecast-outage")
+                .body(Body::from(
+                    r#"{"observedAtEpochMillis":1000,"generationPowerWatts":2500}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(telemetry.status(), StatusCode::CREATED);
+    Ok(())
+}
+
 struct Fixture {
     account_id: AccountId,
     system: SystemId,
@@ -325,7 +433,9 @@ impl ForecastApiUseCases for Stub {
         expected_version: u64,
         input: ForecastSettingsInput,
     ) -> Result<ForecastSettingsResponse, ForecastApiError> {
-        assert_eq!(expected_version, 4);
+        if expected_version != 4 {
+            return Err(ForecastApiError::Conflict);
+        }
         let mut response = settings(scope, 5);
         response.model_identifier = input.model_identifier;
         Ok(response)
@@ -364,7 +474,11 @@ impl ForecastApiUseCases for Stub {
             valid_from: 1_000,
             valid_to: 3_601_000,
             resolution_seconds: 3_600,
-            freshness: pvlog_api::ForecastFreshness::Fresh,
+            freshness: if query.issued_before_epoch_millis.is_some() {
+                pvlog_api::ForecastFreshness::Stale
+            } else {
+                pvlog_api::ForecastFreshness::Fresh
+            },
             provenance: provenance(),
         }])
     }
@@ -374,17 +488,16 @@ impl ForecastApiUseCases for Stub {
         scope: ForecastResourceScope,
         query: YieldSeriesQuery,
     ) -> Result<YieldSeriesResponse, ForecastApiError> {
-        assert_eq!(query.resolution, YieldSeriesResolution::FifteenMinutes);
-        assert!(query.include_partial);
+        let selected_run = query.weather_run_id;
         Ok(YieldSeriesResponse {
             scope,
-            basis: CalculationBasis::Forecast,
+            basis: query.basis,
             resolution: query.resolution,
             issue_time: Some(900),
-            weather_run_id: WeatherDataRunId::new(),
+            weather_run_id: selected_run.unwrap_or_default(),
             calculation_run_id: YieldCalculationRunId::new(),
             model_identifier: "pvwatts-compatible".to_owned(),
-            model_revision: 1,
+            model_revision: if selected_run.is_some() { 2 } else { 1 },
             configuration_digest: "07".repeat(32),
             freshness: pvlog_api::ForecastFreshness::Fresh,
             provenance: provenance(),
@@ -442,6 +555,96 @@ impl ForecastApiUseCases for Stub {
                 unavailable_reason: None,
             }],
         })
+    }
+}
+
+struct UnavailableStub;
+
+#[async_trait]
+impl ForecastApiUseCases for UnavailableStub {
+    async fn settings(
+        &self,
+        scope: ForecastResourceScope,
+    ) -> Result<ForecastSettingsResponse, ForecastApiError> {
+        Stub.settings(scope).await
+    }
+
+    async fn update_settings(
+        &self,
+        actor: UserId,
+        scope: ForecastResourceScope,
+        expected_version: u64,
+        input: ForecastSettingsInput,
+    ) -> Result<ForecastSettingsResponse, ForecastApiError> {
+        Stub.update_settings(actor, scope, expected_version, input)
+            .await
+    }
+
+    async fn input_completeness(
+        &self,
+        scope: ForecastResourceScope,
+    ) -> Result<ForecastInputCompletenessResponse, ForecastApiError> {
+        Stub.input_completeness(scope).await
+    }
+
+    async fn forecast_runs(
+        &self,
+        _scope: ForecastResourceScope,
+        _query: ForecastRunQuery,
+    ) -> Result<Vec<ForecastRunResponse>, ForecastApiError> {
+        Err(ForecastApiError::Unavailable)
+    }
+
+    async fn yield_series(
+        &self,
+        _scope: ForecastResourceScope,
+        _query: YieldSeriesQuery,
+    ) -> Result<YieldSeriesResponse, ForecastApiError> {
+        Err(ForecastApiError::Unavailable)
+    }
+
+    async fn performance_series(
+        &self,
+        _scope: ForecastResourceScope,
+        _query: PerformanceQuery,
+    ) -> Result<PerformanceSeriesResponse, ForecastApiError> {
+        Err(ForecastApiError::Unavailable)
+    }
+}
+
+struct TelemetryStub;
+
+#[async_trait]
+impl ModernTelemetryUseCases for TelemetryStub {
+    async fn ingest(
+        &self,
+        command: NormalizeObservation,
+    ) -> Result<CanonicalObservation, ModernTelemetryError> {
+        normalize_observation(command).map_err(|_| ModernTelemetryError::Invalid)
+    }
+
+    async fn ingest_batch(
+        &self,
+        _commands: Vec<NormalizeObservation>,
+        _mode: BatchIngestionMode,
+    ) -> Result<BatchIngestionResult, ModernTelemetryError> {
+        Ok(BatchIngestionResult {
+            outcomes: Vec::new(),
+        })
+    }
+
+    async fn correct(
+        &self,
+        _command: CorrectObservation,
+    ) -> Result<VersionedObservation, ModernTelemetryError> {
+        Err(ModernTelemetryError::Invalid)
+    }
+
+    async fn delete(
+        &self,
+        _command: CorrectObservation,
+    ) -> Result<ObservationId, ModernTelemetryError> {
+        Err(ModernTelemetryError::Invalid)
     }
 }
 
