@@ -1,11 +1,11 @@
 use std::error::Error;
 
 use pvlog_domain::{
-    BasisPoints, EstimateRange, ForecastLossFactors, GeographicPoint, IrradiancePoint,
-    MilliDegreesCelsius, StringDcInput, StringId, StringYieldContribution, SurfaceOrientation,
-    SystemId, UnsignedBasisPoints, UtcTimestamp, Watts, WattsPerSquareMetre,
-    aggregate_inverter_yield, aggregate_system_yield, calculate_string_dc,
-    plane_of_array_irradiance, solar_position,
+    BasisPoints, CalculationBasis, EstimateRange, ForecastLossFactors, GeographicPoint,
+    IrradiancePoint, MilliDegreesCelsius, StringDcInput, StringId, StringYieldContribution,
+    SurfaceOrientation, SystemId, UnsignedBasisPoints, UtcTimestamp, Watts, WattsPerSquareMetre,
+    WeatherDataKind, YieldModelError, aggregate_inverter_yield, aggregate_system_yield,
+    calculate_string_dc, integrate_interval_energy, plane_of_array_irradiance, solar_position,
 };
 
 #[test]
@@ -23,6 +23,50 @@ fn berlin_solstice_reference_positions_are_stable() -> Result<(), Box<dyn Error>
     assert_eq!(
         (winter.zenith_millidegrees, winter.azimuth_millidegrees),
         (76_910, 193_125)
+    );
+    Ok(())
+}
+
+#[test]
+fn interval_energy_keeps_forecast_and_historical_weather_paths_distinct()
+-> Result<(), Box<dyn Error>> {
+    let interval = pvlog_domain::TimeRange::new(
+        UtcTimestamp::from_epoch_millis(0)?,
+        UtcTimestamp::from_epoch_millis(900_000)?,
+    )?;
+    let power = EstimateRange {
+        central: Watts::new(4_000),
+        lower: Some(Watts::new(3_600)),
+        upper: Some(Watts::new(4_400)),
+    };
+    let forecast = integrate_interval_energy(
+        CalculationBasis::Forecast,
+        WeatherDataKind::Forecast,
+        power,
+        interval,
+    )?;
+    assert_eq!(forecast.central.value(), 1_000);
+    assert_eq!(
+        forecast.lower.map(pvlog_domain::WattHours::value),
+        Some(900)
+    );
+    assert_eq!(
+        integrate_interval_energy(
+            CalculationBasis::Expected,
+            WeatherDataKind::Observed,
+            power,
+            interval,
+        )?,
+        forecast
+    );
+    assert_eq!(
+        integrate_interval_energy(
+            CalculationBasis::Expected,
+            WeatherDataKind::Forecast,
+            power,
+            interval,
+        ),
+        Err(YieldModelError::IncompatibleWeatherClassification)
     );
     Ok(())
 }

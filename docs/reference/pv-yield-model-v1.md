@@ -16,3 +16,7 @@ nameplate multiplied by POA irradiance, the confirmed peak-power temperature coe
 available, each configured loss factor multiplicatively, and the signed calibration factor. Each
 fixed-point division rounds to the nearest base unit. Negative output is clamped to zero and the
 physical safety cap is 125% of confirmed DC nameplate.
+
+Interval energy integrates the interval power over the exact half-open UTC duration and rounds to
+whole Wh. Forecast basis accepts only forecast weather. Historical expected-generation basis
+accepts only observed or reanalysis weather; forecast input is never relabeled as observation.

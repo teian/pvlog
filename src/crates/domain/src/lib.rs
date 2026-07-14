@@ -77,5 +77,5 @@ pub use yield_model::{
     InverterYieldEstimate, SolarPosition, StringDcEstimate, StringDcInput, StringYieldContribution,
     SurfaceOrientation, SystemYieldEstimate, YIELD_MODEL_V1_IDENTIFIER, YIELD_MODEL_V1_REVISION,
     YieldModelError, aggregate_inverter_yield, aggregate_system_yield, calculate_string_dc,
-    plane_of_array_irradiance, solar_position,
+    integrate_interval_energy, plane_of_array_irradiance, solar_position,
 };

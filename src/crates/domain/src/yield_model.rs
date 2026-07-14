@@ -1,9 +1,10 @@
 //! Deterministic version-1 PV yield model primitives.
 
 use crate::{
-    BasisPoints, EstimateRange, ForecastCompleteness, ForecastCompletenessReason,
+    BasisPoints, CalculationBasis, EstimateRange, ForecastCompleteness, ForecastCompletenessReason,
     ForecastLossFactors, GeographicPoint, InverterId, IrradiancePoint, MilliDegreesCelsius,
-    StringId, SystemId, UnsignedBasisPoints, UtcTimestamp, Watts, WattsPerSquareMetre,
+    StringId, SystemId, TimeRange, UnsignedBasisPoints, UtcTimestamp, WattHours, Watts,
+    WattsPerSquareMetre, WeatherDataKind,
 };
 use std::f64::consts::PI;
 use thiserror::Error;
@@ -284,6 +285,52 @@ pub fn aggregate_system_yield(
     })
 }
 
+/// Integrates an interval power estimate to watt-hours using the exact half-open duration.
+///
+/// Forecast calculations accept only forecast weather; expected-generation calculations accept
+/// only observed or reanalysis weather, preventing forecast relabeling in historical results.
+///
+/// # Errors
+///
+/// Returns an error for an incompatible weather classification or arithmetic overflow.
+pub fn integrate_interval_energy(
+    basis: CalculationBasis,
+    weather_kind: WeatherDataKind,
+    power: EstimateRange<Watts>,
+    interval: TimeRange,
+) -> Result<EstimateRange<WattHours>, YieldModelError> {
+    let compatible = matches!(
+        (basis, weather_kind),
+        (CalculationBasis::Forecast, WeatherDataKind::Forecast)
+            | (
+                CalculationBasis::Expected,
+                WeatherDataKind::Observed | WeatherDataKind::Reanalysis
+            )
+    );
+    if !compatible {
+        return Err(YieldModelError::IncompatibleWeatherClassification);
+    }
+    let duration_milliseconds = interval.end.epoch_millis() - interval.start.epoch_millis();
+    let integrate = |value: Watts| -> Result<WattHours, YieldModelError> {
+        let product = i128::from(value.value())
+            .checked_mul(duration_milliseconds)
+            .ok_or(YieldModelError::ArithmeticOverflow)?;
+        let rounded = if product >= 0 {
+            product + 1_800_000
+        } else {
+            product - 1_800_000
+        } / 3_600_000;
+        Ok(WattHours::new(
+            i64::try_from(rounded).map_err(|_| YieldModelError::ArithmeticOverflow)?,
+        ))
+    };
+    Ok(EstimateRange {
+        central: integrate(power.central)?,
+        lower: power.lower.map(&integrate).transpose()?,
+        upper: power.upper.map(integrate).transpose()?,
+    })
+}
+
 struct EstimateAccumulator {
     central: i64,
     lower: Option<i64>,
@@ -520,4 +567,6 @@ pub enum YieldModelError {
     ArithmeticOverflow,
     #[error("inverter maximum AC capacity must be positive")]
     InvalidInverterCapacity,
+    #[error("weather classification is incompatible with the calculation basis")]
+    IncompatibleWeatherClassification,
 }
