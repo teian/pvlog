@@ -30,7 +30,8 @@ pub use forecasting::{
     ForecastSettingsId, GeographicPoint, IrradiancePoint, MetresPerSecondMilli, ModelVersion,
     NormalizedWeatherPoint, NormalizedWeatherRun, SpatialCoverage, UnsignedBasisPoints,
     WattsPerSquareMetre, WeatherDataKind, WeatherDataProvenance, WeatherDataRunId,
-    YieldCalculationResult, YieldCalculationRunId, YieldResultId, YieldScope,
+    WeatherRunValidationError, YieldCalculationResult, YieldCalculationRunId, YieldResultId,
+    YieldScope,
 };
 pub use identifiers::{
     AccountId, AlertEventId, AlertRuleId, ApiCredentialId, AuditEventId, ChannelId, ConnectorId,

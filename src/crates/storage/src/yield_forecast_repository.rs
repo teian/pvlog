@@ -1188,6 +1188,7 @@ fn validate_settings(record: &ForecastSettingsRecord) -> Result<(), YieldForecas
 }
 
 fn validate_weather_record(record: &WeatherRunRecord) -> Result<(), YieldForecastRepositoryError> {
+    record.run.validate()?;
     if record.source_run_key.trim().is_empty() || record.run.resolution_seconds == 0 {
         return Err(YieldForecastRepositoryError::Validation(
             "weather source key and positive resolution are required",
@@ -1393,6 +1394,8 @@ pub enum YieldForecastRepositoryError {
     SqliteRouting(#[from] crate::SqliteRoutingError),
     #[error("yield forecast repository identifier is invalid: {0}")]
     Identifier(#[from] pvlog_domain::IdentifierError),
+    #[error("normalized weather run is invalid: {0}")]
+    WeatherValidation(#[from] pvlog_domain::WeatherRunValidationError),
     #[error("yield forecast repository URL is invalid: {0}")]
     Url(#[from] url::ParseError),
     #[error("yield forecast repository input is invalid: {0}")]

@@ -274,6 +274,157 @@ pub struct NormalizedWeatherRun {
     pub points: Vec<NormalizedWeatherPoint>,
 }
 
+impl NormalizedWeatherRun {
+    /// Validates provider-neutral temporal, spatial, irradiance, uncertainty, and provenance rules.
+    ///
+    /// # Errors
+    ///
+    /// Returns a stable validation error when the run cannot be safely persisted or calculated.
+    pub fn validate(&self) -> Result<(), WeatherRunValidationError> {
+        if self.resolution_seconds == 0 {
+            return Err(WeatherRunValidationError::InvalidResolution);
+        }
+        if self.kind == WeatherDataKind::Forecast && self.issued_at.is_none() {
+            return Err(WeatherRunValidationError::MissingIssueTime);
+        }
+        if self
+            .issued_at
+            .is_some_and(|issued_at| issued_at > self.provenance.fetched_at)
+        {
+            return Err(WeatherRunValidationError::IssueAfterFetch);
+        }
+        if self.kind == WeatherDataKind::Forecast
+            && self
+                .issued_at
+                .is_some_and(|issued_at| self.valid_range.end <= issued_at)
+        {
+            return Err(WeatherRunValidationError::InvalidForecastHorizon);
+        }
+        if matches!(
+            self.kind,
+            WeatherDataKind::Observed | WeatherDataKind::Reanalysis
+        ) && self.valid_range.end > self.provenance.fetched_at
+        {
+            return Err(WeatherRunValidationError::HistoricalRunEndsAfterFetch);
+        }
+        validate_spatial_coverage(&self.spatial_coverage)?;
+        validate_weather_provenance(&self.provenance)?;
+        if self.points.is_empty() {
+            return Err(WeatherRunValidationError::MissingPoints);
+        }
+        let expected_duration = i128::from(self.resolution_seconds) * 1_000;
+        let mut previous_end = None;
+        for point in &self.points {
+            if point.interval.start < self.valid_range.start
+                || point.interval.end > self.valid_range.end
+            {
+                return Err(WeatherRunValidationError::PointOutsideRunRange);
+            }
+            if previous_end.is_some_and(|end| point.interval.start < end) {
+                return Err(WeatherRunValidationError::OverlappingPoints);
+            }
+            if point.interval.end.epoch_millis() - point.interval.start.epoch_millis()
+                != expected_duration
+            {
+                return Err(WeatherRunValidationError::ResolutionMismatch);
+            }
+            validate_irradiance(&point.irradiance)?;
+            previous_end = Some(point.interval.end);
+        }
+        Ok(())
+    }
+}
+
+fn validate_spatial_coverage(coverage: &SpatialCoverage) -> Result<(), WeatherRunValidationError> {
+    match coverage {
+        SpatialCoverage::Point(point)
+            if !(-90_000_000..=90_000_000).contains(&point.latitude_microdegrees)
+                || !(-180_000_000..=180_000_000).contains(&point.longitude_microdegrees) =>
+        {
+            Err(WeatherRunValidationError::InvalidLocation)
+        }
+        SpatialCoverage::ProviderRegion(region) if region.trim().is_empty() => {
+            Err(WeatherRunValidationError::InvalidLocation)
+        }
+        SpatialCoverage::Point(_) | SpatialCoverage::ProviderRegion(_) => Ok(()),
+    }
+}
+
+fn validate_weather_provenance(
+    provenance: &WeatherDataProvenance,
+) -> Result<(), WeatherRunValidationError> {
+    if provenance.adapter.trim().is_empty() {
+        return Err(WeatherRunValidationError::MissingAdapter);
+    }
+    if !matches!(provenance.source_url.scheme(), "https" | "http") {
+        return Err(WeatherRunValidationError::InvalidSourceUrl);
+    }
+    if provenance.license_identifier.trim().is_empty() || provenance.attribution.trim().is_empty() {
+        return Err(WeatherRunValidationError::MissingLicenseMetadata);
+    }
+    Ok(())
+}
+
+fn validate_irradiance(irradiance: &IrradiancePoint) -> Result<(), WeatherRunValidationError> {
+    if irradiance.plane_of_array.is_none()
+        && irradiance.global_horizontal.is_none()
+        && (irradiance.direct_normal.is_none() || irradiance.diffuse_horizontal.is_none())
+    {
+        return Err(WeatherRunValidationError::MissingIrradiance);
+    }
+    for estimate in [
+        irradiance.global_horizontal,
+        irradiance.direct_normal,
+        irradiance.diffuse_horizontal,
+        irradiance.plane_of_array,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if estimate.lower.is_some_and(|lower| lower > estimate.central)
+            || estimate.upper.is_some_and(|upper| upper < estimate.central)
+            || matches!((estimate.lower, estimate.upper), (Some(lower), Some(upper)) if lower > upper)
+        {
+            return Err(WeatherRunValidationError::InvalidUncertainty);
+        }
+    }
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+pub enum WeatherRunValidationError {
+    #[error("weather resolution must be positive")]
+    InvalidResolution,
+    #[error("forecast weather requires an issue time")]
+    MissingIssueTime,
+    #[error("weather issue time cannot be after fetch time")]
+    IssueAfterFetch,
+    #[error("forecast horizon must extend beyond its issue time")]
+    InvalidForecastHorizon,
+    #[error("observed or reanalysis weather cannot end after fetch time")]
+    HistoricalRunEndsAfterFetch,
+    #[error("weather spatial coverage is invalid")]
+    InvalidLocation,
+    #[error("weather adapter is required")]
+    MissingAdapter,
+    #[error("weather source URL must use HTTP or HTTPS")]
+    InvalidSourceUrl,
+    #[error("weather licensing and attribution are required")]
+    MissingLicenseMetadata,
+    #[error("weather run requires interval points")]
+    MissingPoints,
+    #[error("weather point lies outside its run range")]
+    PointOutsideRunRange,
+    #[error("weather points overlap or are not ordered")]
+    OverlappingPoints,
+    #[error("weather point duration does not match run resolution")]
+    ResolutionMismatch,
+    #[error("weather point lacks usable irradiance")]
+    MissingIrradiance,
+    #[error("weather uncertainty does not bound its central estimate")]
+    InvalidUncertainty,
+}
+
 /// Stable calculation algorithm identifier and revision.
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct ModelVersion {

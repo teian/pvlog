@@ -354,7 +354,7 @@ fn weather_run(
             kind: WeatherDataKind::Forecast,
             issued_at: Some(timestamp(revision)?),
             valid_range: range(start, end)?,
-            resolution_seconds: 1,
+            resolution_seconds: u32::try_from((end - start) / 1_000)?,
             spatial_coverage: SpatialCoverage::Point(GeographicPoint {
                 latitude_microdegrees: 52_520_000,
                 longitude_microdegrees: 13_405_000,
