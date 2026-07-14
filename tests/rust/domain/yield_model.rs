@@ -1,12 +1,74 @@
 use std::error::Error;
 
 use pvlog_domain::{
-    BasisPoints, CalculationBasis, EstimateRange, ForecastLossFactors, GeographicPoint,
-    IrradiancePoint, MilliDegreesCelsius, StringDcInput, StringId, StringYieldContribution,
-    SurfaceOrientation, SystemId, UnsignedBasisPoints, UtcTimestamp, Watts, WattsPerSquareMetre,
-    WeatherDataKind, YieldModelError, aggregate_inverter_yield, aggregate_system_yield,
-    calculate_string_dc, integrate_interval_energy, plane_of_array_irradiance, solar_position,
+    ActualEnergySample, BasisPoints, CalculationBasis, EstimateRange, ForecastLossFactors,
+    GeographicPoint, IrradiancePoint, MilliDegreesCelsius, PerformanceComparison, PerformanceKind,
+    StringDcInput, StringId, StringYieldContribution, SurfaceOrientation, SystemId,
+    UnsignedBasisPoints, UtcTimestamp, Watts, WattsPerSquareMetre, WeatherDataKind,
+    YieldModelError, aggregate_inverter_yield, aggregate_system_yield, calculate_string_dc,
+    compare_actual_to_modeled, integrate_interval_energy, plane_of_array_irradiance,
+    solar_position,
 };
+
+#[test]
+fn performance_requires_coverage_positive_expectation_and_exact_scope() -> Result<(), Box<dyn Error>>
+{
+    let scope = pvlog_domain::YieldScope::System(SystemId::new());
+    let actual = ActualEnergySample {
+        scope,
+        energy: Some(pvlog_domain::WattHours::new(900)),
+        coverage: UnsignedBasisPoints::new(9_500)?,
+        quality: UnsignedBasisPoints::new(9_800)?,
+    };
+    assert_eq!(
+        compare_actual_to_modeled(
+            PerformanceKind::GenerationPerformance,
+            CalculationBasis::Expected,
+            scope,
+            actual,
+            Some(pvlog_domain::WattHours::new(1_000)),
+            UnsignedBasisPoints::new(9_000)?,
+            UnsignedBasisPoints::new(9_000)?,
+        )?,
+        PerformanceComparison::Available {
+            ratio_basis_points: 9_000,
+            actual_energy: pvlog_domain::WattHours::new(900),
+            modeled_energy: pvlog_domain::WattHours::new(1_000),
+            coverage: UnsignedBasisPoints::new(9_500)?,
+        }
+    );
+    let low_coverage = ActualEnergySample {
+        coverage: UnsignedBasisPoints::new(5_000)?,
+        ..actual
+    };
+    assert!(matches!(
+        compare_actual_to_modeled(
+            PerformanceKind::ForecastRealization,
+            CalculationBasis::Forecast,
+            scope,
+            low_coverage,
+            Some(pvlog_domain::WattHours::new(1_000)),
+            UnsignedBasisPoints::new(9_000)?,
+            UnsignedBasisPoints::new(9_000)?,
+        )?,
+        PerformanceComparison::Unavailable {
+            reason: pvlog_domain::ForecastCompletenessReason::InsufficientActualCoverage
+        }
+    ));
+    assert_eq!(
+        compare_actual_to_modeled(
+            PerformanceKind::GenerationPerformance,
+            CalculationBasis::Expected,
+            pvlog_domain::YieldScope::String(StringId::new()),
+            actual,
+            Some(pvlog_domain::WattHours::new(1_000)),
+            UnsignedBasisPoints::new(9_000)?,
+            UnsignedBasisPoints::new(9_000)?,
+        ),
+        Err(YieldModelError::UnsupportedActualAllocation)
+    );
+    Ok(())
+}
 
 #[test]
 fn berlin_solstice_reference_positions_are_stable() -> Result<(), Box<dyn Error>> {

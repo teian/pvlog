@@ -173,6 +173,101 @@ pub struct SystemYieldEstimate {
     pub completeness: ForecastCompleteness,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ActualEnergySample {
+    pub scope: crate::YieldScope,
+    pub energy: Option<WattHours>,
+    pub coverage: UnsignedBasisPoints,
+    pub quality: UnsignedBasisPoints,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PerformanceKind {
+    GenerationPerformance,
+    ForecastRealization,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PerformanceComparison {
+    Available {
+        ratio_basis_points: u32,
+        actual_energy: WattHours,
+        modeled_energy: WattHours,
+        coverage: UnsignedBasisPoints,
+    },
+    Unavailable {
+        reason: ForecastCompletenessReason,
+    },
+}
+
+/// Compares measured energy with expected or forecast energy at the exact same scope.
+///
+/// # Errors
+///
+/// Returns an error when basis and metric disagree, scopes differ (which would require downward
+/// allocation), or ratio arithmetic exceeds the supported range.
+pub fn compare_actual_to_modeled(
+    kind: PerformanceKind,
+    basis: CalculationBasis,
+    scope: crate::YieldScope,
+    actual: ActualEnergySample,
+    modeled_energy: Option<WattHours>,
+    minimum_coverage: UnsignedBasisPoints,
+    minimum_quality: UnsignedBasisPoints,
+) -> Result<PerformanceComparison, YieldModelError> {
+    if !matches!(
+        (kind, basis),
+        (
+            PerformanceKind::GenerationPerformance,
+            CalculationBasis::Expected
+        ) | (
+            PerformanceKind::ForecastRealization,
+            CalculationBasis::Forecast
+        )
+    ) {
+        return Err(YieldModelError::IncompatiblePerformanceBasis);
+    }
+    if actual.scope != scope {
+        return Err(YieldModelError::UnsupportedActualAllocation);
+    }
+    let Some(actual_energy) = actual.energy else {
+        return Ok(PerformanceComparison::Unavailable {
+            reason: ForecastCompletenessReason::MissingActualTelemetry,
+        });
+    };
+    if actual.coverage < minimum_coverage || actual.quality < minimum_quality {
+        return Ok(PerformanceComparison::Unavailable {
+            reason: ForecastCompletenessReason::InsufficientActualCoverage,
+        });
+    }
+    let Some(modeled_energy) = modeled_energy else {
+        return Ok(PerformanceComparison::Unavailable {
+            reason: ForecastCompletenessReason::MissingWeatherInput,
+        });
+    };
+    if modeled_energy.value() <= 0 {
+        return Ok(PerformanceComparison::Unavailable {
+            reason: ForecastCompletenessReason::NonPositiveExpectedEnergy,
+        });
+    }
+    if actual_energy.value() < 0 {
+        return Ok(PerformanceComparison::Unavailable {
+            reason: ForecastCompletenessReason::MissingActualTelemetry,
+        });
+    }
+    let ratio = i128::from(actual_energy.value())
+        .checked_mul(10_000)
+        .ok_or(YieldModelError::ArithmeticOverflow)?
+        / i128::from(modeled_energy.value());
+    Ok(PerformanceComparison::Available {
+        ratio_basis_points: u32::try_from(ratio)
+            .map_err(|_| YieldModelError::ArithmeticOverflow)?,
+        actual_energy,
+        modeled_energy,
+        coverage: actual.coverage,
+    })
+}
+
 /// Aggregates string DC, applies inverter efficiency, and clips AC output.
 ///
 /// # Errors
@@ -569,4 +664,8 @@ pub enum YieldModelError {
     InvalidInverterCapacity,
     #[error("weather classification is incompatible with the calculation basis")]
     IncompatibleWeatherClassification,
+    #[error("performance metric and modeled basis are incompatible")]
+    IncompatiblePerformanceBasis,
+    #[error("aggregate actual energy cannot be allocated to a child scope")]
+    UnsupportedActualAllocation,
 }

@@ -20,3 +20,8 @@ physical safety cap is 125% of confirmed DC nameplate.
 Interval energy integrates the interval power over the exact half-open UTC duration and rounds to
 whole Wh. Forecast basis accepts only forecast weather. Historical expected-generation basis
 accepts only observed or reanalysis weather; forecast input is never relabeled as observation.
+
+Generation performance is actual divided by historical expected energy. Forecast realization is
+actual divided by the previously issued forecast. Both require configured actual-coverage and
+quality thresholds plus a positive modeled denominator. Ratios are calculated only at an exact
+measurement scope; aggregate actual energy is never allocated down to an inverter or string.
