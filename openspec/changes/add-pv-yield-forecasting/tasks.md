@@ -36,7 +36,7 @@
 - [x] 5.2 Add coalesced interval invalidation and rebuild jobs for equipment/settings changes, provider revisions, late telemetry, corrections, and model-version changes.
 - [x] 5.3 Extend daily/monthly/yearly/lifetime summary rebuilds with expected generation, forecast realization, generation performance, uncertainty, and independent coverage metadata.
 - [x] 5.4 Add operational metrics and safe diagnostics for provider freshness/failures, forecast age, calculation lag/outcomes, invalidation backlog, completeness, model version, and dead letters.
-- [ ] 5.5 Add worker integration tests for duplicate jobs, retries, provider outage, stale results, intersecting invalidations, correction-driven rebuilds, configuration boundaries, and telemetry independence.
+- [x] 5.5 Add worker integration tests for duplicate jobs, retries, provider outage, stale results, intersecting invalidations, correction-driven rebuilds, configuration boundaries, and telemetry independence.
 
 ## 6. Modern API and Contract
 

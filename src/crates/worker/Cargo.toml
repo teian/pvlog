@@ -24,6 +24,14 @@ tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 
+[dev-dependencies]
+sqlx.workspace = true
+tempfile.workspace = true
+
+[[test]]
+name = "yield-jobs"
+path = "../../../tests/rust/worker/yield_jobs.rs"
+
 [lib]
 path = "src/lib.rs"
 

@@ -434,7 +434,7 @@ fn deterministic_job_id(
     hasher.update(idempotency_key.as_bytes());
     let mut bytes = [0_u8; 16];
     bytes.copy_from_slice(&hasher.finalize().as_bytes()[..16]);
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[6] = (bytes[6] & 0x0f) | 0x70;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
     JobId::from_uuid(uuid::Uuid::from_bytes(bytes)).map_err(|_| YieldJobError::InvalidPayload)
 }
