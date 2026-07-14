@@ -45,6 +45,10 @@ name = "forecast-models"
 path = "../../../tests/rust/domain/forecast_models.rs"
 
 [[test]]
+name = "yield-model"
+path = "../../../tests/rust/domain/yield_model.rs"
+
+[[test]]
 name = "rbac-policy"
 path = "../../../tests/rust/domain/rbac_policy.rs"
 

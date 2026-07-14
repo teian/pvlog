@@ -14,6 +14,7 @@ mod systems;
 mod telemetry;
 mod time;
 mod validation;
+mod yield_model;
 
 pub use equipment_catalog::{
     CatalogEntryId, CatalogProvenance, CatalogRevision, CoolingMethod, DimensionsMillimetres,
@@ -72,3 +73,7 @@ pub use telemetry::{
 };
 pub use time::{IanaTimezone, UtcTimestamp};
 pub use validation::ValidationError;
+pub use yield_model::{
+    SolarPosition, SurfaceOrientation, YIELD_MODEL_V1_IDENTIFIER, YIELD_MODEL_V1_REVISION,
+    YieldModelError, plane_of_array_irradiance, solar_position,
+};

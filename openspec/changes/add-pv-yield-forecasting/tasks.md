@@ -23,7 +23,7 @@
 
 ## 4. Deterministic Yield Model
 
-- [ ] 4.1 Implement and document the version-1 solar-position and plane-of-array irradiance calculation with fixed rounding and public reference fixtures.
+- [x] 4.1 Implement and document the version-1 solar-position and plane-of-array irradiance calculation with fixed rounding and public reference fixtures.
 - [ ] 4.2 Implement the version-1 module-temperature, string DC output, temperature-coefficient, bounded loss/calibration, and physical-cap calculations.
 - [ ] 4.3 Implement inverter conversion/clipping and compatible string-to-inverter-to-system aggregation with included/excluded capacity and uncertainty propagation.
 - [ ] 4.4 Implement interval power-to-energy integration and distinct forecast-generation versus observed/reanalysis expected-generation calculation paths.
