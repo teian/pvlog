@@ -10,6 +10,7 @@ use pvlog_api::{
     AuthorizedRequest, ForecastApiError, ForecastApiUseCases, ForecastInputCompletenessResponse,
     ForecastLossInput, ForecastProvenanceResponse, ForecastResourceScope, ForecastRunQuery,
     ForecastRunResponse, ForecastSettingsInput, ForecastSettingsResponse, ModernRequestAuthorizer,
+    PerformanceMetric, PerformancePointResponse, PerformanceQuery, PerformanceSeriesResponse,
     RequestAuthorizationError, RequestPrincipal, YieldSeriesPointResponse, YieldSeriesQuery,
     YieldSeriesResolution, YieldSeriesResponse, forecasting_router,
 };
@@ -203,6 +204,49 @@ async fn forecast_runs_and_yield_series_are_bounded_and_metadata_complete()
     Ok(())
 }
 
+#[tokio::test]
+async fn performance_aligns_actual_and_modeled_energy_without_allocating_to_children()
+-> Result<(), Box<dyn Error>> {
+    let fixture = Fixture::new();
+    let app = fixture.app();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/accounts/{}/systems/{}/yield-performance?startEpochMillis=1000&endEpochMillis=3601000&metric=generation_performance&resolution=hour&maximumPoints=2",
+                    fixture.account_id, fixture.system
+                ))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), 16_384).await?;
+    let json: serde_json::Value = serde_json::from_slice(&body)?;
+    assert_eq!(json["metric"], "generation_performance");
+    assert_eq!(json["basis"], "expected");
+    assert_eq!(json["points"][0]["actualEnergyWattHours"], 800);
+    assert_eq!(json["points"][0]["modeledEnergyWattHours"], 1_000);
+    assert_eq!(json["points"][0]["ratioBasisPoints"], 8_000);
+
+    let unsupported = app
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/accounts/{}/systems/{}/yield-performance?startEpochMillis=1000&endEpochMillis=3601000&metric=forecast_realization&resolution=hour&maximumPoints=2&inverterId={}",
+                    fixture.account_id, fixture.system, fixture.inverter
+                ))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(unsupported.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body = to_bytes(unsupported.into_body(), 16_384).await?;
+    let json: serde_json::Value = serde_json::from_slice(&body)?;
+    assert_eq!(json["field"], "scope");
+    assert_eq!(json["detail"], "unsupported_actual_scope");
+    Ok(())
+}
+
 struct Fixture {
     account_id: AccountId,
     system: SystemId,
@@ -361,6 +405,41 @@ impl ForecastApiUseCases for Stub {
                 upper_energy_watt_hours: Some(275),
                 coverage_basis_points: 10_000,
                 completeness: ForecastCompleteness::Complete,
+            }],
+        })
+    }
+
+    async fn performance_series(
+        &self,
+        scope: ForecastResourceScope,
+        query: PerformanceQuery,
+    ) -> Result<PerformanceSeriesResponse, ForecastApiError> {
+        if !matches!(scope, ForecastResourceScope::System { .. }) {
+            return Err(ForecastApiError::UnsupportedScope);
+        }
+        assert_eq!(query.metric, PerformanceMetric::GenerationPerformance);
+        Ok(PerformanceSeriesResponse {
+            scope,
+            metric: query.metric,
+            basis: query.metric.basis(),
+            resolution: query.resolution,
+            issue_time: None,
+            weather_run_id: WeatherDataRunId::new(),
+            calculation_run_id: YieldCalculationRunId::new(),
+            model_identifier: "pvwatts-compatible".to_owned(),
+            model_revision: 1,
+            configuration_digest: "08".repeat(32),
+            freshness: pvlog_api::ForecastFreshness::Fresh,
+            provenance: provenance(),
+            points: vec![PerformancePointResponse {
+                interval_start: query.start_epoch_millis,
+                interval_end: query.end_epoch_millis,
+                actual_energy_watt_hours: Some(800),
+                modeled_energy_watt_hours: Some(1_000),
+                ratio_basis_points: Some(8_000),
+                actual_coverage_basis_points: 10_000,
+                modeled_coverage_basis_points: 10_000,
+                unavailable_reason: None,
             }],
         })
     }

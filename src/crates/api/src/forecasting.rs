@@ -218,6 +218,64 @@ pub struct YieldSeriesResponse {
     pub points: Vec<YieldSeriesPointResponse>,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PerformanceMetric {
+    GenerationPerformance,
+    ForecastRealization,
+}
+
+impl PerformanceMetric {
+    #[must_use]
+    pub const fn basis(self) -> CalculationBasis {
+        match self {
+            Self::GenerationPerformance => CalculationBasis::Expected,
+            Self::ForecastRealization => CalculationBasis::Forecast,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PerformanceQuery {
+    pub start_epoch_millis: i64,
+    pub end_epoch_millis: i64,
+    pub metric: PerformanceMetric,
+    pub resolution: YieldSeriesResolution,
+    pub weather_run_id: Option<WeatherDataRunId>,
+    pub maximum_points: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PerformancePointResponse {
+    pub interval_start: i64,
+    pub interval_end: i64,
+    pub actual_energy_watt_hours: Option<i64>,
+    pub modeled_energy_watt_hours: Option<i64>,
+    pub ratio_basis_points: Option<u32>,
+    pub actual_coverage_basis_points: u16,
+    pub modeled_coverage_basis_points: u16,
+    pub unavailable_reason: Option<ForecastCompletenessReason>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PerformanceSeriesResponse {
+    pub scope: ForecastResourceScope,
+    pub metric: PerformanceMetric,
+    pub basis: CalculationBasis,
+    pub resolution: YieldSeriesResolution,
+    pub issue_time: Option<i64>,
+    pub weather_run_id: WeatherDataRunId,
+    pub calculation_run_id: YieldCalculationRunId,
+    pub model_identifier: String,
+    pub model_revision: u16,
+    pub configuration_digest: String,
+    pub freshness: ForecastFreshness,
+    pub provenance: ForecastProvenanceResponse,
+    pub points: Vec<PerformancePointResponse>,
+}
+
 #[async_trait]
 pub trait ForecastApiUseCases: Send + Sync {
     async fn settings(
@@ -249,6 +307,12 @@ pub trait ForecastApiUseCases: Send + Sync {
         scope: ForecastResourceScope,
         query: YieldSeriesQuery,
     ) -> Result<YieldSeriesResponse, ForecastApiError>;
+
+    async fn performance_series(
+        &self,
+        scope: ForecastResourceScope,
+        query: PerformanceQuery,
+    ) -> Result<PerformanceSeriesResponse, ForecastApiError>;
 }
 
 #[derive(Clone)]
@@ -289,6 +353,10 @@ pub fn forecasting_router(
         .route(
             "/api/v1/accounts/{account_id}/systems/{system_id}/yield-series",
             get(yield_series),
+        )
+        .route(
+            "/api/v1/accounts/{account_id}/systems/{system_id}/yield-performance",
+            get(performance_series),
         );
     router.with_state(ForecastState {
         service,
@@ -398,6 +466,7 @@ struct SeriesParameters {
     #[serde(rename = "endEpochMillis")]
     end: i64,
     basis: Option<String>,
+    metric: Option<String>,
     resolution: Option<String>,
     #[serde(rename = "weatherRunId")]
     weather_run_id: Option<WeatherDataRunId>,
@@ -443,6 +512,42 @@ async fn yield_series(
     authorize(&state, principal, system_scope, false).await?;
     let (scope, query) = series_query(account_id, system_id, &parameters)?;
     Ok(Json(state.service.yield_series(scope, query).await?))
+}
+
+async fn performance_series(
+    State(state): State<ForecastState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path(path): Path<ForecastPath>,
+    Query(parameters): Query<SeriesParameters>,
+) -> Result<Json<PerformanceSeriesResponse>, ForecastApiError> {
+    let system_scope = path.scope()?;
+    let ForecastResourceScope::System {
+        account_id,
+        system_id,
+    } = system_scope
+    else {
+        return Err(ForecastApiError::InvalidPath);
+    };
+    authorize(&state, principal, system_scope, false).await?;
+    let (scope, series) = series_query(account_id, system_id, &parameters)?;
+    let metric = match parameters
+        .metric
+        .as_deref()
+        .unwrap_or("generation_performance")
+    {
+        "generation_performance" => PerformanceMetric::GenerationPerformance,
+        "forecast_realization" => PerformanceMetric::ForecastRealization,
+        _ => return Err(ForecastApiError::InvalidQuery("metric")),
+    };
+    let query = PerformanceQuery {
+        start_epoch_millis: series.start_epoch_millis,
+        end_epoch_millis: series.end_epoch_millis,
+        metric,
+        resolution: series.resolution,
+        weather_run_id: series.weather_run_id,
+        maximum_points: series.maximum_points,
+    };
+    Ok(Json(state.service.performance_series(scope, query).await?))
 }
 
 fn run_query(parameters: &RunParameters) -> Result<ForecastRunQuery, ForecastApiError> {
@@ -688,6 +793,8 @@ pub enum ForecastApiError {
     InvalidQuery(&'static str),
     #[error("forecast query exceeds documented bounds")]
     QueryTooLarge,
+    #[error("actual telemetry does not support the requested child scope")]
+    UnsupportedScope,
     #[error("forecast access is forbidden")]
     Forbidden,
     #[error("forecast resource was not found")]
@@ -728,6 +835,7 @@ impl IntoResponse for ForecastApiError {
         let validation = match self {
             Self::Validation(field, detail) => Some((field, detail)),
             Self::InvalidQuery(field) => Some((field, "invalid_query_parameter")),
+            Self::UnsupportedScope => Some(("scope", "unsupported_actual_scope")),
             _ => None,
         };
         if let Some((field, detail)) = validation {
@@ -755,7 +863,9 @@ impl IntoResponse for ForecastApiError {
             Self::PreconditionRequired => StatusCode::PRECONDITION_REQUIRED,
             Self::Conflict => StatusCode::PRECONDITION_FAILED,
             Self::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
-            Self::Validation(_, _) | Self::InvalidQuery(_) => unreachable!(),
+            Self::Validation(_, _) | Self::InvalidQuery(_) | Self::UnsupportedScope => {
+                unreachable!()
+            }
         }
         .into_response()
     }

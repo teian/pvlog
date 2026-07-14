@@ -70,8 +70,10 @@ pub use equipment_catalog::{
 pub use forecasting::{
     ForecastApiError, ForecastApiUseCases, ForecastFreshness, ForecastInputCompletenessResponse,
     ForecastLossInput, ForecastProvenanceResponse, ForecastResourceScope, ForecastRunQuery,
-    ForecastRunResponse, ForecastSettingsInput, ForecastSettingsResponse, YieldSeriesPointResponse,
-    YieldSeriesQuery, YieldSeriesResolution, YieldSeriesResponse, forecasting_router,
+    ForecastRunResponse, ForecastSettingsInput, ForecastSettingsResponse, PerformanceMetric,
+    PerformancePointResponse, PerformanceQuery, PerformanceSeriesResponse,
+    YieldSeriesPointResponse, YieldSeriesQuery, YieldSeriesResolution, YieldSeriesResponse,
+    forecasting_router,
 };
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,
