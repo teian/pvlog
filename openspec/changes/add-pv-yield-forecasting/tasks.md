@@ -41,7 +41,7 @@
 ## 6. Modern API and Contract
 
 - [x] 6.1 Add authorized ETag-protected forecast-settings and input-completeness resources for account/system/inverter/string scopes with field-specific validation problems.
-- [ ] 6.2 Add bounded forecast-run and forecast/expected series resources with explicit scope, resolution, issue time, versions, provenance, freshness, uncertainty, coverage, partial-capacity, and unavailable metadata.
+- [x] 6.2 Add bounded forecast-run and forecast/expected series resources with explicit scope, resolution, issue time, versions, provenance, freshness, uncertainty, coverage, partial-capacity, and unavailable metadata.
 - [ ] 6.3 Add aggregated performance and forecast-realization resources that align actual/model intervals and refuse unsupported child-scope ratios.
 - [ ] 6.4 Extend analysis export with forecast, expected, actual, and performance values plus the same units, interval semantics, versions, coverage, uncertainty, and attribution shown by queries.
 - [ ] 6.5 Update the committed OpenAPI contract, generated fixture, examples, operation coverage, problem types, security, pagination/bounds, and backward-compatibility checks for all forecast resources.

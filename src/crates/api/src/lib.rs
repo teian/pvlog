@@ -68,8 +68,10 @@ pub use equipment_catalog::{
     CatalogPageResponse, EquipmentCatalogApiError, equipment_catalog_router,
 };
 pub use forecasting::{
-    ForecastApiError, ForecastApiUseCases, ForecastInputCompletenessResponse, ForecastLossInput,
-    ForecastResourceScope, ForecastSettingsInput, ForecastSettingsResponse, forecasting_router,
+    ForecastApiError, ForecastApiUseCases, ForecastFreshness, ForecastInputCompletenessResponse,
+    ForecastLossInput, ForecastProvenanceResponse, ForecastResourceScope, ForecastRunQuery,
+    ForecastRunResponse, ForecastSettingsInput, ForecastSettingsResponse, YieldSeriesPointResponse,
+    YieldSeriesQuery, YieldSeriesResolution, YieldSeriesResponse, forecasting_router,
 };
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,

@@ -5,14 +5,15 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use axum::{
     Extension, Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::get,
 };
 use pvlog_domain::{
-    AccountId, ApiScope, ForecastCompletenessReason, InverterId, Permission, StringId, SystemId,
-    UserId,
+    AccountId, ApiScope, CalculationBasis, ForecastCompleteness, ForecastCompletenessReason,
+    InverterId, Permission, StringId, SystemId, UserId, WeatherDataKind, WeatherDataRunId,
+    YieldCalculationRunId,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -110,6 +111,113 @@ pub struct ForecastInputCompletenessResponse {
     pub version: u64,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ForecastFreshness {
+    Fresh,
+    Stale,
+    Unavailable,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForecastProvenanceResponse {
+    pub provider_id: String,
+    pub adapter: String,
+    pub source_url: String,
+    pub license_identifier: String,
+    pub attribution: String,
+    pub fetched_at: i64,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForecastRunResponse {
+    pub id: WeatherDataRunId,
+    pub system_id: SystemId,
+    pub kind: WeatherDataKind,
+    pub issued_at: Option<i64>,
+    pub valid_from: i64,
+    pub valid_to: i64,
+    pub resolution_seconds: u32,
+    pub freshness: ForecastFreshness,
+    pub provenance: ForecastProvenanceResponse,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum YieldSeriesResolution {
+    FifteenMinutes,
+    Hour,
+    Day,
+}
+
+impl YieldSeriesResolution {
+    const fn seconds(self) -> u32 {
+        match self {
+            Self::FifteenMinutes => 900,
+            Self::Hour => 3_600,
+            Self::Day => 86_400,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ForecastRunQuery {
+    pub start_epoch_millis: i64,
+    pub end_epoch_millis: i64,
+    pub issued_before_epoch_millis: Option<i64>,
+    pub kind: WeatherDataKind,
+    pub limit: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct YieldSeriesQuery {
+    pub start_epoch_millis: i64,
+    pub end_epoch_millis: i64,
+    pub basis: CalculationBasis,
+    pub resolution: YieldSeriesResolution,
+    pub weather_run_id: Option<WeatherDataRunId>,
+    pub include_partial: bool,
+    pub maximum_points: u32,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct YieldSeriesPointResponse {
+    pub interval_start: i64,
+    pub interval_end: i64,
+    pub central_power_watts: Option<i64>,
+    pub lower_power_watts: Option<i64>,
+    pub upper_power_watts: Option<i64>,
+    pub central_energy_watt_hours: Option<i64>,
+    pub lower_energy_watt_hours: Option<i64>,
+    pub upper_energy_watt_hours: Option<i64>,
+    pub coverage_basis_points: u16,
+    pub completeness: ForecastCompleteness,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct YieldSeriesResponse {
+    pub scope: ForecastResourceScope,
+    pub basis: CalculationBasis,
+    pub resolution: YieldSeriesResolution,
+    pub issue_time: Option<i64>,
+    pub weather_run_id: WeatherDataRunId,
+    pub calculation_run_id: YieldCalculationRunId,
+    pub model_identifier: String,
+    pub model_revision: u16,
+    pub configuration_digest: String,
+    pub freshness: ForecastFreshness,
+    pub provenance: ForecastProvenanceResponse,
+    pub included_capacity_watts: i64,
+    pub total_effective_capacity_watts: i64,
+    pub completeness: ForecastCompleteness,
+    pub unavailable_reasons: Vec<ForecastCompletenessReason>,
+    pub points: Vec<YieldSeriesPointResponse>,
+}
+
 #[async_trait]
 pub trait ForecastApiUseCases: Send + Sync {
     async fn settings(
@@ -129,6 +237,18 @@ pub trait ForecastApiUseCases: Send + Sync {
         &self,
         scope: ForecastResourceScope,
     ) -> Result<ForecastInputCompletenessResponse, ForecastApiError>;
+
+    async fn forecast_runs(
+        &self,
+        scope: ForecastResourceScope,
+        query: ForecastRunQuery,
+    ) -> Result<Vec<ForecastRunResponse>, ForecastApiError>;
+
+    async fn yield_series(
+        &self,
+        scope: ForecastResourceScope,
+        query: YieldSeriesQuery,
+    ) -> Result<YieldSeriesResponse, ForecastApiError>;
 }
 
 #[derive(Clone)]
@@ -161,6 +281,15 @@ pub fn forecasting_router(
     for route in COMPLETENESS_ROUTES {
         router = router.route(route, get(input_completeness));
     }
+    router = router
+        .route(
+            "/api/v1/accounts/{account_id}/systems/{system_id}/forecast-runs",
+            get(forecast_runs),
+        )
+        .route(
+            "/api/v1/accounts/{account_id}/systems/{system_id}/yield-series",
+            get(yield_series),
+        );
     router.with_state(ForecastState {
         service,
         authorizer,
@@ -248,6 +377,162 @@ async fn input_completeness(
     let response = state.service.input_completeness(scope).await?;
     let version = response.version;
     Ok(json_with_etag(StatusCode::OK, response, version))
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct RunParameters {
+    #[serde(rename = "startEpochMillis")]
+    start: i64,
+    #[serde(rename = "endEpochMillis")]
+    end: i64,
+    #[serde(rename = "issuedBeforeEpochMillis")]
+    issued_before: Option<i64>,
+    kind: Option<String>,
+    limit: Option<u32>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+struct SeriesParameters {
+    #[serde(rename = "startEpochMillis")]
+    start: i64,
+    #[serde(rename = "endEpochMillis")]
+    end: i64,
+    basis: Option<String>,
+    resolution: Option<String>,
+    #[serde(rename = "weatherRunId")]
+    weather_run_id: Option<WeatherDataRunId>,
+    #[serde(rename = "includePartial")]
+    include_partial: Option<bool>,
+    #[serde(rename = "maximumPoints")]
+    maximum_points: Option<u32>,
+    #[serde(rename = "inverterId")]
+    inverter_id: Option<InverterId>,
+    #[serde(rename = "stringId")]
+    string_id: Option<StringId>,
+}
+
+async fn forecast_runs(
+    State(state): State<ForecastState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path(path): Path<ForecastPath>,
+    Query(parameters): Query<RunParameters>,
+) -> Result<Json<Vec<ForecastRunResponse>>, ForecastApiError> {
+    let scope = path.scope()?;
+    if !matches!(scope, ForecastResourceScope::System { .. }) {
+        return Err(ForecastApiError::InvalidPath);
+    }
+    authorize(&state, principal, scope, false).await?;
+    let query = run_query(&parameters)?;
+    Ok(Json(state.service.forecast_runs(scope, query).await?))
+}
+
+async fn yield_series(
+    State(state): State<ForecastState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path(path): Path<ForecastPath>,
+    Query(parameters): Query<SeriesParameters>,
+) -> Result<Json<YieldSeriesResponse>, ForecastApiError> {
+    let system_scope = path.scope()?;
+    let ForecastResourceScope::System {
+        account_id,
+        system_id,
+    } = system_scope
+    else {
+        return Err(ForecastApiError::InvalidPath);
+    };
+    authorize(&state, principal, system_scope, false).await?;
+    let (scope, query) = series_query(account_id, system_id, &parameters)?;
+    Ok(Json(state.service.yield_series(scope, query).await?))
+}
+
+fn run_query(parameters: &RunParameters) -> Result<ForecastRunQuery, ForecastApiError> {
+    validate_range(parameters.start, parameters.end)?;
+    let kind = match parameters.kind.as_deref().unwrap_or("forecast") {
+        "forecast" => WeatherDataKind::Forecast,
+        "observed" => WeatherDataKind::Observed,
+        "reanalysis" => WeatherDataKind::Reanalysis,
+        _ => return Err(ForecastApiError::InvalidQuery("kind")),
+    };
+    let limit = parameters.limit.unwrap_or(50);
+    if limit == 0 || limit > 100 {
+        return Err(ForecastApiError::InvalidQuery("limit"));
+    }
+    Ok(ForecastRunQuery {
+        start_epoch_millis: parameters.start,
+        end_epoch_millis: parameters.end,
+        issued_before_epoch_millis: parameters.issued_before,
+        kind,
+        limit,
+    })
+}
+
+fn series_query(
+    account_id: AccountId,
+    system_id: SystemId,
+    parameters: &SeriesParameters,
+) -> Result<(ForecastResourceScope, YieldSeriesQuery), ForecastApiError> {
+    validate_range(parameters.start, parameters.end)?;
+    let basis = match parameters.basis.as_deref().unwrap_or("forecast") {
+        "forecast" => CalculationBasis::Forecast,
+        "expected" => CalculationBasis::Expected,
+        _ => return Err(ForecastApiError::InvalidQuery("basis")),
+    };
+    let resolution = match parameters.resolution.as_deref().unwrap_or("hour") {
+        "15m" => YieldSeriesResolution::FifteenMinutes,
+        "hour" => YieldSeriesResolution::Hour,
+        "day" => YieldSeriesResolution::Day,
+        _ => return Err(ForecastApiError::InvalidQuery("resolution")),
+    };
+    let maximum_points = parameters.maximum_points.unwrap_or(2_000);
+    if maximum_points == 0 || maximum_points > 10_000 {
+        return Err(ForecastApiError::InvalidQuery("maximumPoints"));
+    }
+    let interval_count = (i128::from(parameters.end) - i128::from(parameters.start))
+        / (i128::from(resolution.seconds()) * 1_000);
+    if interval_count > i128::from(maximum_points) {
+        return Err(ForecastApiError::QueryTooLarge);
+    }
+    let scope = match (parameters.inverter_id, parameters.string_id) {
+        (None, None) => ForecastResourceScope::System {
+            account_id,
+            system_id,
+        },
+        (Some(inverter_id), None) => ForecastResourceScope::Inverter {
+            account_id,
+            system_id,
+            inverter_id,
+        },
+        (Some(inverter_id), Some(string_id)) => ForecastResourceScope::String {
+            account_id,
+            system_id,
+            inverter_id,
+            string_id,
+        },
+        (None, Some(_)) => return Err(ForecastApiError::InvalidQuery("inverterId")),
+    };
+    Ok((
+        scope,
+        YieldSeriesQuery {
+            start_epoch_millis: parameters.start,
+            end_epoch_millis: parameters.end,
+            basis,
+            resolution,
+            weather_run_id: parameters.weather_run_id,
+            include_partial: parameters.include_partial.unwrap_or(false),
+            maximum_points,
+        },
+    ))
+}
+
+fn validate_range(start: i64, end: i64) -> Result<(), ForecastApiError> {
+    const MAXIMUM_RANGE_MILLISECONDS: i64 = 366 * 86_400 * 1_000;
+    if end <= start {
+        return Err(ForecastApiError::InvalidQuery("endEpochMillis"));
+    }
+    if end.saturating_sub(start) > MAXIMUM_RANGE_MILLISECONDS {
+        return Err(ForecastApiError::QueryTooLarge);
+    }
+    Ok(())
 }
 
 async fn authorize(
@@ -399,6 +684,10 @@ fn json_with_etag<T: Serialize>(status: StatusCode, body: T, version: u64) -> Re
 pub enum ForecastApiError {
     #[error("forecast resource path is invalid")]
     InvalidPath,
+    #[error("forecast query field is invalid")]
+    InvalidQuery(&'static str),
+    #[error("forecast query exceeds documented bounds")]
+    QueryTooLarge,
     #[error("forecast access is forbidden")]
     Forbidden,
     #[error("forecast resource was not found")]
@@ -436,12 +725,17 @@ struct ForecastValidationProblem {
 
 impl IntoResponse for ForecastApiError {
     fn into_response(self) -> Response {
-        if let Self::Validation(field, detail) = self {
+        let validation = match self {
+            Self::Validation(field, detail) => Some((field, detail)),
+            Self::InvalidQuery(field) => Some((field, "invalid_query_parameter")),
+            _ => None,
+        };
+        if let Some((field, detail)) = validation {
             let mut response = (
                 StatusCode::UNPROCESSABLE_ENTITY,
                 Json(ForecastValidationProblem {
                     problem_type: "https://pvlog.example/problems/forecast-validation",
-                    title: "invalid_forecast_setting",
+                    title: "invalid_forecast_request",
                     status: StatusCode::UNPROCESSABLE_ENTITY.as_u16(),
                     detail,
                     field,
@@ -456,11 +750,12 @@ impl IntoResponse for ForecastApiError {
         }
         match self {
             Self::InvalidPath | Self::NotFound => StatusCode::NOT_FOUND,
+            Self::QueryTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             Self::Forbidden => StatusCode::FORBIDDEN,
             Self::PreconditionRequired => StatusCode::PRECONDITION_REQUIRED,
             Self::Conflict => StatusCode::PRECONDITION_FAILED,
             Self::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
-            Self::Validation(_, _) => unreachable!(),
+            Self::Validation(_, _) | Self::InvalidQuery(_) => unreachable!(),
         }
         .into_response()
     }

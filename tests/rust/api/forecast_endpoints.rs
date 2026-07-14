@@ -8,12 +8,15 @@ use axum::{
 };
 use pvlog_api::{
     AuthorizedRequest, ForecastApiError, ForecastApiUseCases, ForecastInputCompletenessResponse,
-    ForecastLossInput, ForecastResourceScope, ForecastSettingsInput, ForecastSettingsResponse,
-    ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal, forecasting_router,
+    ForecastLossInput, ForecastProvenanceResponse, ForecastResourceScope, ForecastRunQuery,
+    ForecastRunResponse, ForecastSettingsInput, ForecastSettingsResponse, ModernRequestAuthorizer,
+    RequestAuthorizationError, RequestPrincipal, YieldSeriesPointResponse, YieldSeriesQuery,
+    YieldSeriesResolution, YieldSeriesResponse, forecasting_router,
 };
 use pvlog_domain::{
-    AccountId, ForecastCompletenessReason, InverterId, Permission, PrincipalId, StringId, SystemId,
-    UserId,
+    AccountId, CalculationBasis, ForecastCompleteness, ForecastCompletenessReason, InverterId,
+    Permission, PrincipalId, StringId, SystemId, UserId, WeatherDataKind, WeatherDataRunId,
+    YieldCalculationRunId,
 };
 use tower::ServiceExt as _;
 
@@ -143,6 +146,63 @@ async fn forecast_resources_reject_missing_or_under_scoped_credentials()
     Ok(())
 }
 
+#[tokio::test]
+async fn forecast_runs_and_yield_series_are_bounded_and_metadata_complete()
+-> Result<(), Box<dyn Error>> {
+    let fixture = Fixture::new();
+    let app = fixture.app();
+    let runs = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/accounts/{}/systems/{}/forecast-runs?startEpochMillis=1000&endEpochMillis=3601000&kind=forecast&limit=10",
+                    fixture.account_id, fixture.system
+                ))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(runs.status(), StatusCode::OK);
+    let body = to_bytes(runs.into_body(), 16_384).await?;
+    let json: serde_json::Value = serde_json::from_slice(&body)?;
+    assert_eq!(json[0]["kind"], "forecast");
+    assert_eq!(json[0]["freshness"], "fresh");
+    assert_eq!(json[0]["provenance"]["attribution"], "Weather Example");
+
+    let series = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/accounts/{}/systems/{}/yield-series?startEpochMillis=1000&endEpochMillis=1801000&basis=forecast&resolution=15m&maximumPoints=4&includePartial=true",
+                    fixture.account_id, fixture.system
+                ))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(series.status(), StatusCode::OK);
+    let body = to_bytes(series.into_body(), 16_384).await?;
+    let json: serde_json::Value = serde_json::from_slice(&body)?;
+    assert_eq!(json["basis"], "forecast");
+    assert_eq!(json["resolution"], "fifteen_minutes");
+    assert_eq!(json["includedCapacityWatts"], 4_000);
+    assert_eq!(json["totalEffectiveCapacityWatts"], 8_000);
+    assert_eq!(json["points"][0]["lowerPowerWatts"], 900);
+
+    let excessive = app
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/accounts/{}/systems/{}/yield-series?startEpochMillis=0&endEpochMillis=3600000&resolution=15m&maximumPoints=1",
+                    fixture.account_id, fixture.system
+                ))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(excessive.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    Ok(())
+}
+
 struct Fixture {
     account_id: AccountId,
     system: SystemId,
@@ -240,6 +300,80 @@ impl ForecastApiUseCases for Stub {
             reasons: vec![ForecastCompletenessReason::MissingOrientation],
             version: 8,
         })
+    }
+
+    async fn forecast_runs(
+        &self,
+        scope: ForecastResourceScope,
+        query: ForecastRunQuery,
+    ) -> Result<Vec<ForecastRunResponse>, ForecastApiError> {
+        let ForecastResourceScope::System { system_id, .. } = scope else {
+            return Err(ForecastApiError::InvalidPath);
+        };
+        assert_eq!(query.kind, WeatherDataKind::Forecast);
+        assert_eq!(query.limit, 10);
+        Ok(vec![ForecastRunResponse {
+            id: WeatherDataRunId::new(),
+            system_id,
+            kind: WeatherDataKind::Forecast,
+            issued_at: Some(900),
+            valid_from: 1_000,
+            valid_to: 3_601_000,
+            resolution_seconds: 3_600,
+            freshness: pvlog_api::ForecastFreshness::Fresh,
+            provenance: provenance(),
+        }])
+    }
+
+    async fn yield_series(
+        &self,
+        scope: ForecastResourceScope,
+        query: YieldSeriesQuery,
+    ) -> Result<YieldSeriesResponse, ForecastApiError> {
+        assert_eq!(query.resolution, YieldSeriesResolution::FifteenMinutes);
+        assert!(query.include_partial);
+        Ok(YieldSeriesResponse {
+            scope,
+            basis: CalculationBasis::Forecast,
+            resolution: query.resolution,
+            issue_time: Some(900),
+            weather_run_id: WeatherDataRunId::new(),
+            calculation_run_id: YieldCalculationRunId::new(),
+            model_identifier: "pvwatts-compatible".to_owned(),
+            model_revision: 1,
+            configuration_digest: "07".repeat(32),
+            freshness: pvlog_api::ForecastFreshness::Fresh,
+            provenance: provenance(),
+            included_capacity_watts: 4_000,
+            total_effective_capacity_watts: 8_000,
+            completeness: ForecastCompleteness::Partial {
+                reasons: vec![ForecastCompletenessReason::PartialEffectiveCapacity],
+            },
+            unavailable_reasons: Vec::new(),
+            points: vec![YieldSeriesPointResponse {
+                interval_start: query.start_epoch_millis,
+                interval_end: query.start_epoch_millis + 900_000,
+                central_power_watts: Some(1_000),
+                lower_power_watts: Some(900),
+                upper_power_watts: Some(1_100),
+                central_energy_watt_hours: Some(250),
+                lower_energy_watt_hours: Some(225),
+                upper_energy_watt_hours: Some(275),
+                coverage_basis_points: 10_000,
+                completeness: ForecastCompleteness::Complete,
+            }],
+        })
+    }
+}
+
+fn provenance() -> ForecastProvenanceResponse {
+    ForecastProvenanceResponse {
+        provider_id: "weather-example".to_owned(),
+        adapter: "normalized-json".to_owned(),
+        source_url: "https://weather.example/forecast".to_owned(),
+        license_identifier: "example-license".to_owned(),
+        attribution: "Weather Example".to_owned(),
+        fetched_at: 950,
     }
 }
 
