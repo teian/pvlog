@@ -94,7 +94,7 @@ impl NotificationApiUseCases for ManagementNotificationApi {
             .alerts()
             .await
             .map_err(|_| NotificationApiError::Unavailable)?;
-        Ok(records.into_iter().map(alert_response).collect())
+        Ok(records.iter().map(alert_response).collect())
     }
 
     async fn create_alert(
@@ -112,7 +112,7 @@ impl NotificationApiUseCases for ManagementNotificationApi {
             .save_alert(&record)
             .await
             .map_err(|_| NotificationApiError::Unavailable)?;
-        Ok(alert_response(record))
+        Ok(alert_response(&record))
     }
 
     async fn update_alert(
@@ -140,7 +140,7 @@ impl NotificationApiUseCases for ManagementNotificationApi {
             .save_alert(&record)
             .await
             .map_err(|_| NotificationApiError::Unavailable)?;
-        Ok(alert_response(record))
+        Ok(alert_response(&record))
     }
 
     async fn delete_alert(
@@ -178,7 +178,7 @@ impl NotificationApiUseCases for ManagementNotificationApi {
             .webhooks()
             .await
             .map_err(|_| NotificationApiError::Unavailable)?;
-        Ok(records.into_iter().map(webhook_response).collect())
+        Ok(records.iter().map(webhook_response).collect())
     }
 
     async fn create_webhook(
@@ -258,7 +258,7 @@ fn alert_record(
     })
 }
 
-fn alert_response(record: AlertRuleRecord) -> Value {
+fn alert_response(record: &AlertRuleRecord) -> Value {
     json!({
         "id": record.id,
         "systemId": record.system_id,
@@ -270,7 +270,7 @@ fn alert_response(record: AlertRuleRecord) -> Value {
     })
 }
 
-fn webhook_response(record: WebhookSubscriptionRecord) -> Value {
+fn webhook_response(record: &WebhookSubscriptionRecord) -> Value {
     json!({
         "id": record.id,
         "endpoint": record.endpoint_url,
@@ -295,7 +295,6 @@ fn storage_kind(kind: &str) -> Result<&'static str, NotificationApiError> {
 
 fn api_kind(kind: &str, condition: &Value) -> &'static str {
     match kind {
-        "idle" => "idle",
         "generation" => "generation_below",
         "consumption" => "consumption_above",
         "net_power" => "net_power_above",

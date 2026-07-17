@@ -107,7 +107,7 @@ impl AccountApiKeyUseCases for Stub {
     ) -> Result<IssuedAccountApiKey, AccountApiKeyError> {
         Ok(IssuedAccountApiKey {
             api_key: SecretString::from("pvlog_once"),
-            credential: metadata(self.id, name, scopes),
+            credential: metadata(self.id, name, scopes)?,
         })
     }
 
@@ -120,7 +120,7 @@ impl AccountApiKeyUseCases for Stub {
             self.id,
             "Uploader".to_owned(),
             BTreeSet::from([ApiScope::TelemetryWrite]),
-        )])
+        )?])
     }
 
     async fn revoke(
@@ -139,19 +139,18 @@ fn metadata(
     id: ApiCredentialId,
     name: String,
     scopes: BTreeSet<ApiScope>,
-) -> AccountApiKeyMetadata {
-    AccountApiKeyMetadata {
+) -> Result<AccountApiKeyMetadata, AccountApiKeyError> {
+    Ok(AccountApiKeyMetadata {
         id,
         name,
         scopes: scopes
             .into_iter()
             .map(AccountApiKeyScope::try_from)
-            .collect::<Result<_, _>>()
-            .expect("public scopes"),
+            .collect::<Result<_, _>>()?,
         created_at_epoch_millis: 1_780_000_000_000,
         expires_at_epoch_millis: None,
         revoked_at_epoch_millis: None,
-    }
+    })
 }
 
 struct AllowAuthorizer {

@@ -27,8 +27,8 @@ impl GeocodingApi for Stub {
         assert_eq!(limit, 5);
         Ok(vec![GeocodingResult {
             display_name: "Marienplatz 1, Munich, Germany".to_owned(),
-            latitude: 48.1373932,
-            longitude: 11.5754485,
+            latitude: 48.137_393_2,
+            longitude: 11.575_448_5,
             attribution: "© OpenStreetMap contributors".to_owned(),
         }])
     }

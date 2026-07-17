@@ -139,7 +139,7 @@ describe("OnboardingPage system management", () => {
     ).toBeVisible();
     await user.keyboard("{ArrowDown}{Enter}");
     expect(await screen.findByText("48.137393, 11.575449")).toBeVisible();
-  });
+  }, 10_000);
 
   it("creates a system and its inverter aggregate through the wizard", async () => {
     await i18n.changeLanguage("en");

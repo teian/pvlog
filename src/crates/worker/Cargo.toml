@@ -14,9 +14,9 @@ sqlite = ["pvlog-storage/sqlite"]
 [dependencies]
 async-trait.workspace = true
 blake3.workspace = true
-pvlog-application = { path = "../application" }
-pvlog-domain = { path = "../domain" }
-pvlog-storage = { path = "../storage", default-features = false }
+pvlog-application = { version = "0.1.0", path = "../application" }
+pvlog-domain = { version = "0.1.0", path = "../domain" }
+pvlog-storage = { version = "0.1.0", path = "../storage", default-features = false }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

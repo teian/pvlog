@@ -15,7 +15,7 @@ chrono-tz.workspace = true
 chrono.workspace = true
 openidconnect.workspace = true
 oauth2.workspace = true
-pvlog-domain = { path = "../domain" }
+pvlog-domain = { version = "0.1.0", path = "../domain" }
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true

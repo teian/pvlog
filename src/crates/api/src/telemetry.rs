@@ -195,12 +195,10 @@ async fn authorize_telemetry_write(
         scopes,
         ..
     } = &principal
+        && (!scopes.contains(&ApiScope::TelemetryWrite)
+            || allowed_system.is_some_and(|allowed| allowed != system_id))
     {
-        if !scopes.contains(&ApiScope::TelemetryWrite)
-            || allowed_system.is_some_and(|allowed| allowed != system_id)
-        {
-            return Err(TelemetryApiError::Forbidden);
-        }
+        return Err(TelemetryApiError::Forbidden);
     }
     let identity = principal.safe_ingestion_identity();
     let authorized = state
@@ -295,12 +293,13 @@ impl IntoResponse for TelemetryApiError {
     fn into_response(self) -> Response {
         let (status, retry) = match self {
             Self::Forbidden => (StatusCode::FORBIDDEN, None),
-            Self::NotFound => (StatusCode::NOT_FOUND, None),
+            Self::NotFound | Self::Domain(ModernTelemetryError::NotFound) => {
+                (StatusCode::NOT_FOUND, None)
+            }
             Self::Unavailable => (StatusCode::SERVICE_UNAVAILABLE, None),
             Self::Invalid | Self::Domain(ModernTelemetryError::Invalid) => {
                 (StatusCode::UNPROCESSABLE_ENTITY, None)
             }
-            Self::Domain(ModernTelemetryError::NotFound) => (StatusCode::NOT_FOUND, None),
             Self::Domain(ModernTelemetryError::Conflict) => (StatusCode::CONFLICT, None),
             Self::Domain(ModernTelemetryError::Overloaded {
                 retry_after_seconds,

@@ -7,6 +7,11 @@ targets = [
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    { id = "RUSTSEC-2023-0071", reason = "openidconnect uses rsa for public-key token verification; the advisory concerns private-key timing and has no fixed release" },
+    { id = "RUSTSEC-2024-0436", reason = "paste is an unmaintained transitive dependency of the current utoipa-axum release" },
+    { crate = "spin@0.9.8", reason = "spin 0.9.8 is transitively required by sqlx, axum, and openidconnect dependencies without a compatible non-yanked 0.9 release" },
+]
 
 [licenses]
 version = 2
@@ -15,6 +20,7 @@ allow = [
     "Apache-2.0",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    "CDLA-Permissive-2.0",
     "ISC",
     "MIT",
     "Unicode-3.0",

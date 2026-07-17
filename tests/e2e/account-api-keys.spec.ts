@@ -52,7 +52,10 @@ test("creates and revokes a least-privilege account API key", async ({
   await expect(
     page.getByRole("heading", { name: "Account", exact: true }),
   ).toBeVisible();
-  await page.getByLabel("Name").fill("Home uploader");
+  await page
+    .getByRole("region", { name: "Account API keys" })
+    .getByLabel("Name")
+    .fill("Home uploader");
   await page.getByLabel("Upload PV data").check();
   await page.getByRole("button", { name: "Create API key" }).click();
   await expect(page.getByRole("textbox", { name: "New API key" })).toHaveValue(

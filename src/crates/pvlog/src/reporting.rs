@@ -130,7 +130,7 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .bind(id_blob(system_id)).fetch_all(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     Ok(statistics_response(
                         system_id,
-                        lifetime.as_ref().map(|row| LifetimeValues::from_row(row)),
+                        lifetime.as_ref().map(LifetimeValues::from_row),
                         rows.iter().map(MonthlyValues::from_row).collect(),
                     ))
                 }
@@ -156,7 +156,7 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .map_err(|_| ReportingApiError::Unavailable)?;
                     Ok(statistics_response(
                         system_id,
-                        lifetime.as_ref().map(|row| LifetimeValues::from_row(row)),
+                        lifetime.as_ref().map(LifetimeValues::from_row),
                         rows.iter().map(MonthlyValues::from_row).collect(),
                     ))
                 }
@@ -379,26 +379,31 @@ fn statistics_response(
     lifetime: Option<LifetimeValues>,
     rows: Vec<MonthlyValues>,
 ) -> StatisticsResponse {
+    let (
+        generation_energy_wh,
+        consumption_energy_wh,
+        peak_generation_power_watts,
+        first_observation_at_epoch_millis,
+        last_observation_at_epoch_millis,
+        coverage_basis_points,
+    ) = lifetime.map_or((None, None, None, None, None, 0), |values| {
+        (
+            values.generation_energy_wh,
+            values.consumption_energy_wh,
+            values.peak_generation_power_watts,
+            values.first_observation_at,
+            values.last_observation_at,
+            values.coverage_basis_points,
+        )
+    });
     StatisticsResponse {
         system_id,
-        generation_energy_wh: lifetime
-            .as_ref()
-            .and_then(|values| values.generation_energy_wh),
-        consumption_energy_wh: lifetime
-            .as_ref()
-            .and_then(|values| values.consumption_energy_wh),
-        peak_generation_power_watts: lifetime
-            .as_ref()
-            .and_then(|values| values.peak_generation_power_watts),
-        first_observation_at_epoch_millis: lifetime
-            .as_ref()
-            .and_then(|values| values.first_observation_at),
-        last_observation_at_epoch_millis: lifetime
-            .as_ref()
-            .and_then(|values| values.last_observation_at),
-        coverage_basis_points: lifetime
-            .as_ref()
-            .map_or(0, |values| values.coverage_basis_points),
+        generation_energy_wh,
+        consumption_energy_wh,
+        peak_generation_power_watts,
+        first_observation_at_epoch_millis,
+        last_observation_at_epoch_millis,
+        coverage_basis_points,
         monthly: rows
             .into_iter()
             .map(|row| MonthlyProductionResponse {
@@ -411,7 +416,10 @@ fn statistics_response(
     }
 }
 
-fn seasonal_response(system_id: SystemId, days: &[(String, Option<i64>)]) -> SeasonalResponse {
+pub(crate) fn seasonal_response(
+    system_id: SystemId,
+    days: &[(String, Option<i64>)],
+) -> SeasonalResponse {
     let mut totals = [
         ("winter", 0_i64, 0_u64),
         ("spring", 0, 0),
@@ -533,30 +541,5 @@ fn weather_response(
                 predicted_energy_wh: row.predicted_energy,
             })
             .collect(),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::seasonal_response;
-    use pvlog_domain::SystemId;
-
-    #[test]
-    fn seasonal_report_groups_daily_energy_and_ignores_missing_values() {
-        let response = seasonal_response(
-            SystemId::new(),
-            &[
-                ("2026-01-10".to_owned(), Some(1_000)),
-                ("2026-02-10".to_owned(), Some(3_000)),
-                ("2026-04-10".to_owned(), Some(5_000)),
-                ("2026-07-10".to_owned(), None),
-            ],
-        );
-
-        assert_eq!(response.seasons[0].generation_energy_wh, 4_000);
-        assert_eq!(response.seasons[0].measured_days, 2);
-        assert_eq!(response.seasons[0].average_daily_energy_wh, 2_000);
-        assert_eq!(response.seasons[1].generation_energy_wh, 5_000);
-        assert_eq!(response.seasons[2].measured_days, 0);
     }
 }

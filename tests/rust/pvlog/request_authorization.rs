@@ -45,7 +45,7 @@ async fn instance_administrator_receives_every_permission_in_session_bootstrap()
         account_id: None,
         name: "instance_administrator".to_owned(),
         kind: RoleKind::BuiltIn(BuiltInRole::InstanceAdministrator),
-        parent_role_ids: Default::default(),
+        parent_role_ids: std::collections::BTreeSet::default(),
         permissions: built_in_permissions(BuiltInRole::InstanceAdministrator),
     };
     rbac.save_role(&RbacRoleRecord {
@@ -124,6 +124,7 @@ async fn instance_administrator_receives_every_permission_in_session_bootstrap()
 }
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn system_requests_resolve_registry_then_authorize_before_routing()
 -> Result<(), Box<dyn Error>> {
     let directory = TempDir::new()?;

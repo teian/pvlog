@@ -492,6 +492,7 @@ pub struct GeocodingConfig {
 }
 
 impl Default for GeocodingConfig {
+    #[allow(clippy::expect_used)]
     fn default() -> Self {
         Self {
             endpoint: Url::parse("https://photon.komoot.io/api")

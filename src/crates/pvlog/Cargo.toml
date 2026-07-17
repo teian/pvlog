@@ -21,11 +21,11 @@ figment.workspace = true
 opentelemetry.workspace = true
 opentelemetry-otlp.workspace = true
 opentelemetry_sdk.workspace = true
-pvlog-api = { path = "../api" }
-pvlog-application = { path = "../application" }
-pvlog-domain = { path = "../domain" }
-pvlog-storage = { path = "../storage", default-features = false }
-pvlog-worker = { path = "../worker", default-features = false }
+pvlog-api = { version = "0.1.0", path = "../api" }
+pvlog-application = { version = "0.1.0", path = "../application" }
+pvlog-domain = { version = "0.1.0", path = "../domain" }
+pvlog-storage = { version = "0.1.0", path = "../storage", default-features = false }
+pvlog-worker = { version = "0.1.0", path = "../worker", default-features = false }
 reqwest.workspace = true
 rust-embed.workspace = true
 secrecy.workspace = true
@@ -68,6 +68,10 @@ path = "../../../tests/rust/pvlog/authentication_connector.rs"
 [[test]]
 name = "embedded-ui"
 path = "../../../tests/rust/pvlog/embedded_ui.rs"
+
+[[test]]
+name = "reporting"
+path = "../../../tests/rust/pvlog/reporting.rs"
 
 [lib]
 path = "src/lib.rs"

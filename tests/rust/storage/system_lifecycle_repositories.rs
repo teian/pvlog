@@ -18,6 +18,7 @@ use tempfile::TempDir;
 const NOW: i64 = 1_780_000_000_000;
 
 #[tokio::test]
+#[allow(clippy::too_many_lines)]
 async fn sqlite_system_lifecycle_uses_registry_and_optimistic_concurrency()
 -> Result<(), Box<dyn Error>> {
     let directory = TempDir::new()?;

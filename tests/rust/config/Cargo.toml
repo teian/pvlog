@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 figment.workspace = true
-pvlog = { path = "../../../src/crates/pvlog" }
+pvlog = { version = "0.1.0", path = "../../../src/crates/pvlog" }
 secrecy.workspace = true
 serde_json.workspace = true
 
@@ -18,4 +18,3 @@ path = "runtime_config.rs"
 
 [lints]
 workspace = true
-

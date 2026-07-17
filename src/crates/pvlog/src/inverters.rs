@@ -82,7 +82,7 @@ impl ManagementInverterApi {
     ) -> Result<InverterResponse, InverterApiError> {
         validate(&input)?;
         let now = now();
-        let id = inverter_id.unwrap_or_else(InverterId::new);
+        let id = inverter_id.unwrap_or_default();
         let repository = self.repository(account_id).await?;
         if inverter_id.is_some()
             && !repository

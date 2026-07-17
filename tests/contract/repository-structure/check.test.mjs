@@ -21,6 +21,7 @@ test("accepts the required source and test roots", () => {
     "src/ui/main.tsx": "export const application = true;\n",
     "tests/rust/api.rs": "#[test]\nfn routes() {}\n",
     "tests/ui/application.test.tsx": "export const testOnly = true;\n",
+    "scripts/import-catalog.mjs": "export const importCatalog = true;\n",
     "vite.config.ts": "export default {};\n",
   });
 

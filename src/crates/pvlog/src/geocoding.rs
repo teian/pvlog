@@ -21,6 +21,11 @@ pub struct PhotonGeocodingApi {
 }
 
 impl PhotonGeocodingApi {
+    /// Creates an adapter for the configured Photon-compatible endpoint.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`GeocodingError::Unavailable`] when the HTTP client cannot be built.
     pub fn new(endpoint: Url) -> Result<Self, GeocodingError> {
         let client = reqwest::Client::builder()
             .user_agent(format!(

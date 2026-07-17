@@ -173,7 +173,7 @@ impl AdministrationRepository for PostgresAdministrationRepository {
         .bind(&record.key)
         .bind(&record.value)
         .bind(&record.value_class)
-        .bind(record.updated_by.map(|id| id.as_uuid()))
+        .bind(record.updated_by.map(pvlog_domain::UserId::as_uuid))
         .bind(record.updated_at)
         .fetch_one(&mut connection)
         .await?;

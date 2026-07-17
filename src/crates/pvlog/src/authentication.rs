@@ -1077,7 +1077,7 @@ async fn provision_personal_account(
             })
             .await
             .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?
-            .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?;
+            .map_err(|()| pvlog_api::SessionApiError::Bootstrap)?;
         }
         #[cfg(not(feature = "sqlite"))]
         {

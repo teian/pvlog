@@ -118,7 +118,10 @@ async fn own_profile(
     State(state): State<LifecycleApiState>,
     principal: Option<Extension<RequestPrincipal>>,
 ) -> Result<Json<OwnProfileResponse>, LifecycleApiError> {
-    let profile = state.service.own_profile(current_user(principal)?).await?;
+    let profile = state
+        .service
+        .own_profile(current_user(principal.as_ref())?)
+        .await?;
     Ok(Json(profile.into()))
 }
 
@@ -129,16 +132,16 @@ async fn update_own_profile(
 ) -> Result<Json<OwnProfileResponse>, LifecycleApiError> {
     let profile = state
         .service
-        .update_own_profile(current_user(principal)?, body.display_name)
+        .update_own_profile(current_user(principal.as_ref())?, body.display_name)
         .await?;
     Ok(Json(profile.into()))
 }
 
 fn current_user(
-    principal: Option<Extension<RequestPrincipal>>,
+    principal: Option<&Extension<RequestPrincipal>>,
 ) -> Result<UserId, LifecycleApiError> {
     match principal {
-        Some(Extension(RequestPrincipal::User(user_id))) => Ok(user_id),
+        Some(Extension(RequestPrincipal::User(user_id))) => Ok(*user_id),
         Some(Extension(RequestPrincipal::ApiCredential { .. })) | None => {
             Err(UserLifecycleError::Forbidden.into())
         }

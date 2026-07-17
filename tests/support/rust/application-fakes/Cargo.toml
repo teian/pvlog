@@ -9,8 +9,8 @@ repository.workspace = true
 [dependencies]
 async-trait.workspace = true
 blake3.workspace = true
-pvlog-application = { path = "../../../../src/crates/application" }
-pvlog-domain = { path = "../../../../src/crates/domain" }
+pvlog-application = { version = "0.1.0", path = "../../../../src/crates/application" }
+pvlog-domain = { version = "0.1.0", path = "../../../../src/crates/domain" }
 secrecy.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

@@ -675,6 +675,7 @@ fn database_target(config: &RuntimeConfig) -> DatabaseTarget {
     }
 }
 
+#[allow(clippy::too_many_lines)]
 async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(), StartupError> {
     probe_database(target).await?;
     let equipment_catalog = Arc::new(EquipmentCatalog::bundled()?);
@@ -782,6 +783,7 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     Ok(())
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn compose_administration_repository(
     target: &DatabaseTarget,
 ) -> Result<Arc<dyn pvlog_storage::AdministrationRepository>, StartupError> {

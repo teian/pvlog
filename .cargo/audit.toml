@@ -1,0 +1,9 @@
+[advisories]
+ignore = [
+    "RUSTSEC-2023-0071", # OIDC only performs public-key verification; no fixed rsa release exists.
+    "RUSTSEC-2024-0436", # Transitive paste dependency of utoipa-axum.
+]
+
+# cargo-deny performs the yanked-crate check with a narrow, documented spin exception.
+[yanked]
+enabled = false

@@ -18,6 +18,7 @@ FROM rust:1.95.0-bookworm AS build
 WORKDIR /build
 
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY assets ./assets
 COPY src ./src
 COPY tests ./tests
 COPY embedded-ui ./embedded-ui

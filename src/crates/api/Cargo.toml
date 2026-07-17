@@ -11,8 +11,8 @@ async-trait.workspace = true
 axum.workspace = true
 opentelemetry.workspace = true
 garde.workspace = true
-pvlog-application = { path = "../application" }
-pvlog-domain = { path = "../domain" }
+pvlog-application = { version = "0.1.0", path = "../application" }
+pvlog-domain = { version = "0.1.0", path = "../domain" }
 secrecy.workspace = true
 serde.workspace = true
 serde_json.workspace = true

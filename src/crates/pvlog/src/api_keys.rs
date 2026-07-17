@@ -83,7 +83,7 @@ impl AccountApiKeyUseCases for ManagementAccountApiKeyService {
             .service
             .issue(account_id, actor, None, name, scopes, expires_at)
             .await
-            .map_err(map_api_token_error)?;
+            .map_err(|error| map_api_token_error(&error))?;
         if let Err(error) = self
             .audit(
                 actor,
@@ -110,7 +110,7 @@ impl AccountApiKeyUseCases for ManagementAccountApiKeyService {
         self.service
             .list(account_id)
             .await
-            .map_err(map_api_token_error)?
+            .map_err(|error| map_api_token_error(&error))?
             .into_iter()
             .map(metadata)
             .collect()
@@ -125,7 +125,7 @@ impl AccountApiKeyUseCases for ManagementAccountApiKeyService {
         self.service
             .revoke(account_id, id)
             .await
-            .map_err(map_api_token_error)?;
+            .map_err(|error| map_api_token_error(&error))?;
         self.audit(actor, account_id, "account.api_key.revoked", id)
             .await
     }
@@ -146,13 +146,15 @@ fn metadata(record: ApiTokenRecord) -> Result<AccountApiKeyMetadata, AccountApiK
     })
 }
 
-fn map_api_token_error(error: ApiTokenError) -> AccountApiKeyError {
+fn map_api_token_error(error: &ApiTokenError) -> AccountApiKeyError {
     match error {
-        ApiTokenError::InvalidRequest | ApiTokenError::Time => AccountApiKeyError::Invalid,
-        ApiTokenError::InvalidToken | ApiTokenError::NotFound => AccountApiKeyError::NotFound,
+        ApiTokenError::InvalidRequest
+        | ApiTokenError::Time
+        | ApiTokenError::Repository(PortError::Rejected(_)) => AccountApiKeyError::Invalid,
+        ApiTokenError::InvalidToken
+        | ApiTokenError::NotFound
+        | ApiTokenError::Repository(PortError::NotFound) => AccountApiKeyError::NotFound,
         ApiTokenError::Repository(PortError::Conflict) => AccountApiKeyError::Conflict,
-        ApiTokenError::Repository(PortError::Rejected(_)) => AccountApiKeyError::Invalid,
-        ApiTokenError::Repository(PortError::NotFound) => AccountApiKeyError::NotFound,
         ApiTokenError::Repository(PortError::Unavailable) => AccountApiKeyError::Unavailable,
     }
 }

@@ -36,13 +36,10 @@ fn bundled_catalog_preserves_module_and_asymmetric_mppt_data() -> Result<(), Box
         specification.bifaciality_tolerance_basis_points,
         Some(1_000)
     );
-    assert_eq!(
-        specification
-            .dimensions_millimetres
-            .expect("catalog dimensions")
-            .length,
-        1_762
-    );
+    let dimensions = specification
+        .dimensions_millimetres
+        .ok_or("catalog dimensions missing")?;
+    assert_eq!(dimensions.length, 1_762);
     assert_eq!(specification.weight_grams, Some(22_000));
 
     let inverter = catalog

@@ -43,6 +43,7 @@ export function validateStructure(repositoryRoot) {
     const insideBackend = isInside(relativePath, "src/crates");
     const insideUi = isInside(relativePath, "src/ui");
     const insideDocumentation = isInside(relativePath, "docs");
+    const insideScripts = isInside(relativePath, "scripts");
 
     if (extension === ".rs" && !insideBackend && !insideTests) {
       violations.push(
@@ -55,6 +56,7 @@ export function validateStructure(repositoryRoot) {
       !insideUi &&
       !insideTests &&
       !insideDocumentation &&
+      !insideScripts &&
       !ROOT_UI_TOOLING.has(relativePath)
     ) {
       violations.push(

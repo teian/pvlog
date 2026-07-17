@@ -144,21 +144,25 @@ async fn verify_contract(
     historical.effective_from = 30;
     historical.strings[0].effective_from = 30;
     historical.catalog_revision = Some("2025.12.1".to_owned());
-    historical
-        .specification_snapshot
-        .as_mut()
-        .and_then(|snapshot| snapshot.template.as_mut())
-        .ok_or("inverter template missing")?
-        .revision
-        .0 = "2025.12.1".to_owned();
+    "2025.12.1".clone_into(
+        &mut historical
+            .specification_snapshot
+            .as_mut()
+            .and_then(|snapshot| snapshot.template.as_mut())
+            .ok_or("inverter template missing")?
+            .revision
+            .0,
+    );
     historical.strings[0].module_catalog_revision = Some("2025.12.1".to_owned());
-    historical.strings[0]
-        .module_specification_snapshot
-        .as_mut()
-        .and_then(|snapshot| snapshot.template.as_mut())
-        .ok_or("module template missing")?
-        .revision
-        .0 = "2025.12.1".to_owned();
+    "2025.12.1".clone_into(
+        &mut historical.strings[0]
+            .module_specification_snapshot
+            .as_mut()
+            .and_then(|snapshot| snapshot.template.as_mut())
+            .ok_or("module template missing")?
+            .revision
+            .0,
+    );
     repository.save_inverter_aggregate(&historical).await?;
     assert!(
         repository
