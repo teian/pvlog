@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it, vi } from "vitest";
@@ -7,7 +7,7 @@ import { HomePage } from "@/pages/HomePage";
 import i18n from "@/shared/lib/i18n";
 
 describe("HomePage", () => {
-  it("renders the English localized application identity", async () => {
+  it("switches the application identity from English to German", async () => {
     await i18n.changeLanguage("en");
     vi.stubGlobal(
       "fetch",
@@ -57,10 +57,24 @@ describe("HomePage", () => {
     );
 
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
-      "Operational dashboard",
+      "All Systems",
     );
     expect(
       await screen.findByText("Live data received 0 seconds ago."),
     ).toBeVisible();
+
+    await i18n.changeLanguage("de");
+    const navigation = screen.getByRole("navigation");
+    expect(
+      within(navigation).getByRole("link", { name: "Übersicht" }),
+    ).toBeVisible();
+    for (const label of ["Anlagen", "Statistik", "Jahreszeiten", "Wetter"]) {
+      expect(within(navigation).getAllByText(label)[0]).toBeVisible();
+    }
+    expect(
+      within(navigation).getByRole("link", { name: "Verwalten" }),
+    ).toBeVisible();
+    expect(screen.getByRole("link", { name: "Verwaltung" })).toBeVisible();
+    expect(screen.queryByText("Administration")).not.toBeInTheDocument();
   });
 });

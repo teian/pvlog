@@ -51,21 +51,25 @@
         "title": "Sign-in complete"
       }
     },
+    "brandDescription": "Real-time production monitoring, fault detection, and reporting for your PV installations.",
     "continueWith": "Continue with {{name}}",
     "displayName": "Display name",
     "email": "Email address",
     "forgotPassword": "Forgot password?",
-    "loginDescription": "Use a local account or a configured external connector.",
+    "emailPlaceholder": "you@company.com",
+    "loginDescription": "Access your PVLog account.",
     "loginFailed": "The credentials could not be verified.",
-    "loginTitle": "Sign in to PVLog",
+    "loginTitle": "Sign in",
     "newPassword": "New password",
+    "or": "or",
     "password": "Password",
     "recoveryDescription": "Enter your email address to request a recovery link.",
     "recoverySent": "If the account exists, a recovery link has been sent.",
     "recoveryTitle": "Recover your account",
     "sendRecovery": "Send recovery link",
     "signOut": "Sign out",
-    "signIn": "Sign in"
+    "signIn": "Sign in",
+    "signInWith": "Sign in with {{name}}"
   },
   "charts": {
     "actualResolution": {
@@ -86,6 +90,7 @@
       "grid": "Grid"
     },
     "compareToggle": "Compare to previous period",
+    "description": "Inspect measured production and operating data across bounded time ranges.",
     "comparisonSummary": "Previous period averaged {{average}} {{unit}} ({{delta}}% vs current).",
     "export": {
       "csv": "Export CSV",
@@ -157,6 +162,7 @@
   },
   "dashboard": {
     "accepted": "{{count}} accepted today",
+    "activeAlertDescription": "Review the affected system and its latest telemetry.",
     "alertState": { "open": "Open", "resolved": "Resolved" },
     "alertsDescription": "Recent alert state changes.",
     "alertsTitle": "Recent alerts",
@@ -164,6 +170,7 @@
     "coverageDescription": "{{value}}% of expected intervals are available.",
     "coverageLabel": "Data coverage",
     "coverageTitle": "Data coverage",
+    "fault": "Fault",
     "ingestionDescription": "Current processing lag: {{lag}} seconds.",
     "ingestionTitle": "Ingestion health",
     "kpi": {
@@ -180,7 +187,9 @@
     "stale": "Last data arrived {{age}} seconds ago; live values are withheld.",
     "staleDescription": "Check the uploader and ingestion health before acting on these values.",
     "staleTitle": "Live data is stale",
-    "title": "Operational dashboard",
+    "systemSummary_one": "{{count}} system · Today · {{date}}",
+    "systemSummary_other": "{{count}} systems · Today · {{date}}",
+    "title": "All Systems",
     "unavailable": "Unavailable"
   },
   "dataQuality": {
@@ -228,21 +237,187 @@
   "errors": {
     "boundaryDescription": "Reload the page or return later.",
     "boundaryTitle": "This view could not be displayed",
+    "forbiddenCardDescription": "Your assigned role does not include the permission required for this page. Contact an administrator if you need access.",
+    "forbiddenCardTitle": "Permission required",
     "forbiddenDescription": "Your account does not have permission to open this view.",
-    "forbiddenTitle": "Access denied"
+    "forbiddenTitle": "Access denied",
+    "returnToDashboard": "Return to dashboard"
+  },
+  "reporting": {
+    "loading": "Loading reporting data…",
+    "errorTitle": "Reporting data unavailable",
+    "errorDescription": "The requested system data could not be loaded.",
+    "emptyTitle": "No systems configured",
+    "emptyDescription": "Create a system in Manage to use this view.",
+    "noMeasurements": "No aggregated measurements are available yet.",
+    "period": "Period",
+    "generation": "Generation",
+    "consumption": "Consumption",
+    "coverage": "Coverage",
+    "systems": {
+      "title": "All Systems",
+      "description": "Systems available to your account",
+      "cardTitle": "PV systems",
+      "name": "System",
+      "capacity": "Installed capacity",
+      "equipment": "Equipment",
+      "equipmentValue": "{{inverters}} inverter · {{strings}} strings",
+      "status": "Status"
+    },
+    "statistics": {
+      "title": "Statistics",
+      "description": "Lifetime and monthly production totals",
+      "totalGeneration": "Total generation",
+      "totalConsumption": "Total consumption",
+      "peak": "Peak power",
+      "coverage": "Data coverage",
+      "monthly": "Monthly production",
+      "monthlyDescription": "Stored account rollups, shown without estimated replacement values."
+    },
+    "seasonal": {
+      "title": "Seasonal",
+      "description": "Production patterns across meteorological seasons",
+      "cardTitle": "Seasonal production",
+      "cardDescription": "Calculated from daily summaries across all available years.",
+      "days": "{{count}} measured days · {{average}} daily average",
+      "seasons": {
+        "winter": "Winter",
+        "spring": "Spring",
+        "summer": "Summer",
+        "autumn": "Autumn"
+      }
+    },
+    "weather": {
+      "title": "Weather",
+      "description": "Predicted weather and its derived power yield",
+      "cardTitle": "Latest weather forecast",
+      "noAttribution": "No provider attribution available",
+      "noForecast": "No weather forecast has been ingested for this system yet.",
+      "irradiance": "Irradiance",
+      "temperature": "Temperature",
+      "clouds": "Cloud cover",
+      "predicted": "Predicted energy"
+    },
+    "lifecycle": {
+      "active": "Active",
+      "archived": "Archived",
+      "disabled": "Disabled"
+    }
   },
   "nav": {
-    "account": "Account {{id}}",
     "administration": "Administration",
+    "allSystems": "All Systems",
     "alerts": "Alerts",
     "dashboard": "Dashboard",
-    "system": "System {{id}}"
+    "manage": "Manage",
+    "seasonal": "Seasonal",
+    "statistics": "Statistics",
+    "system": "System {{id}}",
+    "systems": "Systems",
+    "unavailable": "This view is not available yet",
+    "weather": "Weather",
+    "view": "View"
   },
   "administration": {
     "title": "Administration",
-    "description": "Review your sign-in identities and the account administration data available to you.",
+    "description": "System configuration for the pvlog platform",
     "unavailableTitle": "Information unavailable",
     "restricted": "Your current role does not permit viewing this account data.",
+    "save": "Save settings",
+    "users": {
+      "title": "Users & Roles",
+      "description": "Who can access pvlog and what they can do.",
+      "invite": "Invite User",
+      "closeInvite": "Close invitation dialog",
+      "selectRole": "Assign role",
+      "roleLabel": "Role",
+      "instanceAdministrator": "Admin",
+      "deleteLabel": "Delete {{displayName}}",
+      "deleteTitle": "Delete user?",
+      "deleteDescription": "Delete {{displayName}} from this pvlog instance. Last-administrator and ownership safeguards still apply.",
+      "cancelDelete": "Cancel",
+      "confirmDelete": "Delete user",
+      "columns": {
+        "user": "User",
+        "role": "Role",
+        "status": "Status"
+      },
+      "status": {
+        "invited": "Invited",
+        "active": "Active",
+        "disabled": "Disabled",
+        "deleted": "Deleted"
+      }
+    },
+    "weatherFeed": {
+      "title": "Site Weather Feed",
+      "description": "Provider-neutral weather input used for forecasting.",
+      "enabled": "Enable weather feed",
+      "endpoint": "Endpoint",
+      "secretRef": "Credential secret reference"
+    },
+    "email": {
+      "title": "Email — SMTP settings",
+      "description": "Outgoing mail server used to send alert emails.",
+      "enabled": "Enable email notifications",
+      "recipient": "Recipient",
+      "host": "Host",
+      "port": "Port",
+      "username": "Username",
+      "credentialSecretRef": "Credential secret reference",
+      "encryption": "Encryption",
+      "starttls": "STARTTLS",
+      "tls": "TLS",
+      "none": "None"
+    },
+    "navigation": {
+      "label": "Administration",
+      "users": "Users & Roles",
+      "data-sources": "Data Sources",
+      "alert-rules": "Alert Rules",
+      "notifications": "Notifications",
+      "retention-backup": "Retention & Backup",
+      "system-logs": "System Logs",
+      "leave": "Leave Administration"
+    },
+    "alertRules": {
+      "title": "Alert Rules & Thresholds",
+      "description": "Conditions that raise a system alert.",
+      "empty": "No alert rules are configured for this account.",
+      "updateError": "The alert rule could not be updated.",
+      "kinds": {
+        "idle": "Trigger when the system remains idle.",
+        "generation_below": "Trigger when generation falls below the configured threshold.",
+        "consumption_above": "Trigger when consumption exceeds the configured threshold.",
+        "net_power_above": "Trigger when net power exceeds the configured threshold.",
+        "standby_cost_above": "Trigger when standby cost exceeds the configured threshold.",
+        "performance_below": "Trigger when performance falls below the configured threshold.",
+        "battery_below": "Trigger when battery level falls below the configured threshold.",
+        "extended_below": "Trigger after an extended period below the threshold.",
+        "extended_above": "Trigger after an extended period above the threshold."
+      }
+    },
+    "notifications": {
+      "title": "Notification Channels",
+      "description": "Where alerts get delivered.",
+      "empty": "No webhook notification channels are configured.",
+      "events_one": "{{count}} subscribed event",
+      "events_other": "{{count}} subscribed events",
+      "smtpUnavailable": "Email and SMTP settings are deployment-owned and are not exposed by the browser API.",
+      "states": {
+        "pending_verification": "Pending verification",
+        "active": "Active",
+        "disabled": "Disabled"
+      }
+    },
+    "retention": {
+      "title": "Data Retention & Backup",
+      "description": "How long readings are kept, and how the system is backed up.",
+      "days": "Reading retention period (days)",
+      "schedule": "Backup schedule (cron)",
+      "automatic": "Enable automatic backups",
+      "runBackup": "Run Backup Now"
+    },
     "identities": {
       "title": "Linked identities",
       "description": "External identities connected to this browser account.",
@@ -266,7 +441,11 @@
       "enabled": "Enabled",
       "disabled": "Disabled",
       "scopes_one": "{{count}} configured scope",
-      "scopes_other": "{{count}} configured scopes"
+      "scopes_other": "{{count}} configured scopes",
+      "protocols": {
+        "oidc": "OpenID Connect",
+        "oauth2": "OAuth 2.0"
+      }
     },
     "roles": {
       "title": "Roles",
@@ -278,7 +457,11 @@
       "create": "Create role",
       "createError": "The role could not be created.",
       "permissions_one": "{{count}} permission",
-      "permissions_other": "{{count}} permissions"
+      "permissions_other": "{{count}} permissions",
+      "kinds": {
+        "built_in": "Built-in",
+        "custom": "Custom"
+      }
     },
     "assignments": {
       "title": "Assign role",
@@ -292,10 +475,42 @@
       "error": "The role assignment could not be created."
     },
     "audit": {
-      "title": "Audit trail",
-      "description": "Recent account actions visible to your role.",
+      "title": "System / Audit Logs",
+      "description": "Configuration changes and system events.",
       "empty": "No audit events are available for this account.",
-      "event": "{{target}} · {{outcome}} · {{date}}"
+      "event": "{{target}} · {{outcome}}",
+      "actors": {
+        "anonymous": "Anonymous",
+        "user": "User",
+        "api_credential": "API credential",
+        "system": "System",
+        "worker": "Worker"
+      },
+      "outcomes": {
+        "succeeded": "Succeeded",
+        "denied": "Denied",
+        "failed": "Failed"
+      },
+      "targets": {
+        "account": "Account",
+        "instance": "Instance",
+        "system": "System",
+        "api_credential": "API credential",
+        "external_identity": "External identity",
+        "observation": "Observation"
+      },
+      "actions": {
+        "account_api_key_list": "View API keys",
+        "account_api_key_issue": "Create API key",
+        "account_api_key_revoke": "Revoke API key",
+        "administration_email_read": "View email settings",
+        "administration_retention_read": "View retention settings",
+        "administration_weather_read": "View weather settings",
+        "connector_list": "View authentication connectors",
+        "instance_role_list": "View instance roles",
+        "instance_role_assignment_list": "View instance role assignments",
+        "user_list": "View users"
+      }
     },
     "operations": {
       "title": "Operations",
@@ -429,7 +644,6 @@
     "back": "Back",
     "capacity": "Installed capacity in watts",
     "create": "Create system and credential",
-    "credential": "Uploader credential name",
     "equipment": "Primary inverter or equipment",
     "instanceName": "Installation name",
     "next": "Next",
@@ -444,72 +658,6 @@
   },
   "forecasting": {
     "notAvailable": "Not available",
-    "completeness": {
-      "actionRequired": "Configuration required",
-      "capacity": "{{included}} of {{total}} kWp included ({{percent}}%)",
-      "configureEquipment": "Open system and string configuration",
-      "description": "Checks location, module, orientation, capacity, and modeling inputs for the effective period.",
-      "errorDescription": "Readiness details are temporarily unavailable.",
-      "errorTitle": "Could not load forecast readiness",
-      "noGaps": "All required forecast inputs are present.",
-      "ready": "Forecast ready",
-      "title": "Forecast input readiness"
-    },
-    "reasons": {
-      "incompatible_input_run": "The weather run is incompatible with this configuration.",
-      "insufficient_actual_coverage": "Actual generation coverage is insufficient.",
-      "insufficient_weather_coverage": "Weather coverage is insufficient.",
-      "missing_actual_telemetry": "Actual generation telemetry is missing.",
-      "missing_forecast_settings": "Forecast loss and calibration settings are missing.",
-      "missing_module_capacity": "A PV string is missing module capacity.",
-      "missing_module_identity": "A PV string is missing its module identity.",
-      "missing_module_specification": "A module specification is incomplete.",
-      "missing_orientation": "A PV string is missing its orientation.",
-      "missing_system_location": "The system location is missing.",
-      "missing_tilt": "A PV string is missing its tilt.",
-      "missing_weather_input": "No suitable weather input is available.",
-      "no_effective_equipment": "No effective PV equipment exists for this period.",
-      "non_positive_expected_energy": "Expected generation is not positive for this interval.",
-      "partial_effective_capacity": "Only part of the effective nameplate capacity can be modeled.",
-      "unsupported_weather_input": "The weather input contains unsupported data."
-    },
-    "settings": {
-      "calibrationBasisPoints": "Calibration (basis points)",
-      "description": "Apply bounded losses and calibration from the selected effective time without changing measured telemetry or confirmed equipment.",
-      "effectiveFrom": "Effective from (epoch milliseconds)",
-      "effectiveTo": "Effective until (optional epoch milliseconds)",
-      "errorDescription": "Effective settings are temporarily unavailable.",
-      "errorTitle": "Could not load forecast settings",
-      "mismatchBasisPoints": "Mismatch loss (basis points)",
-      "model": "Model identifier",
-      "revision": "Model revision",
-      "save": "Save forecast settings",
-      "saveError": "The settings could not be saved. Reload and try again.",
-      "saved": "Settings saved; affected forecasts will be recalculated.",
-      "saving": "Saving…",
-      "shadingBasisPoints": "Shading loss (basis points)",
-      "soilingBasisPoints": "Soiling loss (basis points)",
-      "title": "Effective loss and calibration settings",
-      "unavailabilityBasisPoints": "Unavailability loss (basis points)",
-      "wiringBasisPoints": "Wiring loss (basis points)"
-    }
-  },
-  "shell": {
-    "closeNavigation": "Close navigation",
-    "openNavigation": "Open navigation",
-    "primaryNavigation": "Primary navigation",
-    "skip": "Skip to main content",
-    "theme": "Change colour theme",
-    "title": "Photovoltaic operations"
-  },
-  "system": {
-    "tabs": {
-      "charts": "Charts",
-      "dataQuality": "Data quality"
-    },
-    "tabsLabel": "System sections"
-  }
-}
     "notAvailableReason": "Not available: {{reason}}",
     "capacityKwp": "{{included}} of {{total}} kWp",
     "coverage": "Coverage",
@@ -579,3 +727,311 @@
       "tableCaption": "Actual and modeled generation with an explicit availability reason",
       "title": "Expected versus actual generation"
     },
+    "completeness": {
+      "actionRequired": "Configuration required",
+      "capacity": "{{included}} of {{total}} kWp included ({{percent}}%)",
+      "configureEquipment": "Open system and string configuration",
+      "description": "Checks location, module, orientation, capacity, and modeling inputs for the effective period.",
+      "errorDescription": "Readiness details are temporarily unavailable.",
+      "errorTitle": "Could not load forecast readiness",
+      "noGaps": "All required forecast inputs are present.",
+      "ready": "Forecast ready",
+      "title": "Forecast input readiness"
+    },
+    "reasons": {
+      "incompatible_input_run": "The weather run is incompatible with this configuration.",
+      "insufficient_actual_coverage": "Actual generation coverage is insufficient.",
+      "insufficient_weather_coverage": "Weather coverage is insufficient.",
+      "missing_actual_telemetry": "Actual generation telemetry is missing.",
+      "missing_forecast_settings": "Forecast loss and calibration settings are missing.",
+      "missing_module_capacity": "A PV string is missing module capacity.",
+      "missing_module_identity": "A PV string is missing its module identity.",
+      "missing_module_specification": "A module specification is incomplete.",
+      "missing_orientation": "A PV string is missing its orientation.",
+      "missing_system_location": "The system location is missing.",
+      "missing_tilt": "A PV string is missing its tilt.",
+      "missing_weather_input": "No suitable weather input is available.",
+      "no_effective_equipment": "No effective PV equipment exists for this period.",
+      "non_positive_expected_energy": "Expected generation is not positive for this interval.",
+      "partial_effective_capacity": "Only part of the effective nameplate capacity can be modeled.",
+      "unsupported_weather_input": "The weather input contains unsupported data."
+    },
+    "settings": {
+      "calibrationBasisPoints": "Calibration (basis points)",
+      "description": "Apply bounded losses and calibration from the selected effective time without changing measured telemetry or confirmed equipment.",
+      "effectiveFrom": "Effective from (epoch milliseconds)",
+      "effectiveTo": "Effective until (optional epoch milliseconds)",
+      "errorDescription": "Effective settings are temporarily unavailable.",
+      "errorTitle": "Could not load forecast settings",
+      "mismatchBasisPoints": "Mismatch loss (basis points)",
+      "model": "Model identifier",
+      "revision": "Model revision",
+      "save": "Save forecast settings",
+      "saveError": "The settings could not be saved. Reload and try again.",
+      "saved": "Settings saved; affected forecasts will be recalculated.",
+      "saving": "Saving…",
+      "shadingBasisPoints": "Shading loss (basis points)",
+      "soilingBasisPoints": "Soiling loss (basis points)",
+      "title": "Effective loss and calibration settings",
+      "unavailabilityBasisPoints": "Unavailability loss (basis points)",
+      "wiringBasisPoints": "Wiring loss (basis points)"
+    }
+  },
+  "shell": {
+    "brandTagline": "Open PV monitoring",
+    "closeNavigation": "Close navigation",
+    "footer": "Open source · self-hosted",
+    "openNavigation": "Open navigation",
+    "primaryNavigation": "Primary navigation",
+    "skip": "Skip to main content",
+    "theme": "Change colour theme",
+    "title": "Photovoltaic operations"
+  },
+  "systemManagement": {
+    "actions": {
+      "addSystem": "Add system",
+      "backToManagement": "Back to system management",
+      "cancel": "Cancel",
+      "createSystem": "Create system",
+      "decreaseInverters": "Decrease inverter count",
+      "delete": "Delete",
+      "deleteInverter": "Delete inverter {{number}}",
+      "deleteShading": "Delete shading period",
+      "deleteString": "Delete string {{name}}",
+      "deleteSystem": "Delete system {{name}}",
+      "edit": "Edit",
+      "increaseInverters": "Increase inverter count",
+      "saving": "Saving…",
+      "search": "Search",
+      "toggle": "Toggle details for {{name}}",
+      "updateSystem": "Save changes"
+    },
+    "delete": {
+      "description": "{{name}} and its configuration will be permanently deleted. This action cannot be undone.",
+      "title": "Delete this system?"
+    },
+    "description": "Manage systems, inverters, and PV strings in one place.",
+    "empty": {
+      "description": "Create your first system to configure inverters and strings.",
+      "title": "No systems yet"
+    },
+    "emptyInverter": "No strings configured yet.",
+    "errors": {
+      "loadDescription": "The system configuration is temporarily unavailable. Please try again.",
+      "loadTitle": "Could not load systems",
+      "saveConflictDescription": "The system was changed in the meantime. Reload the page and apply your changes again.",
+      "saveDescription": "The changes could not be saved. Check your input and try again.",
+      "saveForbiddenDescription": "You do not have permission to save systems in this account.",
+      "saveTitle": "Save failed",
+      "saveUnavailableDescription": "The save service is currently unavailable. Try again later.",
+      "saveValidationDescription": "The server rejected the system data. Check the system name and time zone and try again."
+    },
+    "inverterSummary": "{{count}} strings · {{kwp}} kWp",
+    "noLocation": "No location saved yet",
+    "orientation": {
+      "east": "East",
+      "north": "North",
+      "northEast": "Northeast",
+      "northWest": "Northwest",
+      "south": "South",
+      "southEast": "Southeast",
+      "southWest": "Southwest",
+      "unknown": "Unknown",
+      "west": "West"
+    },
+    "status": {
+      "active": "Active",
+      "activeUpper": "ACTIVE",
+      "inactive": "Inactive",
+      "inactiveUpper": "INACTIVE",
+      "offline": "OFFLINE",
+      "online": "ONLINE"
+    },
+    "stringDescription": "{{count}} × {{watts}} Wp · {{orientation}}",
+    "subtitle": "{{count}} systems configured",
+    "success": {
+      "created": "System created successfully",
+      "description": "{{name}} is now available in system management.",
+      "updated": "System updated successfully"
+    },
+    "summary": "{{inverters}} inverters · {{strings}} strings",
+    "title": "System management",
+    "units": {
+      "kwMax": "kW max.",
+      "kwp": "kWp"
+    },
+    "wizard": {
+      "addInverter": "Add inverter",
+      "addShading": "Add shading",
+      "addString": "Add string to inverter {{number}}",
+      "advanced": "Advanced settings",
+      "azimuth": "Azimuth (°)",
+      "catalogPlaceholder": "Search manufacturer or model",
+      "catalogLoading": "Loading catalogue…",
+      "createTitle": "Create new system",
+      "editTitle": "Edit system",
+      "footerHint": "All changes are saved together.",
+      "inverterCatalog": "Inverter catalogue",
+      "inverterOptionDetails": "{{power}} W · {{mppts}} MPPT · {{phases}}-phase",
+      "inverterSearchPlaceholder": "Search manufacturer or type",
+      "inverterCount": "Number of inverters",
+      "inverterDescription": "Choose models from the catalogue or enter technical values manually.",
+      "inverterNumber": "Inverter {{number}}",
+      "inverters": "Inverters",
+      "location": "Location",
+      "locationError": "The address could not be resolved right now. Please try again.",
+      "locationNotFound": "No matching location was found for this address.",
+      "maxPower": "Max. power (W)",
+      "manualEntry": "Enter manually",
+      "manualInverterDescription": "Enter technical specifications yourself",
+      "manualModuleDescription": "Enter module specifications yourself",
+      "modelName": "Model / name",
+      "moduleCatalog": "Module catalogue",
+      "moduleCount": "Modules",
+      "modulePlaceholder": "Search module manufacturer or model",
+      "moduleOptionDetails": "{{power}} Wp · {{temperatureCoefficient}} %/°C",
+      "moduleSearchPlaceholder": "Search module manufacturer or type",
+      "modulePower": "Power (Wp)",
+      "mppts": "MPPTs",
+      "noCatalogMatches": "No matching catalogue entry.",
+      "orientation": "Orientation",
+      "overrideCatalog": "Override catalogue values manually",
+      "phases": "Phases",
+      "shading": {
+        "degree": "Shading (%)",
+        "from": "From",
+        "label": "Description",
+        "to": "To"
+      },
+      "status": "Status",
+      "stringName": "String name",
+      "strings": "PV strings",
+      "stringsDescription": "Assign module groups, orientation, and detailed parameters to each inverter.",
+      "stringsForInverter": "Strings for inverter {{number}}",
+      "subtitle": "Configure system details and technical components in one step.",
+      "systemData": "System data",
+      "systemName": "System name",
+      "temperatureCoefficient": "Temperature coefficient (%/°C)",
+      "tilt": "Tilt (°)",
+      "validation": {
+        "blocked": "Cannot save: {{reason}}",
+        "inverterName": "The name for inverter {{number}} is missing.",
+        "moduleCount": "The module count for string {{string}} on inverter {{inverter}} must be greater than 0.",
+        "modulePower": "The module power for string {{string}} on inverter {{inverter}} must be greater than 0.",
+        "stringName": "The name for string {{string}} on inverter {{inverter}} is missing.",
+        "strings": "Inverter {{number}} requires at least one PV string.",
+        "systemName": "The system name is missing."
+      }
+    }
+  },
+  "account": {
+    "description": "Manage your personal details, password, and integration access.",
+    "navigation": "Manage account",
+    "password": {
+      "confirm": "Confirm new password",
+      "current": "Current password",
+      "currentRejected": "The current password is incorrect.",
+      "description": "Your other active sessions will be ended after the change.",
+      "mismatch": "The new passwords do not match.",
+      "new": "New password",
+      "requirements": "At least 12 and no more than 128 characters.",
+      "save": "Change password",
+      "saveError": "The password could not be changed. Local password sign-in may not be configured for this account.",
+      "saved": "Your password has been changed.",
+      "saving": "Changing…",
+      "title": "Password",
+      "tooShort": "The new password must contain at least 12 characters."
+    },
+    "profile": {
+      "description": "These details belong directly to your user account.",
+      "displayName": "Name",
+      "email": "Email address",
+      "emailReadOnly": "The sign-in email cannot currently be changed.",
+      "loadErrorDescription": "Your account details could not be loaded. Try again.",
+      "loadErrorTitle": "Account details unavailable",
+      "nameInvalid": "Enter a name containing no more than 120 characters.",
+      "save": "Save changes",
+      "saveError": "The account details could not be saved.",
+      "saved": "Your account details have been saved.",
+      "saving": "Saving…",
+      "title": "Personal details"
+    },
+    "title": "Account"
+  },
+  "accountApiKeys": {
+    "active": "Active",
+    "cancel": "Cancel",
+    "confirmRevoke": "Revoke API key",
+    "create": "Create API key",
+    "createDescription": "Choose only the permissions required by this integration. Permissions never imply one another.",
+    "createError": "The API key could not be created. Check the name, permissions, and expiry.",
+    "createTitle": "Create API key",
+    "creating": "Creating…",
+    "description": "Create separate, revocable credentials for integrations without sharing your password or granting unnecessary system access.",
+    "empty": "No account API keys have been created yet.",
+    "expiry": "Expiry (optional)",
+    "expiryHint": "Leave empty for a key without automatic expiry.",
+    "listDescription": "Only safe metadata is shown. API key secrets cannot be viewed again.",
+    "listTitle": "Existing API keys",
+    "loadErrorDescription": "The account API keys could not be loaded. Try again.",
+    "loadErrorTitle": "Loading failed",
+    "name": "Name",
+    "nameRequired": "Enter a name for the API key.",
+    "navigation": "Manage account API keys",
+    "never": "Never",
+    "permissionRequired": "Select at least one permission.",
+    "permissions": "Permissions",
+    "revoke": "Revoke",
+    "revokeDescription": "This integration will immediately lose access. Other API keys are not affected.",
+    "revokeError": "The API key could not be revoked. Try again.",
+    "revokeSuccess": "The API key was revoked.",
+    "revokeTitle": "Revoke {{name}}?",
+    "revoked": "Revoked",
+    "scopes": {
+      "systemsRead": {
+        "description": "Read system and equipment configuration.",
+        "label": "Read systems",
+        "short": "Systems: read"
+      },
+      "systemsWrite": {
+        "description": "Change system and equipment configuration. Grant only when required.",
+        "label": "Change systems",
+        "short": "Systems: change"
+      },
+      "telemetryRead": {
+        "description": "Read PV measurements, reports, and statistics.",
+        "label": "Read PV data",
+        "short": "PV data: read"
+      },
+      "telemetryWrite": {
+        "description": "Upload PV measurements without receiving read access.",
+        "label": "Upload PV data",
+        "short": "PV data: upload"
+      }
+    },
+    "secret": {
+      "close": "Close one-time API key",
+      "copied": "Copied",
+      "copy": "Copy API key",
+      "description": "Copy this API key now. For security, PVLog stores only its hash and cannot display it again.",
+      "label": "New API key",
+      "title": "Your new API key"
+    },
+    "table": {
+      "actions": "Actions",
+      "created": "Created",
+      "expires": "Expires",
+      "name": "Name",
+      "permissions": "Permissions",
+      "status": "Status"
+    },
+    "title": "Account API keys"
+  },
+  "system": {
+    "tabs": {
+      "charts": "Charts",
+      "dataQuality": "Data quality"
+    },
+    "tabsLabel": "System sections"
+  }
+}

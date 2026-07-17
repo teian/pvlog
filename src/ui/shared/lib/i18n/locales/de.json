@@ -51,21 +51,25 @@
         "title": "Anmeldung abgeschlossen"
       }
     },
+    "brandDescription": "Echtzeitüberwachung der Produktion, Fehlererkennung und Berichte für deine PV-Anlagen.",
     "continueWith": "Weiter mit {{name}}",
     "displayName": "Anzeigename",
     "email": "E-Mail-Adresse",
     "forgotPassword": "Passwort vergessen?",
-    "loginDescription": "Verwende ein lokales Konto oder einen konfigurierten externen Connector.",
+    "emailPlaceholder": "du@unternehmen.de",
+    "loginDescription": "Greife auf dein PVLog-Konto zu.",
     "loginFailed": "Die Anmeldedaten konnten nicht bestätigt werden.",
-    "loginTitle": "Bei PVLog anmelden",
+    "loginTitle": "Anmelden",
     "newPassword": "Neues Passwort",
+    "or": "oder",
     "password": "Passwort",
     "recoveryDescription": "Gib deine E-Mail-Adresse ein, um einen Wiederherstellungslink anzufordern.",
     "recoverySent": "Falls das Konto existiert, wurde ein Wiederherstellungslink versendet.",
     "recoveryTitle": "Konto wiederherstellen",
     "sendRecovery": "Wiederherstellungslink senden",
     "signOut": "Abmelden",
-    "signIn": "Anmelden"
+    "signIn": "Anmelden",
+    "signInWith": "Mit {{name}} anmelden"
   },
   "charts": {
     "actualResolution": {
@@ -86,6 +90,7 @@
       "grid": "Netz"
     },
     "compareToggle": "Mit vorherigem Zeitraum vergleichen",
+    "description": "Prüfe gemessene Erzeugungs- und Betriebsdaten über begrenzte Zeiträume.",
     "comparisonSummary": "Vorheriger Zeitraum im Schnitt {{average}} {{unit}} ({{delta}} % ggü. aktuell).",
     "export": {
       "csv": "CSV exportieren",
@@ -157,6 +162,7 @@
   },
   "dashboard": {
     "accepted": "{{count}} heute angenommen",
+    "activeAlertDescription": "Prüfe die betroffene Anlage und ihre neuesten Messwerte.",
     "alertState": { "open": "Offen", "resolved": "Gelöst" },
     "alertsDescription": "Letzte Änderungen des Warnungsstatus.",
     "alertsTitle": "Letzte Warnungen",
@@ -164,6 +170,7 @@
     "coverageDescription": "{{value}} % der erwarteten Intervalle sind verfügbar.",
     "coverageLabel": "Datenabdeckung",
     "coverageTitle": "Datenabdeckung",
+    "fault": "Störung",
     "ingestionDescription": "Aktuelle Verarbeitungslatenz: {{lag}} Sekunden.",
     "ingestionTitle": "Erfassungszustand",
     "kpi": {
@@ -180,7 +187,9 @@
     "stale": "Die letzten Daten sind {{age}} Sekunden alt; Live-Werte werden nicht angezeigt.",
     "staleDescription": "Prüfe Uploader und Erfassungszustand, bevor du anhand dieser Werte handelst.",
     "staleTitle": "Live-Daten sind veraltet",
-    "title": "Betriebsübersicht",
+    "systemSummary_one": "{{count}} Anlage · Heute · {{date}}",
+    "systemSummary_other": "{{count}} Anlagen · Heute · {{date}}",
+    "title": "Alle Anlagen",
     "unavailable": "Nicht verfügbar"
   },
   "dataQuality": {
@@ -228,21 +237,187 @@
   "errors": {
     "boundaryDescription": "Lade die Seite neu oder kehre später zurück.",
     "boundaryTitle": "Diese Ansicht konnte nicht angezeigt werden",
+    "forbiddenCardDescription": "Deiner zugewiesenen Rolle fehlt die für diese Seite erforderliche Berechtigung. Wende dich an die Administration, wenn du Zugriff benötigst.",
+    "forbiddenCardTitle": "Berechtigung erforderlich",
     "forbiddenDescription": "Dein Konto darf diese Ansicht nicht öffnen.",
-    "forbiddenTitle": "Zugriff verweigert"
+    "forbiddenTitle": "Zugriff verweigert",
+    "returnToDashboard": "Zurück zum Dashboard"
+  },
+  "reporting": {
+    "loading": "Berichtsdaten werden geladen…",
+    "errorTitle": "Berichtsdaten nicht verfügbar",
+    "errorDescription": "Die angeforderten Anlagendaten konnten nicht geladen werden.",
+    "emptyTitle": "Keine Anlagen eingerichtet",
+    "emptyDescription": "Lege unter Verwalten eine Anlage an, um diese Ansicht zu verwenden.",
+    "noMeasurements": "Es sind noch keine aggregierten Messwerte verfügbar.",
+    "period": "Zeitraum",
+    "generation": "Erzeugung",
+    "consumption": "Verbrauch",
+    "coverage": "Abdeckung",
+    "systems": {
+      "title": "Alle Anlagen",
+      "description": "Für dein Konto verfügbare Anlagen",
+      "cardTitle": "PV-Anlagen",
+      "name": "Anlage",
+      "capacity": "Installierte Leistung",
+      "equipment": "Geräte",
+      "equipmentValue": "{{inverters}} Wechselrichter · {{strings}} Strings",
+      "status": "Status"
+    },
+    "statistics": {
+      "title": "Statistik",
+      "description": "Gesamt- und monatliche Erzeugungswerte",
+      "totalGeneration": "Gesamterzeugung",
+      "totalConsumption": "Gesamtverbrauch",
+      "peak": "Spitzenleistung",
+      "coverage": "Datenabdeckung",
+      "monthly": "Monatliche Erzeugung",
+      "monthlyDescription": "Gespeicherte Konto-Aggregate ohne geschätzte Ersatzwerte."
+    },
+    "seasonal": {
+      "title": "Jahreszeiten",
+      "description": "Erzeugungsmuster über meteorologische Jahreszeiten",
+      "cardTitle": "Saisonale Erzeugung",
+      "cardDescription": "Aus Tagessummen aller verfügbaren Jahre berechnet.",
+      "days": "{{count}} Messtage · durchschnittlich {{average}} pro Tag",
+      "seasons": {
+        "winter": "Winter",
+        "spring": "Frühling",
+        "summer": "Sommer",
+        "autumn": "Herbst"
+      }
+    },
+    "weather": {
+      "title": "Wetter",
+      "description": "Wettervorhersage und daraus abgeleiteter Energieertrag",
+      "cardTitle": "Aktuelle Wettervorhersage",
+      "noAttribution": "Keine Anbieterangabe verfügbar",
+      "noForecast": "Für diese Anlage wurde noch keine Wettervorhersage eingelesen.",
+      "irradiance": "Einstrahlung",
+      "temperature": "Temperatur",
+      "clouds": "Bewölkung",
+      "predicted": "Prognoseenergie"
+    },
+    "lifecycle": {
+      "active": "Aktiv",
+      "archived": "Archiviert",
+      "disabled": "Deaktiviert"
+    }
   },
   "nav": {
-    "account": "Konto {{id}}",
     "administration": "Verwaltung",
+    "allSystems": "Alle Anlagen",
     "alerts": "Warnungen",
     "dashboard": "Übersicht",
-    "system": "Anlage {{id}}"
+    "manage": "Verwalten",
+    "seasonal": "Jahreszeiten",
+    "statistics": "Statistik",
+    "system": "Anlage {{id}}",
+    "systems": "Anlagen",
+    "unavailable": "Diese Ansicht ist noch nicht verfügbar",
+    "weather": "Wetter",
+    "view": "Ansicht"
   },
   "administration": {
     "title": "Verwaltung",
-    "description": "Prüfe deine Anmeldeidentitäten und die für dich sichtbaren Verwaltungsdaten des Kontos.",
+    "description": "Systemkonfiguration für die pvlog-Plattform",
     "unavailableTitle": "Informationen nicht verfügbar",
     "restricted": "Deine aktuelle Rolle erlaubt das Anzeigen dieser Kontodaten nicht.",
+    "save": "Einstellungen speichern",
+    "users": {
+      "title": "Benutzer & Rollen",
+      "description": "Wer auf pvlog zugreifen kann und welche Rechte bestehen.",
+      "invite": "Benutzer einladen",
+      "closeInvite": "Einladungsdialog schließen",
+      "selectRole": "Rolle zuweisen",
+      "roleLabel": "Rolle",
+      "instanceAdministrator": "Instanzadministrator",
+      "deleteLabel": "{{displayName}} löschen",
+      "deleteTitle": "Benutzer löschen?",
+      "deleteDescription": "{{displayName}} aus dieser pvlog-Instanz löschen. Schutzregeln für den letzten Administrator und Eigentümer bleiben aktiv.",
+      "cancelDelete": "Abbrechen",
+      "confirmDelete": "Benutzer löschen",
+      "columns": {
+        "user": "Benutzer",
+        "role": "Rolle",
+        "status": "Status"
+      },
+      "status": {
+        "invited": "Eingeladen",
+        "active": "Aktiv",
+        "disabled": "Deaktiviert",
+        "deleted": "Gelöscht"
+      }
+    },
+    "weatherFeed": {
+      "title": "Wetterdatenquelle der Anlage",
+      "description": "Provider-neutrale Wetterdaten für die Prognose.",
+      "enabled": "Wetterdatenquelle aktivieren",
+      "endpoint": "Endpunkt",
+      "secretRef": "Secret-Referenz für Zugangsdaten"
+    },
+    "email": {
+      "title": "E-Mail — SMTP-Einstellungen",
+      "description": "Ausgehender Mailserver für Alarm-E-Mails.",
+      "enabled": "E-Mail-Benachrichtigungen aktivieren",
+      "recipient": "Empfänger",
+      "host": "Host",
+      "port": "Port",
+      "username": "Benutzername",
+      "credentialSecretRef": "Secret-Referenz für Zugangsdaten",
+      "encryption": "Verschlüsselung",
+      "starttls": "STARTTLS",
+      "tls": "TLS",
+      "none": "Keine"
+    },
+    "navigation": {
+      "label": "Verwaltung",
+      "users": "Benutzer & Rollen",
+      "data-sources": "Datenquellen",
+      "alert-rules": "Alarmregeln",
+      "notifications": "Benachrichtigungen",
+      "retention-backup": "Aufbewahrung & Backup",
+      "system-logs": "Systemprotokolle",
+      "leave": "Verwaltung verlassen"
+    },
+    "alertRules": {
+      "title": "Alarmregeln & Schwellenwerte",
+      "description": "Bedingungen, die einen Anlagenalarm auslösen.",
+      "empty": "Für dieses Konto sind keine Alarmregeln konfiguriert.",
+      "updateError": "Die Alarmregel konnte nicht aktualisiert werden.",
+      "kinds": {
+        "idle": "Auslösen, wenn die Anlage inaktiv bleibt.",
+        "generation_below": "Auslösen, wenn die Erzeugung unter den konfigurierten Schwellenwert fällt.",
+        "consumption_above": "Auslösen, wenn der Verbrauch den konfigurierten Schwellenwert überschreitet.",
+        "net_power_above": "Auslösen, wenn die Netzleistung den konfigurierten Schwellenwert überschreitet.",
+        "standby_cost_above": "Auslösen, wenn die Bereitschaftskosten den Schwellenwert überschreiten.",
+        "performance_below": "Auslösen, wenn die Leistung unter den konfigurierten Schwellenwert fällt.",
+        "battery_below": "Auslösen, wenn der Batteriestand unter den Schwellenwert fällt.",
+        "extended_below": "Nach einem längeren Zeitraum unter dem Schwellenwert auslösen.",
+        "extended_above": "Nach einem längeren Zeitraum über dem Schwellenwert auslösen."
+      }
+    },
+    "notifications": {
+      "title": "Benachrichtigungskanäle",
+      "description": "Wohin Alarme zugestellt werden.",
+      "empty": "Es sind keine Webhook-Benachrichtigungskanäle konfiguriert.",
+      "events_one": "{{count}} abonniertes Ereignis",
+      "events_other": "{{count}} abonnierte Ereignisse",
+      "smtpUnavailable": "E-Mail- und SMTP-Einstellungen gehören zum Deployment und werden von der Browser-API nicht bereitgestellt.",
+      "states": {
+        "pending_verification": "Bestätigung ausstehend",
+        "active": "Aktiv",
+        "disabled": "Deaktiviert"
+      }
+    },
+    "retention": {
+      "title": "Datenaufbewahrung & Backup",
+      "description": "Wie lange Messwerte gespeichert und wie die Daten gesichert werden.",
+      "days": "Aufbewahrungszeitraum der Messwerte (Tage)",
+      "schedule": "Backup-Zeitplan (Cron)",
+      "automatic": "Automatische Backups aktivieren",
+      "runBackup": "Backup jetzt ausführen"
+    },
     "identities": {
       "title": "Verknüpfte Identitäten",
       "description": "Externe Identitäten, die mit diesem Browserkonto verbunden sind.",
@@ -266,7 +441,11 @@
       "enabled": "Aktiv",
       "disabled": "Inaktiv",
       "scopes_one": "{{count}} konfigurierte Berechtigung",
-      "scopes_other": "{{count}} konfigurierte Berechtigungen"
+      "scopes_other": "{{count}} konfigurierte Berechtigungen",
+      "protocols": {
+        "oidc": "OpenID Connect",
+        "oauth2": "OAuth 2.0"
+      }
     },
     "roles": {
       "title": "Rollen",
@@ -278,7 +457,11 @@
       "create": "Rolle erstellen",
       "createError": "Die Rolle konnte nicht erstellt werden.",
       "permissions_one": "{{count}} Berechtigung",
-      "permissions_other": "{{count}} Berechtigungen"
+      "permissions_other": "{{count}} Berechtigungen",
+      "kinds": {
+        "built_in": "Integriert",
+        "custom": "Benutzerdefiniert"
+      }
     },
     "assignments": {
       "title": "Rolle zuweisen",
@@ -292,25 +475,57 @@
       "error": "Die Rollenzuweisung konnte nicht erstellt werden."
     },
     "audit": {
-      "title": "Audit-Protokoll",
-      "description": "Aktuelle Kontoaktionen, die deine Rolle einsehen darf.",
+      "title": "System- / Audit-Protokolle",
+      "description": "Konfigurationsänderungen und Systemereignisse.",
       "empty": "Für dieses Konto sind keine Audit-Ereignisse verfügbar.",
-      "event": "{{target}} · {{outcome}} · {{date}}"
+      "event": "{{target}} · {{outcome}}",
+      "actors": {
+        "anonymous": "Anonym",
+        "user": "Benutzer",
+        "api_credential": "API-Zugang",
+        "system": "System",
+        "worker": "Hintergrunddienst"
+      },
+      "outcomes": {
+        "succeeded": "Erfolgreich",
+        "denied": "Abgelehnt",
+        "failed": "Fehlgeschlagen"
+      },
+      "targets": {
+        "account": "Konto",
+        "instance": "Instanz",
+        "system": "Anlage",
+        "api_credential": "API-Zugang",
+        "external_identity": "Externe Identität",
+        "observation": "Messwert"
+      },
+      "actions": {
+        "account_api_key_list": "API-Keys anzeigen",
+        "account_api_key_issue": "API-Key erstellen",
+        "account_api_key_revoke": "API-Key widerrufen",
+        "administration_email_read": "E-Mail-Einstellungen anzeigen",
+        "administration_retention_read": "Aufbewahrungseinstellungen anzeigen",
+        "administration_weather_read": "Wettereinstellungen anzeigen",
+        "connector_list": "Anmelde-Connectoren anzeigen",
+        "instance_role_list": "Instanzrollen anzeigen",
+        "instance_role_assignment_list": "Instanz-Rollenzuweisungen anzeigen",
+        "user_list": "Benutzer anzeigen"
+      }
     },
     "operations": {
       "title": "Betrieb",
-      "description": "Verfuegbarkeit der Betriebsfunktionen fuer Konto und Instanz.",
+      "description": "Verfügbarkeit der Betriebsfunktionen für Konto und Instanz.",
       "alerts": "Alarmregeln",
       "alertEvents": "Alarmereignisse",
       "webhooks": "Webhooks",
       "importsExports": "Importe und Exporte",
       "workers": "Worker und Dead Letters",
-      "storage": "Speicherintegritaet",
+      "storage": "Speicherintegrität",
       "backups": "Sicherungen",
       "readiness": "Bereitschaft",
-      "unavailable": "Nicht verfuegbar",
-      "available_one": "{{count}} verfuegbar",
-      "available_other": "{{count}} verfuegbar"
+      "unavailable": "Nicht verfügbar",
+      "available_one": "{{count}} verfügbar",
+      "available_other": "{{count}} verfügbar"
     },
     "resources": {
       "title": "Anlagenressourcen",
@@ -429,7 +644,6 @@
     "back": "Zurück",
     "capacity": "Installierte Leistung in Watt",
     "create": "Anlage und Zugang erstellen",
-    "credential": "Name des Uploader-Zugangs",
     "equipment": "Primärer Wechselrichter oder Gerät",
     "instanceName": "Name der Installation",
     "next": "Weiter",
@@ -444,72 +658,6 @@
   },
   "forecasting": {
     "notAvailable": "Nicht verfügbar",
-    "completeness": {
-      "actionRequired": "Konfiguration erforderlich",
-      "capacity": "{{included}} von {{total}} kWp einbezogen ({{percent}} %)",
-      "configureEquipment": "Anlagen- und String-Konfiguration öffnen",
-      "description": "Prüft Standort, Module, Ausrichtung, Leistung und Modellparameter für den wirksamen Zeitraum.",
-      "errorDescription": "Die Angaben zur Bereitschaft sind vorübergehend nicht verfügbar.",
-      "errorTitle": "Prognosebereitschaft konnte nicht geladen werden",
-      "noGaps": "Alle erforderlichen Prognoseeingaben sind vorhanden.",
-      "ready": "Prognosebereit",
-      "title": "Bereitschaft der Prognoseeingaben"
-    },
-    "reasons": {
-      "incompatible_input_run": "Der Wetterlauf ist mit dieser Konfiguration nicht kompatibel.",
-      "insufficient_actual_coverage": "Die Abdeckung der Ist-Erzeugung ist unzureichend.",
-      "insufficient_weather_coverage": "Die Wetterabdeckung ist unzureichend.",
-      "missing_actual_telemetry": "Telemetrie zur Ist-Erzeugung fehlt.",
-      "missing_forecast_settings": "Einstellungen für Verluste und Kalibrierung fehlen.",
-      "missing_module_capacity": "Bei einem PV-String fehlt die Modulleistung.",
-      "missing_module_identity": "Bei einem PV-String fehlt die Modulidentität.",
-      "missing_module_specification": "Eine Modulspezifikation ist unvollständig.",
-      "missing_orientation": "Bei einem PV-String fehlt die Ausrichtung.",
-      "missing_system_location": "Der Anlagenstandort fehlt.",
-      "missing_tilt": "Bei einem PV-String fehlt die Neigung.",
-      "missing_weather_input": "Es sind keine geeigneten Wetterdaten verfügbar.",
-      "no_effective_equipment": "Für diesen Zeitraum gibt es keine wirksame PV-Ausrüstung.",
-      "non_positive_expected_energy": "Die erwartete Erzeugung ist in diesem Intervall nicht positiv.",
-      "partial_effective_capacity": "Nur ein Teil der wirksamen Nennleistung kann modelliert werden.",
-      "unsupported_weather_input": "Die Wetterdaten enthalten nicht unterstützte Werte."
-    },
-    "settings": {
-      "calibrationBasisPoints": "Kalibrierung (Basispunkte)",
-      "description": "Begrenzte Verluste und Kalibrierung ab dem gewählten Zeitpunkt anwenden, ohne Messdaten oder bestätigte Geräte zu verändern.",
-      "effectiveFrom": "Wirksam ab (Epoch-Millisekunden)",
-      "effectiveTo": "Wirksam bis (optionale Epoch-Millisekunden)",
-      "errorDescription": "Die wirksamen Einstellungen sind vorübergehend nicht verfügbar.",
-      "errorTitle": "Prognoseeinstellungen konnten nicht geladen werden",
-      "mismatchBasisPoints": "Mismatch-Verlust (Basispunkte)",
-      "model": "Modellkennung",
-      "revision": "Modellrevision",
-      "save": "Prognoseeinstellungen speichern",
-      "saveError": "Die Einstellungen konnten nicht gespeichert werden. Bitte neu laden und erneut versuchen.",
-      "saved": "Einstellungen gespeichert; betroffene Prognosen werden neu berechnet.",
-      "saving": "Wird gespeichert…",
-      "shadingBasisPoints": "Verschattungsverlust (Basispunkte)",
-      "soilingBasisPoints": "Verschmutzungsverlust (Basispunkte)",
-      "title": "Wirksame Verlust- und Kalibrierungseinstellungen",
-      "unavailabilityBasisPoints": "Nichtverfügbarkeitsverlust (Basispunkte)",
-      "wiringBasisPoints": "Verkabelungsverlust (Basispunkte)"
-    }
-  },
-  "shell": {
-    "closeNavigation": "Navigation schließen",
-    "openNavigation": "Navigation öffnen",
-    "primaryNavigation": "Hauptnavigation",
-    "skip": "Zum Hauptinhalt springen",
-    "theme": "Farbschema ändern",
-    "title": "Photovoltaik-Betrieb"
-  },
-  "system": {
-    "tabs": {
-      "charts": "Diagramme",
-      "dataQuality": "Datenqualität"
-    },
-    "tabsLabel": "Anlagenbereiche"
-  }
-}
     "notAvailableReason": "Nicht verfügbar: {{reason}}",
     "capacityKwp": "{{included}} von {{total}} kWp",
     "coverage": "Abdeckung",
@@ -579,3 +727,311 @@
       "tableCaption": "Ist- und Modellerzeugung mit ausdrücklichem Verfügbarkeitsgrund",
       "title": "Erwartete und tatsächliche Erzeugung"
     },
+    "completeness": {
+      "actionRequired": "Konfiguration erforderlich",
+      "capacity": "{{included}} von {{total}} kWp einbezogen ({{percent}} %)",
+      "configureEquipment": "Anlagen- und String-Konfiguration öffnen",
+      "description": "Prüft Standort, Module, Ausrichtung, Leistung und Modellparameter für den wirksamen Zeitraum.",
+      "errorDescription": "Die Angaben zur Bereitschaft sind vorübergehend nicht verfügbar.",
+      "errorTitle": "Prognosebereitschaft konnte nicht geladen werden",
+      "noGaps": "Alle erforderlichen Prognoseeingaben sind vorhanden.",
+      "ready": "Prognosebereit",
+      "title": "Bereitschaft der Prognoseeingaben"
+    },
+    "reasons": {
+      "incompatible_input_run": "Der Wetterlauf ist mit dieser Konfiguration nicht kompatibel.",
+      "insufficient_actual_coverage": "Die Abdeckung der Ist-Erzeugung ist unzureichend.",
+      "insufficient_weather_coverage": "Die Wetterabdeckung ist unzureichend.",
+      "missing_actual_telemetry": "Telemetrie zur Ist-Erzeugung fehlt.",
+      "missing_forecast_settings": "Einstellungen für Verluste und Kalibrierung fehlen.",
+      "missing_module_capacity": "Bei einem PV-String fehlt die Modulleistung.",
+      "missing_module_identity": "Bei einem PV-String fehlt die Modulidentität.",
+      "missing_module_specification": "Eine Modulspezifikation ist unvollständig.",
+      "missing_orientation": "Bei einem PV-String fehlt die Ausrichtung.",
+      "missing_system_location": "Der Anlagenstandort fehlt.",
+      "missing_tilt": "Bei einem PV-String fehlt die Neigung.",
+      "missing_weather_input": "Es sind keine geeigneten Wetterdaten verfügbar.",
+      "no_effective_equipment": "Für diesen Zeitraum gibt es keine wirksame PV-Ausrüstung.",
+      "non_positive_expected_energy": "Die erwartete Erzeugung ist in diesem Intervall nicht positiv.",
+      "partial_effective_capacity": "Nur ein Teil der wirksamen Nennleistung kann modelliert werden.",
+      "unsupported_weather_input": "Die Wetterdaten enthalten nicht unterstützte Werte."
+    },
+    "settings": {
+      "calibrationBasisPoints": "Kalibrierung (Basispunkte)",
+      "description": "Begrenzte Verluste und Kalibrierung ab dem gewählten Zeitpunkt anwenden, ohne Messdaten oder bestätigte Geräte zu verändern.",
+      "effectiveFrom": "Wirksam ab (Epoch-Millisekunden)",
+      "effectiveTo": "Wirksam bis (optionale Epoch-Millisekunden)",
+      "errorDescription": "Die wirksamen Einstellungen sind vorübergehend nicht verfügbar.",
+      "errorTitle": "Prognoseeinstellungen konnten nicht geladen werden",
+      "mismatchBasisPoints": "Mismatch-Verlust (Basispunkte)",
+      "model": "Modellkennung",
+      "revision": "Modellrevision",
+      "save": "Prognoseeinstellungen speichern",
+      "saveError": "Die Einstellungen konnten nicht gespeichert werden. Bitte neu laden und erneut versuchen.",
+      "saved": "Einstellungen gespeichert; betroffene Prognosen werden neu berechnet.",
+      "saving": "Wird gespeichert…",
+      "shadingBasisPoints": "Verschattungsverlust (Basispunkte)",
+      "soilingBasisPoints": "Verschmutzungsverlust (Basispunkte)",
+      "title": "Wirksame Verlust- und Kalibrierungseinstellungen",
+      "unavailabilityBasisPoints": "Nichtverfügbarkeitsverlust (Basispunkte)",
+      "wiringBasisPoints": "Verkabelungsverlust (Basispunkte)"
+    }
+  },
+  "shell": {
+    "brandTagline": "Offenes PV-Monitoring",
+    "closeNavigation": "Navigation schließen",
+    "footer": "Open Source · selbst gehostet",
+    "openNavigation": "Navigation öffnen",
+    "primaryNavigation": "Hauptnavigation",
+    "skip": "Zum Hauptinhalt springen",
+    "theme": "Farbschema ändern",
+    "title": "Photovoltaik-Betrieb"
+  },
+  "systemManagement": {
+    "actions": {
+      "addSystem": "Anlage hinzufügen",
+      "backToManagement": "Zurück zur Anlagenverwaltung",
+      "cancel": "Abbrechen",
+      "createSystem": "Anlage anlegen",
+      "decreaseInverters": "Wechselrichteranzahl verringern",
+      "delete": "Löschen",
+      "deleteInverter": "Wechselrichter {{number}} löschen",
+      "deleteShading": "Verschattungszeitraum löschen",
+      "deleteString": "String {{name}} löschen",
+      "deleteSystem": "Anlage {{name}} löschen",
+      "edit": "Bearbeiten",
+      "increaseInverters": "Wechselrichteranzahl erhöhen",
+      "saving": "Wird gespeichert…",
+      "search": "Suchen",
+      "toggle": "Details für {{name}} ein- oder ausblenden",
+      "updateSystem": "Änderungen speichern"
+    },
+    "delete": {
+      "description": "{{name}} und die zugehörige Konfiguration werden dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
+      "title": "Anlage wirklich löschen?"
+    },
+    "description": "Verwalte Anlagen, Wechselrichter und PV-Strings an einem Ort.",
+    "empty": {
+      "description": "Lege deine erste Anlage an, um Wechselrichter und Strings zu konfigurieren.",
+      "title": "Noch keine Anlage vorhanden"
+    },
+    "emptyInverter": "Noch keine Strings konfiguriert.",
+    "errors": {
+      "loadDescription": "Die Anlagenkonfiguration ist derzeit nicht verfügbar. Bitte versuche es erneut.",
+      "loadTitle": "Anlagen konnten nicht geladen werden",
+      "saveConflictDescription": "Die Anlage wurde zwischenzeitlich geändert. Lade die Seite neu und übernimm deine Änderungen erneut.",
+      "saveDescription": "Die Änderungen konnten nicht gespeichert werden. Prüfe deine Eingaben und versuche es erneut.",
+      "saveForbiddenDescription": "Du hast keine Berechtigung, Anlagen in diesem Konto zu speichern.",
+      "saveTitle": "Speichern fehlgeschlagen",
+      "saveUnavailableDescription": "Der Speicherdienst ist derzeit nicht verfügbar. Versuche es später erneut.",
+      "saveValidationDescription": "Der Server hat die Anlagendaten abgelehnt. Prüfe Anlagenname und Zeitzone und versuche es erneut."
+    },
+    "inverterSummary": "{{count}} Strings · {{kwp}} kWp",
+    "noLocation": "Standort noch nicht hinterlegt",
+    "orientation": {
+      "east": "Ost",
+      "north": "Nord",
+      "northEast": "Nordost",
+      "northWest": "Nordwest",
+      "south": "Süd",
+      "southEast": "Südost",
+      "southWest": "Südwest",
+      "unknown": "Unbekannt",
+      "west": "West"
+    },
+    "status": {
+      "active": "Aktiv",
+      "activeUpper": "AKTIV",
+      "inactive": "Inaktiv",
+      "inactiveUpper": "INAKTIV",
+      "offline": "OFFLINE",
+      "online": "ONLINE"
+    },
+    "stringDescription": "{{count}} × {{watts}} Wp · {{orientation}}",
+    "subtitle": "{{count}} Anlagen konfiguriert",
+    "success": {
+      "created": "Anlage erfolgreich angelegt",
+      "description": "{{name}} ist jetzt in der Anlagenverwaltung verfügbar.",
+      "updated": "Anlage erfolgreich aktualisiert"
+    },
+    "summary": "{{inverters}} Wechselrichter · {{strings}} Strings",
+    "title": "Anlagenverwaltung",
+    "units": {
+      "kwMax": "kW max.",
+      "kwp": "kWp"
+    },
+    "wizard": {
+      "addInverter": "Wechselrichter hinzufügen",
+      "addShading": "Verschattung hinzufügen",
+      "addString": "String zu Wechselrichter {{number}} hinzufügen",
+      "advanced": "Erweiterte Einstellungen",
+      "azimuth": "Azimut (°)",
+      "catalogPlaceholder": "Hersteller oder Modell suchen",
+      "catalogLoading": "Katalog wird geladen…",
+      "createTitle": "Neue Anlage anlegen",
+      "editTitle": "Anlage bearbeiten",
+      "footerHint": "Alle Änderungen werden gemeinsam gespeichert.",
+      "inverterCatalog": "Wechselrichterkatalog",
+      "inverterOptionDetails": "{{power}} W · {{mppts}} MPPT · {{phases}}-phasig",
+      "inverterSearchPlaceholder": "Hersteller oder Typ suchen",
+      "inverterCount": "Anzahl Wechselrichter",
+      "inverterDescription": "Wähle Modelle aus dem Katalog oder trage die technischen Werte manuell ein.",
+      "inverterNumber": "Wechselrichter {{number}}",
+      "inverters": "Wechselrichter",
+      "location": "Standort",
+      "locationError": "Die Adresse konnte derzeit nicht aufgelöst werden. Bitte versuche es erneut.",
+      "locationNotFound": "Für diese Adresse wurde kein passender Standort gefunden.",
+      "maxPower": "Max. Leistung (W)",
+      "manualEntry": "Manuell eingeben",
+      "manualInverterDescription": "Kenndaten selbst erfassen",
+      "manualModuleDescription": "Moduldaten selbst erfassen",
+      "modelName": "Modell / Bezeichnung",
+      "moduleCatalog": "Modulkatalog",
+      "moduleCount": "Module",
+      "modulePlaceholder": "Modulhersteller oder Modell suchen",
+      "moduleOptionDetails": "{{power}} Wp · {{temperatureCoefficient}} %/°C",
+      "moduleSearchPlaceholder": "Modulhersteller oder Typ suchen",
+      "modulePower": "Leistung (Wp)",
+      "mppts": "MPPTs",
+      "noCatalogMatches": "Kein passender Katalogeintrag.",
+      "orientation": "Ausrichtung",
+      "overrideCatalog": "Katalogwerte manuell überschreiben",
+      "phases": "Phasen",
+      "shading": {
+        "degree": "Verschattung (%)",
+        "from": "Von",
+        "label": "Beschreibung",
+        "to": "Bis"
+      },
+      "status": "Status",
+      "stringName": "String-Bezeichnung",
+      "strings": "PV-Strings",
+      "stringsDescription": "Ordne jedem Wechselrichter seine Modulgruppen, Ausrichtung und Detailparameter zu.",
+      "stringsForInverter": "Strings für Wechselrichter {{number}}",
+      "subtitle": "Konfiguriere Stammdaten und technische Komponenten in einem Schritt.",
+      "systemData": "Anlagendaten",
+      "systemName": "Anlagenname",
+      "temperatureCoefficient": "Temperaturkoeffizient (%/°C)",
+      "tilt": "Neigung (°)",
+      "validation": {
+        "blocked": "Speichern nicht möglich: {{reason}}",
+        "inverterName": "Die Bezeichnung für Wechselrichter {{number}} fehlt.",
+        "moduleCount": "Die Modulanzahl für String {{string}} an Wechselrichter {{inverter}} muss größer als 0 sein.",
+        "modulePower": "Die Modulleistung für String {{string}} an Wechselrichter {{inverter}} muss größer als 0 sein.",
+        "stringName": "Die Bezeichnung für String {{string}} an Wechselrichter {{inverter}} fehlt.",
+        "strings": "Wechselrichter {{number}} benötigt mindestens einen PV-String.",
+        "systemName": "Der Anlagenname fehlt."
+      }
+    }
+  },
+  "account": {
+    "description": "Verwalte deine persönlichen Daten, dein Passwort und die Zugänge für Integrationen.",
+    "navigation": "Konto verwalten",
+    "password": {
+      "confirm": "Neues Passwort bestätigen",
+      "current": "Aktuelles Passwort",
+      "currentRejected": "Das aktuelle Passwort ist nicht korrekt.",
+      "description": "Nach der Änderung werden deine anderen aktiven Sitzungen beendet.",
+      "mismatch": "Die neuen Passwörter stimmen nicht überein.",
+      "new": "Neues Passwort",
+      "requirements": "Mindestens 12 und höchstens 128 Zeichen.",
+      "save": "Passwort ändern",
+      "saveError": "Das Passwort konnte nicht geändert werden. Lokale Passwortanmeldung ist für dieses Konto möglicherweise nicht eingerichtet.",
+      "saved": "Dein Passwort wurde geändert.",
+      "saving": "Wird geändert…",
+      "title": "Passwort",
+      "tooShort": "Das neue Passwort muss mindestens 12 Zeichen lang sein."
+    },
+    "profile": {
+      "description": "Diese Angaben gehören direkt zu deinem Benutzerkonto.",
+      "displayName": "Name",
+      "email": "E-Mail-Adresse",
+      "emailReadOnly": "Die Anmelde-E-Mail kann derzeit nicht geändert werden.",
+      "loadErrorDescription": "Deine Kontodaten konnten nicht geladen werden. Versuche es erneut.",
+      "loadErrorTitle": "Kontodaten nicht verfügbar",
+      "nameInvalid": "Gib einen Namen mit höchstens 120 Zeichen ein.",
+      "save": "Änderungen speichern",
+      "saveError": "Die Kontodaten konnten nicht gespeichert werden.",
+      "saved": "Deine Kontodaten wurden gespeichert.",
+      "saving": "Wird gespeichert…",
+      "title": "Persönliche Daten"
+    },
+    "title": "Konto"
+  },
+  "accountApiKeys": {
+    "active": "Aktiv",
+    "cancel": "Abbrechen",
+    "confirmRevoke": "API-Key widerrufen",
+    "create": "API-Key erstellen",
+    "createDescription": "Wähle nur die Berechtigungen, die diese Integration benötigt. Berechtigungen schließen einander nicht automatisch ein.",
+    "createError": "Der API-Key konnte nicht erstellt werden. Prüfe Name, Berechtigungen und Ablaufdatum.",
+    "createTitle": "API-Key erstellen",
+    "creating": "Wird erstellt…",
+    "description": "Erstelle getrennte, widerrufbare Zugangsdaten für Integrationen, ohne dein Passwort oder unnötige Anlagenrechte weiterzugeben.",
+    "empty": "Es wurden noch keine Konto-API-Keys erstellt.",
+    "expiry": "Ablaufzeitpunkt (optional)",
+    "expiryHint": "Leer lassen, wenn der Key nicht automatisch ablaufen soll.",
+    "listDescription": "Es werden nur sichere Metadaten angezeigt. API-Key-Secrets können nicht erneut angezeigt werden.",
+    "listTitle": "Vorhandene API-Keys",
+    "loadErrorDescription": "Die Konto-API-Keys konnten nicht geladen werden. Versuche es erneut.",
+    "loadErrorTitle": "Laden fehlgeschlagen",
+    "name": "Name",
+    "nameRequired": "Gib einen Namen für den API-Key ein.",
+    "navigation": "Konto-API-Keys verwalten",
+    "never": "Nie",
+    "permissionRequired": "Wähle mindestens eine Berechtigung aus.",
+    "permissions": "Berechtigungen",
+    "revoke": "Widerrufen",
+    "revokeDescription": "Diese Integration verliert sofort den Zugriff. Andere API-Keys bleiben unverändert.",
+    "revokeError": "Der API-Key konnte nicht widerrufen werden. Versuche es erneut.",
+    "revokeSuccess": "Der API-Key wurde widerrufen.",
+    "revokeTitle": "{{name}} widerrufen?",
+    "revoked": "Widerrufen",
+    "scopes": {
+      "systemsRead": {
+        "description": "Anlagen- und Wechselrichterkonfiguration lesen.",
+        "label": "Anlagen lesen",
+        "short": "Anlagen: lesen"
+      },
+      "systemsWrite": {
+        "description": "Anlagen- und Wechselrichterkonfiguration ändern. Nur bei Bedarf vergeben.",
+        "label": "Anlagen ändern",
+        "short": "Anlagen: ändern"
+      },
+      "telemetryRead": {
+        "description": "PV-Messwerte, Berichte und Statistiken lesen.",
+        "label": "PV-Daten lesen",
+        "short": "PV-Daten: lesen"
+      },
+      "telemetryWrite": {
+        "description": "PV-Messwerte hochladen, ohne Lesezugriff zu erhalten.",
+        "label": "PV-Daten hochladen",
+        "short": "PV-Daten: hochladen"
+      }
+    },
+    "secret": {
+      "close": "Einmaligen API-Key schließen",
+      "copied": "Kopiert",
+      "copy": "API-Key kopieren",
+      "description": "Kopiere diesen API-Key jetzt. PVLog speichert aus Sicherheitsgründen nur seinen Hash und kann ihn später nicht erneut anzeigen.",
+      "label": "Neuer API-Key",
+      "title": "Dein neuer API-Key"
+    },
+    "table": {
+      "actions": "Aktionen",
+      "created": "Erstellt",
+      "expires": "Läuft ab",
+      "name": "Name",
+      "permissions": "Berechtigungen",
+      "status": "Status"
+    },
+    "title": "Konto-API-Keys"
+  },
+  "system": {
+    "tabs": {
+      "charts": "Diagramme",
+      "dataQuality": "Datenqualität"
+    },
+    "tabsLabel": "Anlagenbereiche"
+  }
+}
