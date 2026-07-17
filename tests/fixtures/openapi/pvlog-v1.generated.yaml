@@ -30,7 +30,7 @@ tags:
   - name: Notifications
     description: Alert rules, events, webhook subscriptions, and delivery attempts
   - name: Authentication
-    description: Browser sessions and local authentication lifecycle
+    description: Browser sessions, local authentication, and account API-key lifecycle
   - name: Administration
     description: Authorized account, role, identity, and audit administration
 paths:
@@ -139,16 +139,236 @@ paths:
         "406": { $ref: "#/components/responses/NotAcceptable" }
         "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
   /api/v1/admin/users:
+    get:
+      operationId: listLocalUsers
+      summary: List local users
+      description: Returns administrator-visible local user metadata without credentials.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Local users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdministrationUser" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
     post:
       operationId: createLocalUser
       summary: Create a local user
       description: Creates an administrator-managed local user without exposing credential material.
       tags: [Administration]
       security: [{ sessionCookie: [] }]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/FreeFormObject" } },
+            },
+        }
       responses:
-        "201": { description: User created, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+        "201":
+          {
+            description: User created,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/FreeFormObject" } },
+              },
+          }
         "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/weather-feed:
+    get:
+      operationId: getWeatherFeedSettings
+      tags: [Administration]
+      summary: Read the provider-neutral weather feed settings
+      description: Returns the configured weather source without resolving or exposing credential secrets.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Weather feed settings
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/WeatherFeedSettings" },
+                },
+            }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+    put:
+      operationId: updateWeatherFeedSettings
+      tags: [Administration]
+      summary: Update the provider-neutral weather feed settings
+      description: Persists weather source settings and a reference to separately managed credentials.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/WeatherFeedSettings" } },
+          }
+      responses:
+        "200":
+          description: Updated weather feed settings
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/WeatherFeedSettings" },
+                },
+            }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/weather-feed/test:
+    post:
+      operationId: testWeatherFeedConnection
+      tags: [Administration]
+      summary: Test weather feed network reachability
+      description: Checks whether the configured weather source host and port are reachable.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Reachability result
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/ConnectionTestResult" },
+                },
+            }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/email-notifications:
+    get:
+      operationId: getEmailNotificationSettings
+      tags: [Administration]
+      summary: Read SMTP notification settings
+      description: Returns SMTP delivery settings while exposing only a credential secret reference.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: SMTP notification settings
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    { $ref: "#/components/schemas/EmailNotificationSettings" },
+                },
+            }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+    put:
+      operationId: updateEmailNotificationSettings
+      tags: [Administration]
+      summary: Update SMTP notification settings
+      description: Persists SMTP delivery settings and a reference to separately managed credentials.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              {
+                schema:
+                  { $ref: "#/components/schemas/EmailNotificationSettings" },
+              },
+          }
+      responses:
+        "200":
+          description: Updated SMTP notification settings
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    { $ref: "#/components/schemas/EmailNotificationSettings" },
+                },
+            }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/email-notifications/test:
+    post:
+      operationId: testEmailNotificationConnection
+      tags: [Administration]
+      summary: Test SMTP network reachability
+      description: Checks whether the configured SMTP host and port are reachable.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Reachability result
+          content:
+            {
+              application/json:
+                {
+                  schema: { $ref: "#/components/schemas/ConnectionTestResult" },
+                },
+            }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/retention-backup:
+    get:
+      operationId: getRetentionBackupSettings
+      tags: [Administration]
+      summary: Read retention and backup settings
+      description: Returns the instance retention period, backup schedule, and last backup metadata.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Retention and backup settings
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    { $ref: "#/components/schemas/RetentionBackupSettings" },
+                },
+            }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+    put:
+      operationId: updateRetentionBackupSettings
+      tags: [Administration]
+      summary: Update retention and backup settings
+      description: Persists the instance retention period and automatic backup schedule.
+      security: [{ sessionCookie: [] }]
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              {
+                schema:
+                  { $ref: "#/components/schemas/RetentionBackupSettings" },
+              },
+          }
+      responses:
+        "200":
+          description: Updated retention and backup settings
+          content:
+            {
+              application/json:
+                {
+                  schema:
+                    { $ref: "#/components/schemas/RetentionBackupSettings" },
+                },
+            }
+        "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/backups:
+    post:
+      operationId: runInstanceBackup
+      tags: [Administration]
+      summary: Run an immediate verified instance backup
+      description: Creates a versioned operator bundle. PostgreSQL deployments require an external backup hook and return 501 otherwise.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "201":
+          description: Backup completed
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/BackupResult" } },
+            }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "501": { $ref: "#/components/responses/Problem" }
   /api/v1/admin/users/{id}:
     parameters: [{ $ref: "#/components/parameters/UserId" }]
     delete:
@@ -168,9 +388,25 @@ paths:
       description: Activates an invited or administrator-created local user.
       tags: [Administration]
       security: [{ sessionCookie: [] }]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/FreeFormObject" } },
+            },
+        }
       responses:
-        "200": { description: User activated, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+        "200":
+          {
+            description: User activated,
+            content:
+              {
+                application/json:
+                  { schema: { $ref: "#/components/schemas/FreeFormObject" } },
+              },
+          }
         "400": { $ref: "#/components/responses/Problem" }
   /api/v1/admin/users/{id}/disable:
     parameters: [{ $ref: "#/components/parameters/UserId" }]
@@ -202,7 +438,15 @@ paths:
       description: Sets the initial password under the configured password policy.
       tags: [Administration]
       security: [{ sessionCookie: [] }]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/FreeFormObject" } },
+            },
+        }
       responses:
         "204": { description: Password set }
         "400": { $ref: "#/components/responses/Problem" }
@@ -213,7 +457,15 @@ paths:
       description: Registers a local user when instance self-registration policy permits it.
       tags: [Authentication]
       security: []
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/FreeFormObject" } },
+            },
+        }
       responses:
         "202": { description: Registration accepted }
         "400": { $ref: "#/components/responses/Problem" }
@@ -224,10 +476,21 @@ paths:
       description: Changes a password after current-password verification and revokes other sessions.
       tags: [Authentication]
       security: [{ sessionCookie: [] }]
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      parameters: [{ $ref: "#/components/parameters/CsrfToken" }]
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/ChangePassword" } },
+            },
+        }
       responses:
-        "204": { description: Password changed }
-        "400": { $ref: "#/components/responses/Problem" }
+        "204": { description: Password changed; all other sessions are revoked }
+        "401": { $ref: "#/components/responses/Problem" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/auth/password-recovery:
     post:
       operationId: requestPasswordRecovery
@@ -235,7 +498,15 @@ paths:
       description: Returns an enumeration-resistant acceptance response and emits a single-use token out of band.
       tags: [Authentication]
       security: []
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/FreeFormObject" } },
+            },
+        }
       responses:
         "202": { description: Recovery request accepted }
         "400": { $ref: "#/components/responses/Problem" }
@@ -246,34 +517,147 @@ paths:
       description: Consumes a single-use recovery token and rotates the local password.
       tags: [Authentication]
       security: []
-      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/FreeFormObject" } } } }
+      requestBody:
+        {
+          required: true,
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/FreeFormObject" } },
+            },
+        }
       responses:
         "204": { description: Recovery completed }
         "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/account/profile:
+    get:
+      operationId: getCurrentUserProfile
+      summary: Read the current user's profile
+      description: Returns safe identity data for the cookie-authenticated user. No account or user identifier is accepted.
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Current user's safe profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CurrentUserProfile" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+    put:
+      operationId: updateCurrentUserProfile
+      summary: Update the current user's profile
+      description: Changes only the current user's display name. Login-email changes require a separate verified workflow and are not accepted here.
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfToken" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateCurrentUserProfile" }
+      responses:
+        "200":
+          description: Updated current-user profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CurrentUserProfile" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+  /api/v1/account/api-keys:
+    get:
+      operationId: listAccountApiKeys
+      summary: List current-account API keys
+      description: Returns safe metadata for API keys owned by the authenticated user's implicit account. Cleartext keys and digests are never returned.
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: API-key metadata ordered by newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AccountApiKey" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+    post:
+      operationId: createAccountApiKey
+      summary: Create a current-account API key
+      description: Creates one independently revocable bearer key. The apiKey property is returned by this operation exactly once and cannot be recovered later.
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfToken" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateAccountApiKey" }
+            examples:
+              uploadOnly:
+                summary: Upload PV telemetry without read or configuration access
+                value:
+                  name: Home automation uploader
+                  scopes: [telemetry:write]
+      responses:
+        "201":
+          description: API key created; copy apiKey now because it is never returned again
+          headers:
+            Cache-Control:
+              schema: { type: string, const: no-store }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IssuedAccountApiKey" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "409": { $ref: "#/components/responses/ConflictProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+  /api/v1/account/api-keys/{api_key_id}:
+    parameters:
+      - $ref: "#/components/parameters/ApiKeyId"
+    delete:
+      operationId: revokeAccountApiKey
+      summary: Revoke a current-account API key
+      description: Permanently prevents the selected API key from authenticating without affecting other keys.
+      tags: [Authentication]
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfToken" }]
+      responses:
+        "204": { description: API key revoked }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
   /api/v1/systems:
     post:
       operationId: createSystem
       tags: [Systems]
       summary: Create a private PV system
-      description: Creates one account-owned system using private and active defaults.
+      description: Creates one system in the authenticated user's ownership context using private and active defaults. No separate account identifier is accepted.
       security: [{ bearerAuth: [systems:write] }]
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/CreateSystem" }
-            example:
-              {
-                accountId: 019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70,
-                name: Roof PV,
-                timezone: Europe/Berlin,
-              }
+            example: { name: Roof PV, timezone: Europe/Berlin }
       responses:
         "201": { $ref: "#/components/responses/SystemResponse" }
         "422": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/systems/{id}:
     parameters:
       - $ref: "#/components/parameters/SystemId"
+    get:
+      operationId: getSystem
+      tags: [Systems]
+      summary: Read a manageable PV system
+      description: Returns mutable system metadata and its current lifecycle version.
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      responses:
+        "200": { $ref: "#/components/responses/SystemResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
     put:
       operationId: updateSystem
       tags: [Systems]
@@ -379,8 +763,16 @@ paths:
       parameters:
         - { name: search, in: query, schema: { type: string } }
         - { name: manufacturer, in: query, schema: { type: string } }
-        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - {
+            name: offset,
+            in: query,
+            schema: { type: integer, minimum: 0, default: 0 },
+          }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 25 },
+          }
       responses:
         "200":
           description: A bounded catalog page with the bundled revision.
@@ -388,6 +780,37 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/InverterCatalogPage" }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/geocoding/search:
+    get:
+      operationId: searchAddress
+      summary: Resolve an address to coordinates
+      description: Performs one explicit, authenticated forward-geocoding request through the operator-configured provider.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      parameters:
+        - {
+            name: q,
+            in: query,
+            required: true,
+            schema: { type: string, minLength: 1, maxLength: 160 },
+          }
+        - { name: language, in: query, schema: { type: string } }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 5, default: 5 },
+          }
+      responses:
+        "200":
+          description: Up to five matching OpenStreetMap address suggestions.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/GeocodingResult" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+        "502": { $ref: "#/components/responses/Problem" }
   /api/v1/equipment-catalog/inverters/{entry_id}:
     get:
       operationId: getCatalogInverter
@@ -415,8 +838,16 @@ paths:
       parameters:
         - { name: search, in: query, schema: { type: string } }
         - { name: manufacturer, in: query, schema: { type: string } }
-        - { name: offset, in: query, schema: { type: integer, minimum: 0, default: 0 } }
-        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - {
+            name: offset,
+            in: query,
+            schema: { type: integer, minimum: 0, default: 0 },
+          }
+        - {
+            name: limit,
+            in: query,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 25 },
+          }
       responses:
         "200":
           description: A bounded catalog page with the bundled revision.
@@ -442,12 +873,8 @@ paths:
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
         "404": { $ref: "#/components/responses/NotFoundProblem" }
 
-  /api/v1/accounts/{account_id}/systems/{system_id}/inverters:
-    parameters:
-      [
-        { $ref: "#/components/parameters/AccountId" },
-        { $ref: "#/components/parameters/NestedSystemId" },
-      ]
+  /api/v1/systems/{system_id}/inverters:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     get:
       operationId: listInverters
       summary: List effective inverter aggregates
@@ -489,7 +916,7 @@ paths:
                       panelCount: 18
                       panelManufacturer: Custom Modules
                       panelModel: CM-450
-                      ratedPowerWatts: 8100
+                      modulePeakPowerWatts: 450
                       effectiveFrom: 1783814400000
               editableCatalogSnapshot:
                 summary: Catalog-prefilled values are confirmed snapshots and may be edited
@@ -502,17 +929,30 @@ paths:
                   specificationSnapshot:
                     manufacturer: Fronius
                     model: Symo GEN24 10.0 site setting
-                    dc: { totalStringInputCount: 3, mpptInputs: [{ trackerIndex: 1, stringInputCount: 2 }, { trackerIndex: 2, stringInputCount: 1 }] }
+                    dc:
+                      {
+                        totalStringInputCount: 3,
+                        mpptInputs:
+                          [
+                            { trackerIndex: 1, stringInputCount: 2 },
+                            { trackerIndex: 2, stringInputCount: 1 },
+                          ],
+                      }
                     ac: { phaseCount: 3, ratedActivePowerWatts: 10000 }
                     operational: {}
-                    template: { entryId: fronius-symo-gen24-10-0, revision: 2026.07.11.1, valueProvenance: catalog_customized }
+                    template:
+                      {
+                        entryId: fronius-symo-gen24-10-0,
+                        revision: 2026.07.11.1,
+                        valueProvenance: catalog_customized,
+                      }
                   effectiveFrom: 1783814400000
                   strings:
                     - name: South roof
                       panelCount: 18
                       panelManufacturer: JA Solar
                       panelModel: JAM54D40-450/LB
-                      ratedPowerWatts: 8100
+                      modulePeakPowerWatts: 450
                       effectiveFrom: 1783814400000
       responses:
         "201":
@@ -524,6 +964,47 @@ paths:
               schema: { $ref: "#/components/schemas/Inverter" }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
         "422": { $ref: "#/components/responses/ValidationProblem" }
+
+  /api/v1/systems/{system_id}/inverters/{inverter_id}:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - {
+          name: inverter_id,
+          in: path,
+          required: true,
+          schema: { type: string, format: uuid },
+        }
+    put:
+      operationId: updateInverter
+      summary: Replace an inverter aggregate
+      description: Replaces one inverter and its complete PV-string subtree while preserving the inverter identifier.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/InverterInput" }
+      responses:
+        "200":
+          description: Inverter aggregate updated.
+          headers:
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Inverter" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+    delete:
+      operationId: deleteInverter
+      summary: Delete an inverter aggregate
+      description: Deletes one inverter and its complete connected-array subtree.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      responses:
+        "204": { description: Inverter aggregate deleted. }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
 
   /api/v1/accounts/{account_id}/systems/{system_id}/tariffs:
     parameters:
@@ -654,9 +1135,19 @@ paths:
     post:
       operationId: createObservation
       summary: Ingest one observation
-      description: Normalizes and durably stores one idempotent canonical observation.
+      description: Normalizes and durably stores one idempotent canonical observation. Account API keys require the telemetry:write scope and standard bearer authentication. Query credentials are rejected before ingestion.
       tags: [Telemetry]
       security: [{ bearerAuth: [telemetry:write] }]
+      x-codeSamples:
+        - lang: Shell
+          label: Account API key
+          source: |-
+            curl --fail-with-body \
+              -H 'content-type: application/json' \
+              -H 'idempotency-key: reading-1780000000000' \
+              -H 'authorization: Bearer pvlog_REDACTED' \
+              --data '{"observedAtEpochMillis":1780000000000,"generationPowerWatts":4200}' \
+              https://pvlog.example/api/v1/systems/SYSTEM_ID/observations
       parameters:
         [
           {
@@ -691,6 +1182,8 @@ paths:
               content: { application/json: { schema: { type: object } } },
             },
           "422": { $ref: "#/components/responses/ValidationProblem" },
+          "401": { $ref: "#/components/responses/UnauthorizedProblem" },
+          "429": { $ref: "#/components/responses/RateLimitProblem" },
           "503": { $ref: "#/components/responses/OverloadProblem" },
         }
   /api/v1/systems/{system_id}/observations/batch:
@@ -698,7 +1191,7 @@ paths:
     post:
       operationId: createObservationBatch
       summary: Ingest an observation batch
-      description: Processes a bounded batch in atomic or partial-result mode.
+      description: Processes a bounded batch in atomic or partial-result mode using a bearer account API key with telemetry:write.
       tags: [Telemetry]
       security: [{ bearerAuth: [telemetry:write] }]
       requestBody:
@@ -721,6 +1214,8 @@ paths:
               content: { application/json: { schema: { type: object } } },
             },
           "422": { $ref: "#/components/responses/ValidationProblem" },
+          "401": { $ref: "#/components/responses/UnauthorizedProblem" },
+          "429": { $ref: "#/components/responses/RateLimitProblem" },
           "503": { $ref: "#/components/responses/OverloadProblem" },
         }
   /api/v1/systems/{system_id}/observations/{observation_id}:
@@ -1094,6 +1589,75 @@ paths:
         "413": { $ref: "#/components/responses/QueryTooLargeProblem" }
         "422": { $ref: "#/components/responses/ForecastValidationProblem" }
         "503": { $ref: "#/components/responses/ForecastUnavailableProblem" }
+  /api/v1/systems/{system_id}/overview:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+    get:
+      operationId: getSystemOverview
+      summary: Get system metadata and installed generation equipment totals
+      description: Returns persisted system identity, lifecycle state, and effective inverter and PV string capacity totals.
+      tags: [Reporting]
+      security: [{ bearerAuth: [systems:read] }, { sessionCookie: [] }]
+      responses:
+        "200":
+          description: System overview
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SystemOverview" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+  /api/v1/systems/{system_id}/reporting/statistics:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+    get:
+      operationId: getSystemReportingStatistics
+      summary: Get lifetime and monthly production statistics
+      description: Returns the stored lifetime summary and available monthly rollups without fabricating missing measurements.
+      tags: [Reporting]
+      security: [{ bearerAuth: [analytics:read] }, { sessionCookie: [] }]
+      responses:
+        "200":
+          description: Stored lifetime and monthly rollups
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReportingStatistics" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+  /api/v1/systems/{system_id}/seasonal:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+    get:
+      operationId: getSystemSeasonalProduction
+      summary: Aggregate production by meteorological season
+      description: Groups all persisted daily generation summaries into winter, spring, summer, and autumn totals.
+      tags: [Reporting]
+      security: [{ bearerAuth: [analytics:read] }, { sessionCookie: [] }]
+      responses:
+        "200":
+          description: Seasonal production from daily summaries
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SeasonalProduction" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+  /api/v1/systems/{system_id}/weather-forecast:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+    get:
+      operationId: getSystemWeatherForecast
+      summary: Get latest forecast weather inputs and predicted energy
+      description: Returns the latest forecast weather run and any matching projected system-level energy calculation.
+      tags: [Reporting]
+      security: [{ bearerAuth: [analytics:read] }, { sessionCookie: [] }]
+      responses:
+        "200":
+          description: Latest weather provider run and matching system yield results
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WeatherForecastReport" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
   /api/v1/systems/{system_id}/series:
     parameters:
       - $ref: "#/components/parameters/NestedSystemId"
@@ -1855,6 +2419,64 @@ paths:
                 { schema: { $ref: "#/components/schemas/InvitationCreated" } },
             }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/admin/roles:
+    get:
+      operationId: listInstanceRoles
+      tags: [Administration]
+      summary: List instance roles
+      description: Returns instance-scoped roles after the browser user passes instance role-management authorization.
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Instance role catalog
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/Role" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/admin/role-assignments:
+    get:
+      operationId: listInstanceRoleAssignments
+      tags: [Administration]
+      summary: List active instance role assignments for one principal
+      description: Returns active instance assignments for the requested user or API credential after instance role-management authorization.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: principalType
+          in: query
+          required: true
+          schema: { type: string, enum: [user, api_credential] }
+        - name: principalId
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/UuidV7" }
+      responses:
+        "200":
+          description: Active instance role assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RoleAssignment" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+    post:
+      operationId: assignInstanceRole
+      tags: [Administration]
+      summary: Assign an instance role to a user or API credential
+      description: Creates an instance-scoped assignment after delegation validation.
+      security: [{ sessionCookie: [] }]
+      parameters: [{ $ref: "#/components/parameters/CsrfToken" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RoleAssignmentInput" }
+      responses:
+        "201": { $ref: "#/components/responses/RoleAssignmentResponse" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/users/me/identities:
     get:
       operationId: listLinkedIdentities
@@ -1977,6 +2599,31 @@ paths:
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
   /api/v1/accounts/{account_id}/role-assignments:
     parameters: [{ $ref: "#/components/parameters/AccountId" }]
+    get:
+      operationId: listAccountRoleAssignments
+      tags: [Administration]
+      summary: List active role assignments for one principal
+      description: Returns active account and system assignments for the requested user or API credential after role-management authorization.
+      security: [{ sessionCookie: [] }]
+      parameters:
+        - name: principalType
+          in: query
+          required: true
+          schema: { type: string, enum: [user, api_credential] }
+        - name: principalId
+          in: query
+          required: true
+          schema: { $ref: "#/components/schemas/UuidV7" }
+      responses:
+        "200":
+          description: Active role assignments
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RoleAssignment" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
     post:
       operationId: assignAccountRole
       tags: [Administration]
@@ -2098,6 +2745,12 @@ components:
         required: true,
         schema: { $ref: "#/components/schemas/UuidV7" },
       }
+    ApiKeyId:
+      name: api_key_id
+      in: path
+      required: true
+      description: Opaque account API-key metadata identifier; this is not the bearer secret.
+      schema: { $ref: "#/components/schemas/UuidV7" }
     IfMatch:
       {
         name: If-Match,
@@ -2304,6 +2957,15 @@ components:
               { schema: { $ref: "#/components/schemas/Problem" } },
           },
       }
+    RateLimitProblem:
+      description: The authenticated principal exceeded its ingestion request quota.
+      headers:
+        Retry-After: { schema: { type: integer, minimum: 1 } }
+        RateLimit-Limit: { schema: { type: integer, minimum: 1 } }
+        RateLimit-Remaining: { schema: { type: integer, minimum: 0 } }
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/Problem" }
     RoleResponse:
       description: Versioned custom or built-in role
       content:
@@ -2390,6 +3052,91 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
   schemas:
+    CurrentUserProfile:
+      type: object
+      additionalProperties: false
+      required: [id, email, displayName]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        email: { type: string, format: email }
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+    UpdateCurrentUserProfile:
+      type: object
+      additionalProperties: false
+      required: [displayName]
+      properties:
+        displayName: { type: string, minLength: 1, maxLength: 120 }
+    ChangePassword:
+      type: object
+      additionalProperties: false
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword:
+          { type: string, format: password, minLength: 1, writeOnly: true }
+        newPassword:
+          {
+            type: string,
+            format: password,
+            minLength: 12,
+            maxLength: 128,
+            writeOnly: true,
+          }
+    AccountApiKeyScope:
+      type: string
+      description: Explicit action permission. Scopes are independent and never imply another scope.
+      enum: [systems:read, systems:write, telemetry:read, telemetry:write]
+    CreateAccountApiKey:
+      type: object
+      additionalProperties: false
+      required: [name, scopes]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        scopes:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/AccountApiKeyScope" }
+        expiresAtEpochMillis:
+          type: [integer, "null"]
+          format: int64
+          description: Optional future expiry as Unix epoch milliseconds.
+    AccountApiKey:
+      type: object
+      additionalProperties: false
+      required: [id, name, scopes, createdAtEpochMillis]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        name: { type: string }
+        scopes:
+          type: array
+          uniqueItems: true
+          items: { $ref: "#/components/schemas/AccountApiKeyScope" }
+        createdAtEpochMillis: { type: integer, format: int64 }
+        expiresAtEpochMillis: { type: [integer, "null"], format: int64 }
+        revokedAtEpochMillis: { type: [integer, "null"], format: int64 }
+    IssuedAccountApiKey:
+      type: object
+      additionalProperties: false
+      required: [apiKey, credential]
+      properties:
+        apiKey:
+          type: string
+          minLength: 40
+          writeOnly: true
+          description: One-time cleartext bearer key. Copy it before dismissing the response.
+        credential: { $ref: "#/components/schemas/AccountApiKey" }
+    GeocodingResult:
+      type: object
+      additionalProperties: false
+      required: [displayName, latitude, longitude, attribution]
+      properties:
+        displayName: { type: string }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        attribution: { type: string }
     FreeFormObject:
       type: object
       additionalProperties: true
@@ -2417,9 +3164,15 @@ components:
       additionalProperties: false
       required: [entryId, revision, valueProvenance]
       properties:
-        entryId: { type: string, description: Stable opaque catalog identifier. }
-        revision: { type: string, description: Revision explicitly copied into this editable snapshot. }
-        valueProvenance: { $ref: "#/components/schemas/EquipmentValueProvenance" }
+        entryId:
+          { type: string, description: Stable opaque catalog identifier. }
+        revision:
+          {
+            type: string,
+            description: Revision explicitly copied into this editable snapshot.,
+          }
+        valueProvenance:
+          { $ref: "#/components/schemas/EquipmentValueProvenance" }
     InverterDcSpecification:
       type: object
       description: DC voltages are millivolts and currents are milliamperes. Per-MPPT limits preserve asymmetric trackers.
@@ -2434,7 +3187,8 @@ components:
         minimumMpptVoltageMillivolts: { type: [integer, "null"], minimum: 1 }
         maximumMpptVoltageMillivolts: { type: [integer, "null"], minimum: 1 }
         maximumInputCurrentMilliamperes: { type: [integer, "null"], minimum: 1 }
-        maximumShortCircuitCurrentMilliamperes: { type: [integer, "null"], minimum: 1 }
+        maximumShortCircuitCurrentMilliamperes:
+          { type: [integer, "null"], minimum: 1 }
         mpptInputs:
           type: array
           minItems: 1
@@ -2445,8 +3199,10 @@ components:
             properties:
               trackerIndex: { type: integer, minimum: 1 }
               stringInputCount: { type: integer, minimum: 1 }
-              maximumOperatingCurrentMilliamperes: { type: [integer, "null"], minimum: 1 }
-              maximumShortCircuitCurrentMilliamperes: { type: [integer, "null"], minimum: 1 }
+              maximumOperatingCurrentMilliamperes:
+                { type: [integer, "null"], minimum: 1 }
+              maximumShortCircuitCurrentMilliamperes:
+                { type: [integer, "null"], minimum: 1 }
               minimumVoltageMillivolts: { type: [integer, "null"], minimum: 1 }
               maximumVoltageMillivolts: { type: [integer, "null"], minimum: 1 }
     InverterAcSpecification:
@@ -2459,8 +3215,10 @@ components:
         ratedActivePowerWatts: { type: integer, minimum: 1 }
         maximumActivePowerWatts: { type: [integer, "null"], minimum: 1 }
         maximumApparentPowerVoltAmperes: { type: [integer, "null"], minimum: 1 }
-        maximumOutputCurrentMilliamperes: { type: [integer, "null"], minimum: 1 }
-        maximumEfficiencyBasisPoints: { type: [integer, "null"], minimum: 0, maximum: 10000 }
+        maximumOutputCurrentMilliamperes:
+          { type: [integer, "null"], minimum: 1 }
+        maximumEfficiencyBasisPoints:
+          { type: [integer, "null"], minimum: 0, maximum: 10000 }
     InverterOperationalSpecification:
       type: object
       description: Temperatures use milli-degrees Celsius, dimensions millimetres, weight grams and acoustic noise millidecibels.
@@ -2474,8 +3232,16 @@ components:
         model: { type: string, minLength: 1 }
         dc: { $ref: "#/components/schemas/InverterDcSpecification" }
         ac: { $ref: "#/components/schemas/InverterAcSpecification" }
-        operational: { $ref: "#/components/schemas/InverterOperationalSpecification" }
-        template: { anyOf: [{ $ref: "#/components/schemas/EquipmentTemplateReference" }, { type: "null" }] }
+        operational:
+          { $ref: "#/components/schemas/InverterOperationalSpecification" }
+        template:
+          {
+            anyOf:
+              [
+                { $ref: "#/components/schemas/EquipmentTemplateReference" },
+                { type: "null" },
+              ],
+          }
     InverterCatalogEntry:
       allOf:
         - { $ref: "#/components/schemas/InverterSpecificationSnapshot" }
@@ -2489,7 +3255,15 @@ components:
       type: object
       description: Electrical values use watts, millivolts and milliamperes; efficiencies/bifaciality use basis points; signed temperature coefficients use ppm per degree Celsius; loads use pascals, dimensions millimetres and weight grams.
       additionalProperties: true
-      required: [peakPowerWatts, openCircuitVoltageMillivolts, maximumPowerVoltageMillivolts, shortCircuitCurrentMilliamperes, maximumPowerCurrentMilliamperes, efficiencyBasisPoints]
+      required:
+        [
+          peakPowerWatts,
+          openCircuitVoltageMillivolts,
+          maximumPowerVoltageMillivolts,
+          shortCircuitCurrentMilliamperes,
+          maximumPowerCurrentMilliamperes,
+          efficiencyBasisPoints,
+        ]
       properties:
         peakPowerWatts: { type: integer, minimum: 1 }
         openCircuitVoltageMillivolts: { type: integer, minimum: 1 }
@@ -2497,12 +3271,15 @@ components:
         shortCircuitCurrentMilliamperes: { type: integer, minimum: 1 }
         maximumPowerCurrentMilliamperes: { type: integer, minimum: 1 }
         efficiencyBasisPoints: { type: integer, minimum: 1, maximum: 10000 }
-        shortCircuitCurrentTemperatureCoefficientPpmPerCelsius: { type: integer }
+        shortCircuitCurrentTemperatureCoefficientPpmPerCelsius:
+          { type: integer }
         openCircuitVoltageTemperatureCoefficientPpmPerCelsius: { type: integer }
         peakPowerTemperatureCoefficientPpmPerCelsius: { type: integer }
         bifacial: { type: boolean }
-        bifacialityFactorBasisPoints: { type: [integer, "null"], minimum: 0, maximum: 10000 }
-        bifacialityToleranceBasisPoints: { type: [integer, "null"], minimum: 0, maximum: 10000 }
+        bifacialityFactorBasisPoints:
+          { type: [integer, "null"], minimum: 0, maximum: 10000 }
+        bifacialityToleranceBasisPoints:
+          { type: [integer, "null"], minimum: 0, maximum: 10000 }
     SolarModuleSpecificationSnapshot:
       type: object
       additionalProperties: false
@@ -2511,7 +3288,14 @@ components:
         manufacturer: { type: string, minLength: 1 }
         model: { type: string, minLength: 1 }
         specification: { $ref: "#/components/schemas/SolarModuleSpecification" }
-        template: { anyOf: [{ $ref: "#/components/schemas/EquipmentTemplateReference" }, { type: "null" }] }
+        template:
+          {
+            anyOf:
+              [
+                { $ref: "#/components/schemas/EquipmentTemplateReference" },
+                { type: "null" },
+              ],
+          }
     SolarModuleCatalogEntry:
       allOf:
         - { $ref: "#/components/schemas/SolarModuleSpecificationSnapshot" }
@@ -2530,7 +3314,11 @@ components:
         total: { type: integer, minimum: 0 }
         offset: { type: integer, minimum: 0 }
         limit: { type: integer, minimum: 1, maximum: 100 }
-        items: { type: array, items: { $ref: "#/components/schemas/InverterCatalogEntry" } }
+        items:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/InverterCatalogEntry" },
+          }
     SolarModuleCatalogPage:
       type: object
       additionalProperties: false
@@ -2540,22 +3328,45 @@ components:
         total: { type: integer, minimum: 0 }
         offset: { type: integer, minimum: 0 }
         limit: { type: integer, minimum: 1, maximum: 100 }
-        items: { type: array, items: { $ref: "#/components/schemas/SolarModuleCatalogEntry" } }
+        items:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/SolarModuleCatalogEntry" },
+          }
     PvStringInput:
       type: object
       additionalProperties: false
-      required: [name, panelCount, ratedPowerWatts, effectiveFrom]
+      required: [name, panelCount, modulePeakPowerWatts, effectiveFrom]
       properties:
         name: { type: string, minLength: 1 }
         panelCount: { type: integer, minimum: 1 }
         panelManufacturer: { type: [string, "null"] }
         panelModel: { type: [string, "null"] }
-        ratedPowerWatts: { type: integer, format: int64, minimum: 1 }
-        valueProvenance: { anyOf: [{ $ref: "#/components/schemas/EquipmentValueProvenance" }, { type: "null" }] }
-        moduleSpecificationSnapshot: { anyOf: [{ $ref: "#/components/schemas/SolarModuleSpecificationSnapshot" }, { type: "null" }] }
-        modulePeakPowerWatts: { type: [integer, "null"], format: int64, minimum: 1 }
-        totalPeakPowerWatts: { type: [integer, "null"], format: int64, minimum: 1, readOnly: true, description: Server-derived as panelCount multiplied by modulePeakPowerWatts; contradictory client totals are rejected. }
-        orientationDegrees: { type: [integer, "null"], minimum: 0, maximum: 359 }
+        valueProvenance:
+          {
+            anyOf:
+              [
+                { $ref: "#/components/schemas/EquipmentValueProvenance" },
+                { type: "null" },
+              ],
+          }
+        moduleSpecificationSnapshot:
+          {
+            anyOf:
+              [
+                {
+                  $ref: "#/components/schemas/SolarModuleSpecificationSnapshot",
+                },
+                { type: "null" },
+              ],
+          }
+        modulePeakPowerWatts:
+          type: integer
+          format: int64
+          minimum: 1
+          description: Rated power of one connected panel. The server derives all aggregate power values from this and panelCount.
+        orientationDegrees:
+          { type: [integer, "null"], minimum: 0, maximum: 359 }
         tiltDegrees: { type: [integer, "null"], minimum: 0, maximum: 90 }
         effectiveFrom: { type: integer, format: int64 }
         effectiveTo: { type: [integer, "null"], format: int64 }
@@ -2569,8 +3380,22 @@ components:
         model: { type: [string, "null"] }
         serialReference: { type: [string, "null"] }
         ratedPowerWatts: { type: [integer, "null"], format: int64, minimum: 1 }
-        valueProvenance: { anyOf: [{ $ref: "#/components/schemas/EquipmentValueProvenance" }, { type: "null" }] }
-        specificationSnapshot: { anyOf: [{ $ref: "#/components/schemas/InverterSpecificationSnapshot" }, { type: "null" }] }
+        valueProvenance:
+          {
+            anyOf:
+              [
+                { $ref: "#/components/schemas/EquipmentValueProvenance" },
+                { type: "null" },
+              ],
+          }
+        specificationSnapshot:
+          {
+            anyOf:
+              [
+                { $ref: "#/components/schemas/InverterSpecificationSnapshot" },
+                { type: "null" },
+              ],
+          }
         effectiveFrom: { type: integer, format: int64 }
         effectiveTo: { type: [integer, "null"], format: int64 }
         strings:
@@ -2587,6 +3412,16 @@ components:
             inverterId: { $ref: "#/components/schemas/UuidV7" }
             moduleCatalogEntryId: { type: [string, "null"], readOnly: true }
             moduleCatalogRevision: { type: [string, "null"], readOnly: true }
+            ratedPowerWatts:
+              type: integer
+              format: int64
+              minimum: 1
+              readOnly: true
+            totalPeakPowerWatts:
+              type: integer
+              format: int64
+              minimum: 1
+              readOnly: true
     Inverter:
       allOf:
         - { $ref: "#/components/schemas/InverterInput" }
@@ -2602,7 +3437,6 @@ components:
               type: array
               minItems: 1
               items: { $ref: "#/components/schemas/PvString" }
-
 
     CreateInvitation:
       type: object
@@ -2668,6 +3502,7 @@ components:
             - { $ref: "#/components/schemas/SessionUser" }
             - { type: "null" }
         accountId:
+          description: Internal ownership and routing identifier. Clients must not present this as a separate account from the signed-in user.
           oneOf:
             - { $ref: "#/components/schemas/UuidV7" }
             - { type: "null" }
@@ -2741,7 +3576,10 @@ components:
           required: [id, accountId]
           properties:
             id: { $ref: "#/components/schemas/UuidV7" }
-            accountId: { $ref: "#/components/schemas/UuidV7" }
+            accountId:
+              oneOf:
+                - { $ref: "#/components/schemas/UuidV7" }
+                - { type: "null" }
     AuditEvent:
       type: object
       required:
@@ -2770,6 +3608,7 @@ components:
       type: object
       required: [name, kind, timezone, enabled]
       properties:
+        systemId: { $ref: "#/components/schemas/UuidV7" }
         name: { type: string, minLength: 1 }
         kind:
           {
@@ -2790,6 +3629,65 @@ components:
         timezone: { type: string, example: Europe/Berlin }
         enabled: { type: boolean }
         condition: { type: object, additionalProperties: true }
+    AdministrationUser:
+      type: object
+      required: [id, email, displayName, status, createdAt, updatedAt]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        status: { type: string, enum: [invited, active, disabled, deleted] }
+        emailVerifiedAt: { type: [integer, "null"], format: int64 }
+        disabledAt: { type: [integer, "null"], format: int64 }
+        lockedUntil: { type: [integer, "null"], format: int64 }
+        createdAt: { type: integer, format: int64 }
+        updatedAt: { type: integer, format: int64 }
+    WeatherFeedSettings:
+      type: object
+      required: [enabled, endpoint]
+      properties:
+        enabled: { type: boolean }
+        endpoint: { type: string, example: "mqtt://broker.local:1883/weather" }
+        credentialSecretRef: { type: [string, "null"] }
+        updatedAtEpochMillis:
+          { type: [integer, "null"], format: int64, readOnly: true }
+    EmailNotificationSettings:
+      type: object
+      required: [enabled, recipient, host, port, username, encryption]
+      properties:
+        enabled: { type: boolean }
+        recipient: { type: string, format: email }
+        host: { type: string }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        username: { type: string }
+        credentialSecretRef: { type: [string, "null"] }
+        encryption: { type: string, enum: [none, starttls, tls] }
+        updatedAtEpochMillis:
+          { type: [integer, "null"], format: int64, readOnly: true }
+    RetentionBackupSettings:
+      type: object
+      required: [readingRetentionDays, automaticBackupsEnabled, backupSchedule]
+      properties:
+        readingRetentionDays: { type: integer, minimum: 1, maximum: 3650 }
+        automaticBackupsEnabled: { type: boolean }
+        backupSchedule: { type: string, example: "0 2 * * *" }
+        lastBackupAtEpochMillis:
+          { type: [integer, "null"], format: int64, readOnly: true }
+        lastBackupBytes:
+          { type: [integer, "null"], format: int64, readOnly: true }
+        updatedAtEpochMillis:
+          { type: [integer, "null"], format: int64, readOnly: true }
+    ConnectionTestResult:
+      type: object
+      required: [reachable]
+      properties: { reachable: { type: boolean } }
+    BackupResult:
+      type: object
+      required: [completedAtEpochMillis, byteLength, artifactName]
+      properties:
+        completedAtEpochMillis: { type: integer, format: int64 }
+        byteLength: { type: integer, format: int64, minimum: 0 }
+        artifactName: { type: string }
     AlertRule:
       allOf:
         - { $ref: "#/components/schemas/AlertRuleInput" }
@@ -2866,10 +3764,10 @@ components:
         durationMilliseconds: { type: integer, minimum: 0 }
     CreateSystem:
       type: object
-      required: [accountId, name, timezone]
+      additionalProperties: false
+      required: [name, timezone]
       properties:
         {
-          accountId: { $ref: "#/components/schemas/UuidV7" },
           name: { type: string, minLength: 1 },
           timezone: { type: string, example: Europe/Berlin },
         }
@@ -3452,10 +4350,138 @@ components:
       additionalProperties: false
       required: [jobId]
       properties: { jobId: { $ref: "#/components/schemas/UuidV7" } }
+    SystemOverview:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          id,
+          name,
+          timezone,
+          lifecycle,
+          inverterCount,
+          stringCount,
+          capacityWatts,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        name: { type: string }
+        timezone: { type: string }
+        lifecycle: { enum: [active, archived, deleting, deleted] }
+        inverterCount: { type: integer, minimum: 0 }
+        stringCount: { type: integer, minimum: 0 }
+        capacityWatts: { type: [integer, "null"], format: int64, minimum: 0 }
+    ReportingStatistics:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          systemId,
+          generationEnergyWh,
+          consumptionEnergyWh,
+          peakGenerationPowerWatts,
+          firstObservationAtEpochMillis,
+          lastObservationAtEpochMillis,
+          coverageBasisPoints,
+          monthly,
+        ]
+      properties:
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        generationEnergyWh: { type: [integer, "null"], format: int64 }
+        consumptionEnergyWh: { type: [integer, "null"], format: int64 }
+        peakGenerationPowerWatts: { type: [integer, "null"], format: int64 }
+        firstObservationAtEpochMillis:
+          { type: [integer, "null"], format: int64 }
+        lastObservationAtEpochMillis: { type: [integer, "null"], format: int64 }
+        coverageBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+        monthly:
+          type: array
+          items: { $ref: "#/components/schemas/MonthlyProduction" }
+    MonthlyProduction:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          bucketStartEpochMillis,
+          generationEnergyWh,
+          consumptionEnergyWh,
+          coverageBasisPoints,
+        ]
+      properties:
+        bucketStartEpochMillis: { type: integer, format: int64 }
+        generationEnergyWh: { type: [integer, "null"], format: int64 }
+        consumptionEnergyWh: { type: [integer, "null"], format: int64 }
+        coverageBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+    SeasonalProduction:
+      type: object
+      additionalProperties: false
+      required: [systemId, seasons]
+      properties:
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        seasons:
+          type: array
+          items: { $ref: "#/components/schemas/SeasonProduction" }
+    SeasonProduction:
+      type: object
+      additionalProperties: false
+      required: [season, generationEnergyWh, measuredDays, averageDailyEnergyWh]
+      properties:
+        season: { enum: [winter, spring, summer, autumn] }
+        generationEnergyWh: { type: integer, format: int64 }
+        measuredDays: { type: integer, minimum: 0 }
+        averageDailyEnergyWh: { type: integer, format: int64 }
+    WeatherForecastReport:
+      type: object
+      additionalProperties: false
+      required: [systemId, issuedAtEpochMillis, attribution, points]
+      properties:
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        issuedAtEpochMillis: { type: [integer, "null"], format: int64 }
+        attribution: { type: [string, "null"] }
+        points:
+          type: array
+          items: { $ref: "#/components/schemas/WeatherForecastPoint" }
+    WeatherForecastPoint:
+      type: object
+      additionalProperties: false
+      required:
+        [
+          intervalStartEpochMillis,
+          intervalEndEpochMillis,
+          irradianceWattsPerSquareMetre,
+          ambientTemperatureMillicelsius,
+          windSpeedMillimetresPerSecond,
+          cloudCoverBasisPoints,
+          predictedEnergyWh,
+        ]
+      properties:
+        intervalStartEpochMillis: { type: integer, format: int64 }
+        intervalEndEpochMillis: { type: integer, format: int64 }
+        irradianceWattsPerSquareMetre:
+          { type: [integer, "null"], format: int64, minimum: 0 }
+        ambientTemperatureMillicelsius:
+          { type: [integer, "null"], format: int64 }
+        windSpeedMillimetresPerSecond:
+          { type: [integer, "null"], format: int64, minimum: 0 }
+        cloudCoverBasisPoints:
+          { type: [integer, "null"], minimum: 0, maximum: 10000 }
+        predictedEnergyWh: { type: [integer, "null"], format: int64 }
     Dashboard:
       type: object
       additionalProperties: false
-      required: [observedAtEpochMillis, ageSeconds, freshnessThresholdSeconds, generationWatts, consumptionWatts, gridWatts, batteryBasisPoints, coverageBasisPoints, recentAlerts, ingestion]
+      required:
+        [
+          observedAtEpochMillis,
+          ageSeconds,
+          freshnessThresholdSeconds,
+          generationWatts,
+          consumptionWatts,
+          gridWatts,
+          batteryBasisPoints,
+          coverageBasisPoints,
+          recentAlerts,
+          ingestion,
+        ]
       properties:
         observedAtEpochMillis: { type: integer, format: int64 }
         ageSeconds: { type: integer, minimum: 0 }
