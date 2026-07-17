@@ -27,6 +27,8 @@ pub struct RuntimeConfig {
     pub auth: AuthConfig,
     /// OpenTelemetry export settings.
     pub telemetry: TelemetryConfig,
+    /// Forward-geocoding provider settings.
+    pub geocoding: GeocodingConfig,
     /// Provider-neutral PV yield forecasting controls.
     pub forecasting: ForecastingConfig,
 }
@@ -135,6 +137,9 @@ impl RuntimeConfig {
         }
 
         self.forecasting.validate(&mut issues);
+        if !matches!(self.geocoding.endpoint.scheme(), "http" | "https") {
+            issues.push("geocoding.endpoint must use HTTP or HTTPS".to_owned());
+        }
 
         if self.environment == Environment::Production {
             if self.http.public_base_url.scheme() != "https" {
@@ -170,6 +175,7 @@ impl Default for RuntimeConfig {
             security: SecurityConfig::default(),
             auth: AuthConfig::default(),
             telemetry: TelemetryConfig::default(),
+            geocoding: GeocodingConfig::default(),
             forecasting: ForecastingConfig::default(),
         }
     }
@@ -185,6 +191,7 @@ impl fmt::Debug for RuntimeConfig {
             .field("security", &self.security)
             .field("auth", &self.auth)
             .field("telemetry", &self.telemetry)
+            .field("geocoding", &self.geocoding)
             .field("forecasting", &self.forecasting)
             .finish()
     }
@@ -474,6 +481,23 @@ pub struct TelemetryConfig {
     pub enabled: bool,
     /// Provider-neutral OTLP/HTTP collector endpoint.
     pub otlp_endpoint: Option<Url>,
+}
+
+/// Provider-neutral address resolution used by explicit user searches.
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct GeocodingConfig {
+    /// Photon-compatible OpenStreetMap search endpoint controlled by the operator.
+    pub endpoint: Url,
+}
+
+impl Default for GeocodingConfig {
+    fn default() -> Self {
+        Self {
+            endpoint: Url::parse("https://photon.komoot.io/api")
+                .expect("default geocoding endpoint is valid"),
+        }
+    }
 }
 
 /// Provider-neutral weather adapter, model, retention, and worker policy.

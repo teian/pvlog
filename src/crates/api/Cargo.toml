@@ -86,8 +86,16 @@ name = "managed-resource-endpoints"
 path = "../../../tests/rust/api/managed_resource_endpoints.rs"
 
 [[test]]
+name = "geocoding-endpoints"
+path = "../../../tests/rust/api/geocoding_endpoints.rs"
+
+[[test]]
 name = "telemetry-endpoints"
 path = "../../../tests/rust/api/telemetry_endpoints.rs"
+
+[[test]]
+name = "account-api-key-endpoints"
+path = "../../../tests/rust/api/account_api_key_endpoints.rs"
 
 [[test]]
 name = "analytics-endpoints"
@@ -100,6 +108,10 @@ path = "../../../tests/rust/api/forecast_endpoints.rs"
 [[test]]
 name = "notification-endpoints"
 path = "../../../tests/rust/api/notification_endpoints.rs"
+
+[[test]]
+name = "administration-endpoints"
+path = "../../../tests/rust/api/administration_endpoints.rs"
 
 [lints]
 workspace = true

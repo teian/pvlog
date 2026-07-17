@@ -717,9 +717,7 @@ fn require_scope(principal: &RequestPrincipal, write: bool) -> Result<(), Foreca
         {
             Ok(())
         }
-        RequestPrincipal::ApiCredential { .. } | RequestPrincipal::SystemIngestion(_) => {
-            Err(ForecastApiError::Forbidden)
-        }
+        RequestPrincipal::ApiCredential { .. } => Err(ForecastApiError::Forbidden),
     }
 }
 

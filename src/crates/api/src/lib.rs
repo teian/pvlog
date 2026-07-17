@@ -26,7 +26,9 @@ use tower_http::{
 };
 use utoipa::ToSchema;
 
+mod administration;
 mod analytics;
+mod api_keys;
 mod audit;
 mod authentication;
 mod authorization;
@@ -34,6 +36,7 @@ mod connectors;
 mod dashboard;
 mod equipment_catalog;
 mod forecasting;
+mod geocoding;
 mod identities;
 mod inverters;
 mod local_password;
@@ -42,12 +45,22 @@ mod notifications;
 mod problem;
 mod rbac;
 mod readiness;
+mod reporting;
 mod sessions;
 mod systems;
 mod telemetry;
 mod user_lifecycle;
 
+pub use administration::{
+    AdministrationApiError, AdministrationApiUseCases, BackupResult, ConnectionTestResult,
+    EmailEncryption, EmailNotificationSettings, RetentionBackupSettings, WeatherFeedSettings,
+    administration_router,
+};
 pub use analytics::analytics_router;
+pub use api_keys::{
+    AccountApiKeyError, AccountApiKeyMetadata, AccountApiKeyScope, AccountApiKeyUseCases,
+    IssuedAccountApiKey, account_api_keys_router,
+};
 pub use audit::{AuditApiError, AuditApiUseCases, AuditEventResponse, audit_router};
 pub use authentication::{
     RequestAuthenticationError, RequestAuthenticator, RequestPrincipal, session_cookie_token,
@@ -75,6 +88,7 @@ pub use forecasting::{
     YieldSeriesPointResponse, YieldSeriesQuery, YieldSeriesResolution, YieldSeriesResponse,
     forecasting_router,
 };
+pub use geocoding::{GeocodingApi, GeocodingError, GeocodingResult, geocoding_router};
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,
 };
@@ -84,13 +98,21 @@ pub use inverters::{
 };
 pub use local_password::local_password_router;
 pub use managed_resources::managed_resources_router;
-pub use notifications::{NotificationApiError, NotificationApiUseCases, notifications_router};
+pub use notifications::{
+    NotificationApiError, NotificationApiUseCases, authorized_notifications_router,
+    notifications_router,
+};
 pub use problem::Problem;
 pub use rbac::{
     AssignmentPrincipalType, RbacApiError, RbacApiUseCases, RoleAssignmentInput,
     RoleAssignmentResponse, RoleInput, RoleResponse, rbac_router,
 };
 pub use readiness::{ReadinessError, ReadinessResponse, ReadinessUseCases, readiness_router};
+pub use reporting::{
+    MonthlyProductionResponse, ReportingApiError, ReportingApiUseCases, SeasonProductionResponse,
+    SeasonalResponse, StatisticsResponse, SystemOverviewResponse, WeatherForecastPointResponse,
+    WeatherForecastResponse, reporting_router,
+};
 pub use sessions::{
     SessionApiError, SessionBootstrap, SessionBootstrapUseCases, SessionConnector, SessionUser,
     sessions_router,
@@ -171,13 +193,28 @@ pub fn router(version: &'static str) -> Router {
                 tracing::info_span!(
                     "http.request",
                     method = %request.method(),
-                    uri = %request.uri(),
+                    route = %normalized_http_route(request.uri().path()),
                     request_id
                 )
             },
         ))
         .layer(PropagateRequestIdLayer::new(request_id.clone()))
         .layer(SetRequestIdLayer::new(request_id, MakeRequestUuid))
+}
+
+/// Normalizes identifier-bearing ingestion paths before observability.
+#[must_use]
+pub fn normalized_http_route(path: &str) -> String {
+    let segments = path.split('/').collect::<Vec<_>>();
+    match segments.as_slice() {
+        ["", "api", "v1", "systems", _, "observations"] => {
+            "/api/v1/systems/{system_id}/observations".to_owned()
+        }
+        ["", "api", "v1", "systems", _, "observations", "batch"] => {
+            "/api/v1/systems/{system_id}/observations/batch".to_owned()
+        }
+        _ => path.to_owned(),
+    }
 }
 
 async fn record_http_metrics(

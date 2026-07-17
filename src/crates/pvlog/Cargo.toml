@@ -26,6 +26,7 @@ pvlog-application = { path = "../application" }
 pvlog-domain = { path = "../domain" }
 pvlog-storage = { path = "../storage", default-features = false }
 pvlog-worker = { path = "../worker", default-features = false }
+reqwest.workspace = true
 rust-embed.workspace = true
 secrecy.workspace = true
 serde.workspace = true

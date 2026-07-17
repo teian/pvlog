@@ -2,11 +2,16 @@
 
 #![forbid(unsafe_code)]
 
+pub mod administration;
+pub mod api_keys;
 pub mod authentication;
 pub mod config;
 pub mod embedded_ui;
+pub mod geocoding;
 pub mod inverters;
+pub mod notifications;
 pub mod operator_bundle;
+pub mod reporting;
 
 use pvlog_application::Clock;
 use pvlog_domain::UtcTimestamp;

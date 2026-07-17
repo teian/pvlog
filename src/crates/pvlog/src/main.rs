@@ -8,18 +8,21 @@ use clap::{Parser, Subcommand};
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::WithExportConfig as _;
 use pvlog::SystemClock;
+use pvlog::administration::ManagementAdministrationApi;
+use pvlog::api_keys::ManagementAccountApiKeyService;
 use pvlog::authentication::{
-    ManagementAuditApi, ManagementConnectorApi, ManagementIdentityApi, ManagementRbacApi,
-    ManagementReadiness, ManagementRequestAuthenticator, ManagementRequestAuthorizer,
-    ManagementSessionBootstrap, session_digest_key,
+    ManagementApiTokenRepository, ManagementAuditApi, ManagementConnectorApi,
+    ManagementIdentityApi, ManagementRbacApi, ManagementReadiness, ManagementRequestAuthenticator,
+    ManagementRequestAuthorizer, ManagementSessionBootstrap, session_digest_key,
 };
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
 use pvlog::inverters::ManagementInverterApi;
+use pvlog::notifications::ManagementNotificationApi;
 use pvlog::operator_bundle::{
     export_account_bundle, export_bundle, export_postgres_bundle, import_bundle, verify_bundle,
 };
 use pvlog_application::{
-    Argon2CredentialConfig, Argon2CredentialService, BrowserSessionPolicy,
+    ApiTokenService, Argon2CredentialConfig, Argon2CredentialService, BrowserSessionPolicy,
     BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, Clock,
     CommonPasswordHook, DiscardingRecoveryNotifier, EquipmentCatalog,
     ExternalIdentityLinkingRepository, ExternalIdentityLinkingService,
@@ -679,10 +682,14 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     let local_password = compose_local_password(config, target)?;
     let request_authenticator = compose_request_authenticator(config, target)?;
     let request_authorizer = compose_request_authorizer(target)?;
+    let account_api_keys = compose_account_api_keys(config, target)?;
     let system_lifecycle = compose_system_lifecycle(target)?;
     let browser_sessions = compose_browser_sessions(config, target)?;
     let session_bootstrap = Arc::new(ManagementSessionBootstrap::new(
         compose_management_repository(target)?,
+        compose_rbac_repository(target)?,
+        Arc::new(SystemClock),
+        target.clone(),
     ));
     let audit_api = Arc::new(ManagementAuditApi::new(compose_management_repository(
         target,
@@ -695,6 +702,16 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
         equipment_catalog.clone(),
     ));
     let readiness = Arc::new(ManagementReadiness::new(target.clone()));
+    let administration = Arc::new(ManagementAdministrationApi::new(
+        compose_administration_repository(target)?,
+        target.clone(),
+    ));
+    let notifications = Arc::new(ManagementNotificationApi::new(target.clone()));
+    let reporting = Arc::new(pvlog::reporting::StorageReportingApi::new(target.clone()));
+    let geocoding = Arc::new(
+        pvlog::geocoding::PhotonGeocodingApi::new(config.geocoding.endpoint.clone())
+            .map_err(|_| StartupError::Geocoding)?,
+    );
     let listener = tokio::net::TcpListener::bind(config.http.bind).await?;
     tracing::info!(address = %listener.local_addr()?, database = ?target, "server listening");
     let api_router = pvlog_api::with_request_authentication(
@@ -710,6 +727,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
             ))
             .merge(pvlog_api::systems_router(
                 system_lifecycle,
+                request_authorizer.clone(),
+            ))
+            .merge(pvlog_api::account_api_keys_router(
+                account_api_keys,
                 request_authorizer.clone(),
             ))
             .merge(pvlog_api::sessions_router(
@@ -732,6 +753,19 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 request_authorizer.clone(),
             ))
             .merge(pvlog_api::equipment_catalog_router(equipment_catalog))
+            .merge(pvlog_api::geocoding_router(geocoding))
+            .merge(pvlog_api::administration_router(
+                administration,
+                request_authorizer.clone(),
+            ))
+            .merge(pvlog_api::authorized_notifications_router(
+                notifications,
+                request_authorizer.clone(),
+            ))
+            .merge(pvlog_api::reporting_router(
+                reporting,
+                request_authorizer.clone(),
+            ))
             .merge(pvlog_api::dashboard_router(Arc::new(EmptyDashboardApi))),
         request_authenticator,
     );
@@ -746,6 +780,41 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     ));
     axum::serve(listener, router).await?;
     Ok(())
+}
+
+fn compose_administration_repository(
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn pvlog_storage::AdministrationRepository>, StartupError> {
+    match target {
+        DatabaseTarget::Sqlite {
+            management_path, ..
+        } => {
+            #[cfg(feature = "sqlite")]
+            {
+                Ok(Arc::new(
+                    pvlog_storage::SqliteAdministrationRepository::new(management_path.clone()),
+                ))
+            }
+            #[cfg(not(feature = "sqlite"))]
+            {
+                let _ = management_path;
+                Err(StartupError::AdapterDisabled("sqlite"))
+            }
+        }
+        DatabaseTarget::Postgres { url } => {
+            #[cfg(feature = "postgres")]
+            {
+                Ok(Arc::new(
+                    pvlog_storage::PostgresAdministrationRepository::new(url.clone()),
+                ))
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                let _ = url;
+                Err(StartupError::AdapterDisabled("postgres"))
+            }
+        }
+    }
 }
 
 #[allow(clippy::unnecessary_wraps)]
@@ -795,6 +864,16 @@ fn compose_identity_api(
 fn compose_rbac_api(
     target: &DatabaseTarget,
 ) -> Result<Arc<dyn pvlog_api::RbacApiUseCases>, StartupError> {
+    Ok(Arc::new(ManagementRbacApi::new(
+        compose_rbac_repository(target)?,
+        Arc::new(SystemClock),
+    )))
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn compose_rbac_repository(
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn pvlog_application::RbacRepository>, StartupError> {
     let repository: Arc<dyn pvlog_application::RbacRepository> = match target {
         DatabaseTarget::Sqlite {
             management_path, ..
@@ -823,10 +902,7 @@ fn compose_rbac_api(
             }
         }
     };
-    Ok(Arc::new(ManagementRbacApi::new(
-        repository,
-        Arc::new(SystemClock),
-    )))
+    Ok(repository)
 }
 
 #[allow(clippy::unnecessary_wraps)]
@@ -869,8 +945,8 @@ fn compose_browser_sessions(
         Arc::new(SystemClock),
         session_digest_key(&config.security.session_secret),
         BrowserSessionPolicy {
-            idle_lifetime_seconds: 1_800,
-            absolute_lifetime_seconds: 28_800,
+            idle_lifetime_seconds: 7 * 24 * 60 * 60,
+            absolute_lifetime_seconds: 7 * 24 * 60 * 60,
             max_concurrent_sessions: 8,
             secure_cookies: config.http.secure_cookies,
         },
@@ -882,40 +958,30 @@ fn compose_request_authenticator(
     config: &RuntimeConfig,
     target: &DatabaseTarget,
 ) -> Result<Arc<dyn pvlog_api::RequestAuthenticator>, StartupError> {
-    let repository: Arc<dyn pvlog_storage::ManagementRepository> = match target {
-        DatabaseTarget::Sqlite {
-            management_path, ..
-        } => {
-            #[cfg(feature = "sqlite")]
-            {
-                Arc::new(pvlog_storage::SqliteManagementRepository::new(
-                    management_path.clone(),
-                ))
-            }
-            #[cfg(not(feature = "sqlite"))]
-            {
-                let _ = management_path;
-                return Err(StartupError::AdapterDisabled("sqlite"));
-            }
-        }
-        DatabaseTarget::Postgres { url } => {
-            #[cfg(feature = "postgres")]
-            {
-                Arc::new(pvlog_storage::PostgresManagementRepository::new(
-                    url.clone(),
-                ))
-            }
-            #[cfg(not(feature = "postgres"))]
-            {
-                let _ = url;
-                return Err(StartupError::AdapterDisabled("postgres"));
-            }
-        }
-    };
+    let repository = compose_management_repository(target)?;
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock);
     Ok(Arc::new(ManagementRequestAuthenticator::new(
         repository,
-        Arc::new(SystemClock),
+        clock,
         &config.security.session_secret,
+    )))
+}
+
+#[allow(clippy::unnecessary_wraps)]
+fn compose_account_api_keys(
+    config: &RuntimeConfig,
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn pvlog_api::AccountApiKeyUseCases>, StartupError> {
+    let repository = compose_management_repository(target)?;
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+    let token_repository = Arc::new(ManagementApiTokenRepository::new(repository.clone()));
+    let service = ApiTokenService::new(
+        token_repository,
+        clock.clone(),
+        session_digest_key(&config.security.session_secret),
+    );
+    Ok(Arc::new(ManagementAccountApiKeyService::new(
+        service, repository, clock,
     )))
 }
 
@@ -934,6 +1000,7 @@ fn compose_system_lifecycle(
     target: &DatabaseTarget,
 ) -> Result<Arc<dyn SystemLifecycleUseCases>, StartupError> {
     let management = compose_management_repository(target)?;
+    let rbac = compose_rbac_repository(target)?;
     let repository: Arc<dyn SystemLifecycleRepository> = match target {
         DatabaseTarget::Sqlite {
             management_path,
@@ -974,6 +1041,7 @@ fn compose_system_lifecycle(
     };
     Ok(Arc::new(SystemLifecycleService::new(
         repository,
+        rbac,
         Arc::new(SystemClock),
     )))
 }
@@ -1129,8 +1197,6 @@ fn argon2_credentials(config: &RuntimeConfig) -> Argon2CredentialService {
 enum StartupError {
     #[error(transparent)]
     Config(#[from] ConfigError),
-    #[error("forecast operation failed: {0}")]
-    ForecastOperation(String),
     #[error(transparent)]
     Storage(#[from] ProbeError),
     #[error(transparent)]
@@ -1139,6 +1205,8 @@ enum StartupError {
     Bundle(#[from] pvlog::operator_bundle::BundleError),
     #[error(transparent)]
     EquipmentCatalog(#[from] pvlog_application::EquipmentCatalogError),
+    #[error("failed to initialize geocoding client")]
+    Geocoding,
     #[error("telemetry initialization failed: {0}")]
     Telemetry(String),
     #[error("failed to serialize command output: {0}")]
@@ -1147,6 +1215,8 @@ enum StartupError {
     IncompatibleSchema,
     #[error("failed to initialize account lifecycle routing")]
     SystemLifecycleRouting,
+    #[error("forecast operation failed: {0}")]
+    ForecastOperation(String),
     #[allow(dead_code)]
     #[error("the {0} database adapter is not enabled in this build")]
     AdapterDisabled(&'static str),

@@ -15,6 +15,7 @@ use sqlx::{
 use thiserror::Error;
 
 mod account_repository;
+mod administration_repository;
 mod browser_session_repository;
 mod compaction;
 mod external_identity_repository;
@@ -49,6 +50,13 @@ pub use account_repository::{
     AccountAuditRecord, AccountConfigurationRepository, AccountRepositoryError,
     ChannelDefinitionRecord, EquipmentRecord, InverterRecord, PvStringRecord,
     SystemConfigurationRecord, TariffRecord,
+};
+#[cfg(feature = "postgres")]
+pub use administration_repository::PostgresAdministrationRepository;
+#[cfg(feature = "sqlite")]
+pub use administration_repository::SqliteAdministrationRepository;
+pub use administration_repository::{
+    AdministrationRepository, AdministrationRepositoryError, GlobalConfigurationRecord,
 };
 pub use compaction::{
     CompactionError, CompactionKey, CompactionPhase, CompactionRepository, CompactionService,

@@ -256,20 +256,20 @@ fn module_snapshot() -> SolarModuleSpecificationSnapshot {
             short_circuit_current_temperature_coefficient_ppm_per_celsius: 450,
             open_circuit_voltage_temperature_coefficient_ppm_per_celsius: -2_500,
             peak_power_temperature_coefficient_ppm_per_celsius: -2_900,
-            maximum_system_voltage_millivolts: 1_500_000,
-            operating_temperature: TemperatureRange {
+            maximum_system_voltage_millivolts: Some(1_500_000),
+            operating_temperature: Some(TemperatureRange {
                 minimum_milli_celsius: -40_000,
                 maximum_milli_celsius: 85_000,
-            },
-            maximum_series_fuse_milliamperes: 25_000,
-            maximum_front_static_load_pascals: 5_400,
-            maximum_rear_static_load_pascals: 2_400,
-            dimensions_millimetres: DimensionsMillimetres {
+            }),
+            maximum_series_fuse_milliamperes: Some(25_000),
+            maximum_front_static_load_pascals: Some(5_400),
+            maximum_rear_static_load_pascals: Some(2_400),
+            dimensions_millimetres: Some(DimensionsMillimetres {
                 length: 1_762,
                 width: 1_134,
                 height: 30,
-            },
-            weight_grams: 22_000,
+            }),
+            weight_grams: Some(22_000),
         },
         template: Some(EquipmentTemplateReference {
             entry_id: CatalogEntryId("module-template".to_owned()),

@@ -316,8 +316,8 @@ async fn provider_failure_is_safe_and_does_not_interrupt_telemetry_ingestion()
         account: fixture.account_id,
         user: fixture.user,
     });
-    let app = forecasting_router(Arc::new(UnavailableStub), authorizer)
-        .merge(telemetry_router(Arc::new(TelemetryStub)))
+    let app = forecasting_router(Arc::new(UnavailableStub), authorizer.clone())
+        .merge(telemetry_router(Arc::new(TelemetryStub), authorizer))
         .layer(Extension(RequestPrincipal::User(fixture.user)));
     let unavailable = app
         .clone()
