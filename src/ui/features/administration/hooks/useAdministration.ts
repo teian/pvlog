@@ -1,6 +1,7 @@
 import {
   createRole,
   assignRole,
+  fetchUserRoleAssignments,
   fetchAuditEvents,
   fetchConnectors,
   fetchLinkedIdentities,
@@ -9,7 +10,25 @@ import {
   fetchOperationalSummary,
   fetchRoles,
   inviteUser,
+  fetchAlertRules,
+  fetchWebhooks,
+  updateAlertRule,
+  fetchAdministrationUsers,
+  deleteAdministrationUser,
+  fetchWeatherFeedSettings,
+  saveWeatherFeedSettings,
+  fetchEmailNotificationSettings,
+  saveEmailNotificationSettings,
+  fetchRetentionBackupSettings,
+  saveRetentionBackupSettings,
+  runBackup,
 } from "@/features/administration/api/administrationApi";
+import type {
+  AlertRule,
+  EmailNotificationSettings,
+  RetentionBackupSettings,
+  WeatherFeedSettings,
+} from "@/features/administration/types/administration.types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 /** Loads identity links for the active browser session. @returns The identity query state. */
@@ -21,12 +40,11 @@ export function useLinkedIdentities() {
   });
 }
 
-/** Loads the role catalog when an account is active. @param accountId - Optional active account. @returns The role query state. */
+/** Loads the role catalog for the active account or the instance. @param accountId - Optional active account. @returns The role query state. */
 export function useRoles(accountId: string | null | undefined) {
   return useQuery({
     queryKey: ["administration", "roles", accountId],
-    queryFn: () => fetchRoles(accountId ?? ""),
-    enabled: Boolean(accountId),
+    queryFn: () => fetchRoles(accountId ?? null),
     retry: false,
   });
 }
@@ -68,7 +86,7 @@ export function useConnectors() {
   });
 }
 
-/** Assigns an existing account role and refreshes the role catalog for the affected account. @param accountId - Active account. @returns The assignment mutation state. */
+/** Assigns an existing account or instance role and refreshes the affected scope. @param accountId - Active account, or null for the instance. @returns The assignment mutation state. */
 export function useAssignRole(accountId: string | null | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -77,11 +95,33 @@ export function useAssignRole(accountId: string | null | undefined) {
       principalType: "user" | "api_credential";
       principalId: string;
       systemId?: string;
-    }) => assignRole(accountId ?? "", input),
-    onSuccess: async () =>
-      queryClient.invalidateQueries({
-        queryKey: ["administration", "roles", accountId],
-      }),
+    }) => assignRole(accountId ?? null, input),
+    onSuccess: async (_assignment, input) =>
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["administration", "roles", accountId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: [
+            "administration",
+            "role-assignments",
+            accountId,
+            input.principalId,
+          ],
+        }),
+      ]),
+  });
+}
+
+/** Loads active role assignments for one user in the current account or instance. @param accountId - Active account, or null for the instance. @param userId - User principal. @returns The assignment query state. */
+export function useUserRoleAssignments(
+  accountId: string | null | undefined,
+  userId: string,
+) {
+  return useQuery({
+    queryKey: ["administration", "role-assignments", accountId, userId],
+    queryFn: () => fetchUserRoleAssignments(accountId ?? null, userId),
+    retry: false,
   });
 }
 
@@ -96,7 +136,7 @@ export function useSystemResources(
   return {
     inverters: useQuery({
       queryKey: ["administration", "inverters", accountId, systemId],
-      queryFn: () => fetchInverters(accountId ?? "", systemId ?? ""),
+      queryFn: () => fetchInverters(systemId ?? ""),
       enabled,
       retry: false,
     }),
@@ -140,5 +180,128 @@ export function useOperationalSummary(accountId: string | null | undefined) {
     queryFn: () => fetchOperationalSummary(accountId ?? ""),
     enabled: Boolean(accountId),
     retry: false,
+  });
+}
+
+/** Loads alert rules when an account is active. */
+export function useAlertRules(accountId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["administration", "alert-rules", accountId],
+    queryFn: () => fetchAlertRules(accountId ?? ""),
+    enabled: Boolean(accountId),
+    retry: false,
+  });
+}
+
+/** Updates one alert rule and refreshes the account rule list. */
+export function useUpdateAlertRule(accountId: string | null | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (rule: AlertRule) => updateAlertRule(accountId ?? "", rule),
+    onSuccess: async () =>
+      queryClient.invalidateQueries({
+        queryKey: ["administration", "alert-rules", accountId],
+      }),
+  });
+}
+
+/** Loads webhook notification channels when an account is active. */
+export function useWebhooks(accountId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["administration", "webhooks", accountId],
+    queryFn: () => fetchWebhooks(accountId ?? ""),
+    enabled: Boolean(accountId),
+    retry: false,
+  });
+}
+
+export function useAdministrationUsers() {
+  return useQuery({
+    queryKey: ["administration", "users"],
+    queryFn: fetchAdministrationUsers,
+    retry: false,
+  });
+}
+
+/** Deletes an eligible local user and refreshes the administrator directory. @returns The deletion mutation state. */
+export function useDeleteAdministrationUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteAdministrationUser,
+    onSuccess: async () =>
+      queryClient.invalidateQueries({
+        queryKey: ["administration", "users"],
+      }),
+  });
+}
+
+export function useWeatherFeedSettings() {
+  return useQuery({
+    queryKey: ["administration", "weather-feed"],
+    queryFn: fetchWeatherFeedSettings,
+    retry: false,
+  });
+}
+
+export function useSaveWeatherFeedSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: WeatherFeedSettings) =>
+      saveWeatherFeedSettings(settings),
+    onSuccess: async () =>
+      queryClient.invalidateQueries({
+        queryKey: ["administration", "weather-feed"],
+      }),
+  });
+}
+
+export function useEmailNotificationSettings() {
+  return useQuery({
+    queryKey: ["administration", "email-notifications"],
+    queryFn: fetchEmailNotificationSettings,
+    retry: false,
+  });
+}
+
+export function useSaveEmailNotificationSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: EmailNotificationSettings) =>
+      saveEmailNotificationSettings(settings),
+    onSuccess: async () =>
+      queryClient.invalidateQueries({
+        queryKey: ["administration", "email-notifications"],
+      }),
+  });
+}
+
+export function useRetentionBackupSettings() {
+  return useQuery({
+    queryKey: ["administration", "retention-backup"],
+    queryFn: fetchRetentionBackupSettings,
+    retry: false,
+  });
+}
+
+export function useSaveRetentionBackupSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (settings: RetentionBackupSettings) =>
+      saveRetentionBackupSettings(settings),
+    onSuccess: async () =>
+      queryClient.invalidateQueries({
+        queryKey: ["administration", "retention-backup"],
+      }),
+  });
+}
+
+export function useRunBackup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: runBackup,
+    onSuccess: async () =>
+      queryClient.invalidateQueries({
+        queryKey: ["administration", "retention-backup"],
+      }),
   });
 }

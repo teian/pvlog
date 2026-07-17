@@ -45,7 +45,11 @@ export function RolesPanel({
             <li className="rounded-md border p-3" key={role.id}>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-medium">{role.name}</p>
-                <Badge variant="secondary">{role.kind}</Badge>
+                <Badge variant="secondary">
+                  {t(`administration.roles.kinds.${role.kind}`, {
+                    defaultValue: role.kind,
+                  })}
+                </Badge>
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
                 {t("administration.roles.permissions", {

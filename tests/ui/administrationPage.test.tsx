@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,9 +7,11 @@ import i18n from "@/shared/lib/i18n";
 
 const accountId = "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c1";
 let fetchMock: ReturnType<typeof vi.fn>;
+let sessionAccountId: string | null;
 
 describe("administration page", () => {
   beforeEach(async () => {
+    sessionAccountId = accountId;
     await i18n.changeLanguage("en");
     window.history.replaceState({}, "", "/administration");
     window.sessionStorage.setItem("pvlog.csrf-token", "csrf-token");
@@ -22,7 +24,7 @@ describe("administration page", () => {
             id: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c2",
             displayName: "Admin",
           },
-          accountId,
+          accountId: sessionAccountId,
           systemIds: [],
           permissions: [],
           connectors: [],
@@ -48,6 +50,72 @@ describe("administration page", () => {
             scopes: ["openid"],
           },
         ]);
+      if (path === "/api/v1/admin/users")
+        return json([
+          {
+            id: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c2",
+            email: "admin@example.test",
+            displayName: "Admin",
+            status: "active",
+            emailVerifiedAt: 1_720_000_000_000,
+            disabledAt: null,
+            lockedUntil: null,
+            createdAt: 1_720_000_000_000,
+            updatedAt: 1_720_000_000_000,
+          },
+        ]);
+      if (path === "/api/v1/admin/roles")
+        return json([
+          {
+            id: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5d1",
+            name: "instance_administrator",
+            kind: "built_in:InstanceAdministrator",
+            permissions: ["instance_manage", "role_manage"],
+            parentRoleIds: [],
+            version: 1,
+            createdAt: 1_720_000_000_000,
+            updatedAt: 1_720_000_000_000,
+          },
+        ]);
+      if (path.includes("/api/v1/admin/role-assignments?principalType=user"))
+        return json([
+          {
+            id: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5d2",
+            roleId: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5d1",
+            principalType: "user",
+            principalId: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c2",
+            accountId: null,
+            systemId: null,
+            expiresAt: null,
+          },
+        ]);
+      if (path === "/api/v1/admin/weather-feed")
+        return json({
+          enabled: true,
+          endpoint: "mqtt://broker.example.test:1883/weather",
+          credentialSecretRef: null,
+          updatedAtEpochMillis: null,
+        });
+      if (path === "/api/v1/admin/email-notifications")
+        return json({
+          enabled: true,
+          recipient: "ops@example.test",
+          host: "smtp.example.test",
+          port: 587,
+          username: "alerts@example.test",
+          credentialSecretRef: "secret://smtp/pvlog",
+          encryption: "starttls",
+          updatedAtEpochMillis: null,
+        });
+      if (path === "/api/v1/admin/retention-backup")
+        return json({
+          readingRetentionDays: 365,
+          automaticBackupsEnabled: true,
+          backupSchedule: "0 2 * * *",
+          lastBackupAtEpochMillis: null,
+          lastBackupBytes: null,
+          updatedAtEpochMillis: null,
+        });
       if (path === "/api/v1/admin/user-invitations" && init?.method === "POST")
         return new Response(
           JSON.stringify({
@@ -57,6 +125,11 @@ describe("administration page", () => {
           }),
           { status: 201, headers: { "content-type": "application/json" } },
         );
+      if (
+        path === "/api/v1/admin/users/018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c2" &&
+        init?.method === "DELETE"
+      )
+        return new Response(null, { status: 204 });
       if (path.endsWith("/role-assignments") && init?.method === "POST")
         return json({
           id: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c9",
@@ -67,6 +140,18 @@ describe("administration page", () => {
           systemId: null,
           expiresAt: null,
         });
+      if (path.includes("/role-assignments?principalType=user"))
+        return json([
+          {
+            id: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c9",
+            roleId: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c5",
+            principalType: "user",
+            principalId: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c2",
+            accountId,
+            systemId: null,
+            expiresAt: null,
+          },
+        ]);
       if (path.endsWith("/roles") && init?.method === "POST")
         return json({
           id: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c7",
@@ -105,12 +190,42 @@ describe("administration page", () => {
             safeMetadata: {},
           },
         ]);
+      if (path.endsWith("/alerts/018f2ab5-8a75-7cc4-9a9b-b0f10c37d5ca"))
+        return json({
+          id: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5ca",
+          name: "Low yield",
+          kind: "performance_below",
+          timezone: "Europe/Berlin",
+          enabled: true,
+          condition: { percentage: 70 },
+        });
+      if (path.endsWith("/alerts"))
+        return json([
+          {
+            id: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5ca",
+            name: "Low yield",
+            kind: "performance_below",
+            timezone: "Europe/Berlin",
+            enabled: false,
+            condition: { percentage: 70 },
+          },
+        ]);
+      if (path.endsWith("/webhooks"))
+        return json([
+          {
+            id: "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5cb",
+            endpoint: "https://ops.example.test/pvlog",
+            events: ["alert_opened", "alert_resolved"],
+            state: "active",
+          },
+        ]);
       return new Response(null, { status: 404 });
     });
     vi.stubGlobal("fetch", fetchMock);
   });
 
-  it("shows only the authorized identity, role, and audit data", async () => {
+  it("uses the dedicated administration navigation to separate account data", async () => {
+    const user = userEvent.setup();
     render(
       <App
         runtimeConfig={{
@@ -130,23 +245,82 @@ describe("administration page", () => {
     ).toBeVisible();
     expect(await screen.findByText("admin@example.test")).toBeVisible();
     expect(screen.getAllByText("Operators")).not.toHaveLength(0);
-    expect(screen.getByText("Company SSO")).toBeVisible();
-    expect(screen.getByText("role.create")).toBeVisible();
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "Role" })).toHaveValue(
+        "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c5",
+      );
+    });
+    expect(screen.queryByText("Company SSO")).not.toBeInTheDocument();
+    expect(screen.queryByText("role.create")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Data Sources" }));
+    expect(await screen.findByText("Company SSO")).toBeVisible();
+
+    await user.click(screen.getByRole("link", { name: "System Logs" }));
+    expect(await screen.findByText("role.create")).toBeVisible();
   });
 
-  it("creates a role through the CSRF-protected account endpoint", async () => {
+  it("shows the seeded instance administrator without requiring an account", async () => {
+    sessionAccountId = null;
+    render(<App runtimeConfig={runtimeConfig} />);
+
+    expect(await screen.findByText("admin@example.test")).toBeVisible();
+    await waitFor(() => {
+      expect(screen.getByRole("combobox", { name: "Role" })).toHaveValue(
+        "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5d1",
+      );
+    });
+    expect(screen.getByRole("option", { name: "Admin" })).toBeVisible();
+  });
+
+  it("toggles a real account alert rule through its PATCH endpoint", async () => {
     const user = userEvent.setup();
     render(<App runtimeConfig={runtimeConfig} />);
-    await screen.findByRole("heading", { name: "Administration" });
-    await user.type(await screen.findByLabelText("Role name"), "Readers");
-    await user.click(screen.getByLabelText("Read systems"));
-    await user.click(screen.getByRole("button", { name: "Create role" }));
+
+    await user.click(await screen.findByRole("link", { name: "Alert Rules" }));
+    await screen.findByText("Low yield");
+    await user.click(screen.getByRole("switch", { name: "Low yield" }));
 
     expect(fetchMock).toHaveBeenCalledWith(
-      `/api/v1/accounts/${accountId}/roles`,
+      `/api/v1/accounts/${accountId}/alerts/018f2ab5-8a75-7cc4-9a9b-b0f10c37d5ca`,
       expect.objectContaining({
-        body: JSON.stringify({ name: "Readers", permissions: ["system_read"] }),
-        method: "POST",
+        method: "PATCH",
+        body: JSON.stringify({
+          name: "Low yield",
+          kind: "performance_below",
+          timezone: "Europe/Berlin",
+          enabled: true,
+          condition: { percentage: 70 },
+        }),
+      }),
+    );
+  });
+
+  it("shows configured webhook notification channels", async () => {
+    const user = userEvent.setup();
+    render(<App runtimeConfig={runtimeConfig} />);
+
+    await user.click(
+      await screen.findByRole("link", { name: "Notifications" }),
+    );
+    expect(
+      await screen.findByText("https://ops.example.test/pvlog"),
+    ).toBeVisible();
+    expect(screen.getByText("2 subscribed events")).toBeVisible();
+  });
+
+  it("deletes a user through the protected lifecycle endpoint", async () => {
+    const user = userEvent.setup();
+    render(<App runtimeConfig={runtimeConfig} />);
+    await user.click(
+      await screen.findByRole("button", { name: "Delete Admin" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Delete user" }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/admin/users/018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c2",
+      expect.objectContaining({
+        method: "DELETE",
       }),
     );
   });
@@ -154,6 +328,9 @@ describe("administration page", () => {
   it("shows an invitation token only from the creation response", async () => {
     const user = userEvent.setup();
     render(<App runtimeConfig={runtimeConfig} />);
+    await user.click(
+      await screen.findByRole("button", { name: "Invite User" }),
+    );
     await user.type(
       await screen.findByLabelText("Email address"),
       "invitee@example.test",
@@ -173,11 +350,10 @@ describe("administration page", () => {
   it("assigns an existing role to a typed principal", async () => {
     const user = userEvent.setup();
     render(<App runtimeConfig={runtimeConfig} />);
-    await user.type(
-      await screen.findByLabelText("Principal ID"),
-      "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c2",
+    await user.selectOptions(
+      await screen.findByRole("combobox", { name: "Role" }),
+      "018f2ab5-8a75-7cc4-9a9b-b0f10c37d5c5",
     );
-    await user.click(screen.getByRole("button", { name: "Assign role" }));
 
     expect(fetchMock).toHaveBeenCalledWith(
       `/api/v1/accounts/${accountId}/role-assignments`,

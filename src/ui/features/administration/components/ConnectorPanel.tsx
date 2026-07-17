@@ -42,7 +42,12 @@ export function ConnectorPanel() {
             <li className="rounded-md border p-3" key={connector.id}>
               <div className="flex flex-wrap items-center gap-2">
                 <p className="font-medium">{connector.displayName}</p>
-                <Badge variant="secondary">{connector.protocol}</Badge>
+                <Badge variant="secondary">
+                  {t(
+                    `administration.connectors.protocols.${connector.protocol}`,
+                    { defaultValue: connector.protocol },
+                  )}
+                </Badge>
                 <Badge variant={connector.enabled ? "default" : "outline"}>
                   {connector.enabled
                     ? t("administration.connectors.enabled")

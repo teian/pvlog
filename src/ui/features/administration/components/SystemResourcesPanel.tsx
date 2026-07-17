@@ -46,7 +46,9 @@ export function SystemResourcesPanel({
               <dt className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
                 {t(`administration.resources.${kind}`)}
               </dt>
-              <dd className="mt-1 text-2xl font-bold tabular-nums">{count ?? "—"}</dd>
+              <dd className="mt-1 text-2xl font-bold tabular-nums">
+                {count ?? "—"}
+              </dd>
             </div>
           ))}
         </dl>

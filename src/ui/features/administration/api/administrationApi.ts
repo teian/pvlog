@@ -7,6 +7,12 @@ import {
   roleSchema,
   roleAssignmentSchema,
   managedResourceSchema,
+  alertRuleSchema,
+  webhookSubscriptionSchema,
+  administrationUserSchema,
+  weatherFeedSettingsSchema,
+  emailNotificationSettingsSchema,
+  retentionBackupSettingsSchema,
   type AuditEvent,
   type LinkedIdentity,
   type Role,
@@ -15,6 +21,12 @@ import {
   type ConnectorAdmin,
   type Inverter,
   type ManagedResource,
+  type AlertRule,
+  type WebhookSubscription,
+  type AdministrationUser,
+  type WeatherFeedSettings,
+  type EmailNotificationSettings,
+  type RetentionBackupSettings,
 } from "@/features/administration/types/administration.types";
 import { sessionJsonRequest } from "@/shared/api/sessionRequest";
 import { z } from "zod";
@@ -33,11 +45,17 @@ export async function fetchLinkedIdentities(): Promise<LinkedIdentity[]> {
     .parse(await getJson("/api/v1/users/me/identities"));
 }
 
-/** Lists roles that can be administered for one account. @param accountId - Account whose role catalog is requested. @returns Validated roles. */
-export async function fetchRoles(accountId: string): Promise<Role[]> {
+/** Lists roles that can be administered at the current account or instance scope. @param accountId - Account whose role catalog is requested, or null for instance roles. @returns Validated roles. */
+export async function fetchRoles(accountId: string | null): Promise<Role[]> {
   return z
     .array(roleSchema)
-    .parse(await getJson(`/api/v1/accounts/${accountId}/roles`));
+    .parse(
+      await getJson(
+        accountId
+          ? `/api/v1/accounts/${accountId}/roles`
+          : "/api/v1/admin/roles",
+      ),
+    );
 }
 
 /** Lists a bounded, server-authorized audit trail for one account. @param accountId - Account whose audit trail is requested. @returns Validated audit events. */
@@ -64,9 +82,9 @@ export async function createRole(
   );
 }
 
-/** Assigns a role to a user or API credential at account or system scope. @param accountId - Account that owns the assignment. @param input - Validated principal and scope identifiers. @returns The created assignment. */
+/** Assigns a role to a user or API credential at account, system, or instance scope. @param accountId - Account that owns the assignment, or null for an instance assignment. @param input - Validated principal and scope identifiers. @returns The created assignment. */
 export async function assignRole(
-  accountId: string,
+  accountId: string | null,
   input: {
     roleId: string;
     principalType: "user" | "api_credential";
@@ -75,11 +93,36 @@ export async function assignRole(
   },
 ): Promise<RoleAssignment> {
   return roleAssignmentSchema.parse(
-    await sessionJsonRequest(`/api/v1/accounts/${accountId}/role-assignments`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+    await sessionJsonRequest(
+      accountId
+        ? `/api/v1/accounts/${accountId}/role-assignments`
+        : "/api/v1/admin/role-assignments",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    ),
   );
+}
+
+/** Lists active RBAC assignments for one user. @param accountId - Owning account, or null for instance assignments. @param userId - User principal identifier. @returns Current assignments at the selected scope. */
+export async function fetchUserRoleAssignments(
+  accountId: string | null,
+  userId: string,
+): Promise<RoleAssignment[]> {
+  const query = new URLSearchParams({
+    principalType: "user",
+    principalId: userId,
+  });
+  return z
+    .array(roleAssignmentSchema)
+    .parse(
+      await getJson(
+        accountId
+          ? `/api/v1/accounts/${accountId}/role-assignments?${query.toString()}`
+          : `/api/v1/admin/role-assignments?${query.toString()}`,
+      ),
+    );
 }
 
 /** Creates a one-time local-user invitation. @param email - Email address to invite. @returns The invitation token, shown once to the administrator. */
@@ -99,18 +142,11 @@ export async function fetchConnectors(): Promise<ConnectorAdmin[]> {
     .parse(await getJson("/api/v1/admin/auth-connectors"));
 }
 
-/** Loads one system's complete inverter/string hierarchy. @param accountId - Owning account. @param systemId - System aggregate root. @returns Validated inverter aggregates. */
-export async function fetchInverters(
-  accountId: string,
-  systemId: string,
-): Promise<Inverter[]> {
+/** Loads one system's complete inverter/string hierarchy. @param systemId - System aggregate root. @returns Validated inverter aggregates. */
+export async function fetchInverters(systemId: string): Promise<Inverter[]> {
   return z
     .array(inverterSchema)
-    .parse(
-      await getJson(
-        `/api/v1/accounts/${accountId}/systems/${systemId}/inverters`,
-      ),
-    );
+    .parse(await getJson(`/api/v1/systems/${systemId}/inverters`));
 }
 
 /** Loads generic administration resources. @param path - Authorized modern resource path. @returns Validated resources. */
@@ -141,4 +177,112 @@ export async function fetchOperationalSummary(
     }),
   );
   return Object.fromEntries(entries);
+}
+
+/** Lists alert rules configured for one account. */
+export async function fetchAlertRules(accountId: string): Promise<AlertRule[]> {
+  return z
+    .array(alertRuleSchema)
+    .parse(await getJson(`/api/v1/accounts/${accountId}/alerts`));
+}
+
+/** Persists the enabled state of an existing alert rule. */
+export async function updateAlertRule(
+  accountId: string,
+  rule: AlertRule,
+): Promise<AlertRule> {
+  return alertRuleSchema.parse(
+    await sessionJsonRequest(
+      `/api/v1/accounts/${accountId}/alerts/${rule.id}`,
+      {
+        method: "PATCH",
+        body: JSON.stringify({
+          name: rule.name,
+          kind: rule.kind,
+          timezone: rule.timezone,
+          enabled: rule.enabled,
+          condition: rule.condition,
+        }),
+      },
+    ),
+  );
+}
+
+/** Lists configured webhook notification channels for one account. */
+export async function fetchWebhooks(
+  accountId: string,
+): Promise<WebhookSubscription[]> {
+  return z
+    .array(webhookSubscriptionSchema)
+    .parse(await getJson(`/api/v1/accounts/${accountId}/webhooks`));
+}
+
+export async function fetchAdministrationUsers(): Promise<
+  AdministrationUser[]
+> {
+  return z
+    .array(administrationUserSchema)
+    .parse(await getJson("/api/v1/admin/users"));
+}
+
+/** Deletes one eligible local user through the protected lifecycle endpoint. @param userId - Local user identifier. @returns Completion after the server accepts the deletion. */
+export async function deleteAdministrationUser(userId: string): Promise<void> {
+  await sessionJsonRequest(`/api/v1/admin/users/${userId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function fetchWeatherFeedSettings(): Promise<WeatherFeedSettings> {
+  return weatherFeedSettingsSchema.parse(
+    await getJson("/api/v1/admin/weather-feed"),
+  );
+}
+
+export async function saveWeatherFeedSettings(
+  settings: WeatherFeedSettings,
+): Promise<WeatherFeedSettings> {
+  return weatherFeedSettingsSchema.parse(
+    await sessionJsonRequest("/api/v1/admin/weather-feed", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    }),
+  );
+}
+
+export async function fetchEmailNotificationSettings(): Promise<EmailNotificationSettings> {
+  return emailNotificationSettingsSchema.parse(
+    await getJson("/api/v1/admin/email-notifications"),
+  );
+}
+
+export async function saveEmailNotificationSettings(
+  settings: EmailNotificationSettings,
+): Promise<EmailNotificationSettings> {
+  return emailNotificationSettingsSchema.parse(
+    await sessionJsonRequest("/api/v1/admin/email-notifications", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    }),
+  );
+}
+
+export async function fetchRetentionBackupSettings(): Promise<RetentionBackupSettings> {
+  return retentionBackupSettingsSchema.parse(
+    await getJson("/api/v1/admin/retention-backup"),
+  );
+}
+
+export async function saveRetentionBackupSettings(
+  settings: RetentionBackupSettings,
+): Promise<RetentionBackupSettings> {
+  return retentionBackupSettingsSchema.parse(
+    await sessionJsonRequest("/api/v1/admin/retention-backup", {
+      method: "PUT",
+      body: JSON.stringify(settings),
+    }),
+  );
+}
+
+export async function runBackup(): Promise<unknown> {
+  return sessionJsonRequest("/api/v1/admin/backups", { method: "POST" });
 }
