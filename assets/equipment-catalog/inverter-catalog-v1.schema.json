@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pvlog.local/schemas/inverter-catalog-v1.schema.json",
+  "title": "PVLog inverter catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "revision", "inverters"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "revision": { "type": "string", "minLength": 1 },
+    "inverters": {
+      "type": "array",
+      "items": {
+        "$ref": "https://pvlog.local/schemas/equipment-catalog-definitions-v1.schema.json#/$defs/inverter"
+      }
+    }
+  }
+}

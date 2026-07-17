@@ -46,8 +46,7 @@ export function useSaveEquipmentConfiguration(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: unknown) =>
-      saveEquipmentConfiguration(accountId, systemId, input),
+    mutationFn: (input: unknown) => saveEquipmentConfiguration(systemId, input),
     onSuccess: async () =>
       queryClient.invalidateQueries({
         queryKey: ["administration", "inverters", accountId, systemId],

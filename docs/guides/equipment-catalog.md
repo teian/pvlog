@@ -35,12 +35,40 @@ Selecting a catalog entry records its stable ID and revision as optional provena
 
 ## Updating the bundled catalog
 
+The bundled runtime data is split into independently versioned assets:
+
+- `assets/equipment-catalog/inverter-catalog-v1.json`
+- `assets/equipment-catalog/pv-module-catalog-v1.json`
+
+Curated inverter records are maintained directly in the inverter catalog. The
+Open PV Module Database importer writes only the PV-module catalog. Module
+refreshes and inverter updates therefore cannot alter each other's records or
+revisions.
+
 1. Use a stable manufacturer product page or manufacturer-published datasheet. Do not scrape sites or copy descriptive copyrighted material.
-2. Add only technical facts needed by the typed schema in `assets/equipment-catalog/catalog-v1.schema.json`.
-3. Preserve an existing stable ID for the same model. Increase the catalog revision for reviewed corrections or additions.
-4. Record `sourceName`, a direct `sourceReference`, and the review/retrieval date. Review regional model variants and datasheet revisions explicitly.
-5. Keep inverter and module arrays sorted by ID. Represent asymmetric MPPT current limits per tracker.
-6. Run schema validation, application catalog tests, OpenAPI checks, and release checksum generation.
-7. Have a second reviewer compare every transcribed value with the attributed source, including signs and unit conversions.
+2. Add normalized inverter facts directly to `assets/equipment-catalog/inverter-catalog-v1.json`.
+3. Add only technical facts supported by the typed schema in `assets/equipment-catalog/equipment-catalog-definitions-v1.schema.json`.
+4. Preserve an existing stable ID for the same model. Increase the source catalog revision for reviewed corrections or additions.
+5. Record `sourceName`, a direct `sourceReference`, and the review/retrieval date. Review regional model variants and datasheet revisions explicitly.
+6. Keep inverter and module arrays sorted by ID. Represent asymmetric MPPT current limits per tracker.
+7. Run schema validation, application catalog tests, OpenAPI checks, and release checksum generation.
+8. Have a second reviewer compare every transcribed value with the attributed source, including signs and unit conversions.
 
 Catalog corrections affect only future prefills. Existing snapshots intentionally retain the older revision and confirmed values for reproducibility.
+
+### Open PV Module Database import
+
+The bundled module list is generated from a pinned Open PV Module Database
+snapshot in addition to individually curated entries. Regenerate it with:
+
+```bash
+pnpm catalog:import-open-pv-modules /path/to/open-pv-module-database
+```
+
+The importer converts decimal engineering units to PVLog's integer units,
+retains stable source IDs and per-record provenance, sorts the result
+deterministically, and rejects records with missing core electrical data or
+physically inconsistent voltage, current, power, efficiency, or temperature
+coefficients. Optional unpublished physical and protection values stay absent.
+The pinned source revision and licensing notice are recorded in
+`assets/equipment-catalog/OPEN_PV_MODULE_DATABASE.md`.

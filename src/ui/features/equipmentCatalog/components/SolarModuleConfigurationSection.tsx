@@ -64,15 +64,22 @@ export function SolarModuleConfigurationSection() {
         ],
         [
           t("features.equipmentCatalog.fields.dimensions"),
-          `${String(specification.dimensionsMillimetres.length)} × ${String(specification.dimensionsMillimetres.width)} × ${String(specification.dimensionsMillimetres.height)} mm`,
+          specification.dimensionsMillimetres
+            ? `${String(specification.dimensionsMillimetres.length)} × ${String(specification.dimensionsMillimetres.width)} × ${String(specification.dimensionsMillimetres.height)} mm`
+            : "—",
         ],
         [
           t("features.equipmentCatalog.fields.weight"),
-          `${String(specification.weightGrams / 1000)} kg`,
+          specification.weightGrams == null
+            ? "—"
+            : `${String(specification.weightGrams / 1000)} kg`,
         ],
         [
           t("features.equipmentCatalog.fields.loads"),
-          `${String(specification.maximumFrontStaticLoadPascals)} / ${String(specification.maximumRearStaticLoadPascals)} Pa`,
+          specification.maximumFrontStaticLoadPascals == null ||
+          specification.maximumRearStaticLoadPascals == null
+            ? "—"
+            : `${String(specification.maximumFrontStaticLoadPascals)} / ${String(specification.maximumRearStaticLoadPascals)} Pa`,
         ],
         [
           t("features.equipmentCatalog.fields.source"),

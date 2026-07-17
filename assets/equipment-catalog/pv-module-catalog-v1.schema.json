@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pvlog.local/schemas/pv-module-catalog-v1.schema.json",
+  "title": "PVLog PV module catalog v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "revision", "solarModules"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "revision": { "type": "string", "minLength": 1 },
+    "solarModules": {
+      "type": "array",
+      "items": {
+        "$ref": "https://pvlog.local/schemas/equipment-catalog-definitions-v1.schema.json#/$defs/solarModule"
+      }
+    }
+  }
+}

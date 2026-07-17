@@ -18,8 +18,8 @@ use pvlog_domain::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ModernRequestAuthorizer, Problem, RequestAuthorizationError, RequestPrincipal,
-    principal_identity,
+    AuthorizedRequest, ModernRequestAuthorizer, Problem, RequestAuthorizationError,
+    RequestPrincipal, principal_identity,
 };
 
 #[derive(Clone, Debug, Deserialize)]
@@ -29,11 +29,9 @@ pub struct PvStringInput {
     pub panel_count: u32,
     pub panel_manufacturer: Option<String>,
     pub panel_model: Option<String>,
-    pub rated_power_watts: i64,
     pub value_provenance: Option<EquipmentValueProvenance>,
     pub module_specification_snapshot: Option<SolarModuleSpecificationSnapshot>,
-    pub module_peak_power_watts: Option<i64>,
-    pub total_peak_power_watts: Option<i64>,
+    pub module_peak_power_watts: i64,
     pub orientation_degrees: Option<u16>,
     pub tilt_degrees: Option<u8>,
     pub effective_from: i64,
@@ -112,6 +110,21 @@ pub trait InverterApiUseCases: Send + Sync {
         system_id: SystemId,
         input: InverterInput,
     ) -> Result<InverterResponse, InverterApiError>;
+    async fn update(
+        &self,
+        actor: UserId,
+        account_id: AccountId,
+        system_id: SystemId,
+        inverter_id: InverterId,
+        input: InverterInput,
+    ) -> Result<InverterResponse, InverterApiError>;
+    async fn delete(
+        &self,
+        actor: UserId,
+        account_id: AccountId,
+        system_id: SystemId,
+        inverter_id: InverterId,
+    ) -> Result<(), InverterApiError>;
 }
 
 #[derive(Clone)]
@@ -126,8 +139,12 @@ pub fn inverters_router(
 ) -> Router {
     Router::new()
         .route(
-            "/api/v1/accounts/{account_id}/systems/{system_id}/inverters",
+            "/api/v1/systems/{system_id}/inverters",
             get(list).post(create),
+        )
+        .route(
+            "/api/v1/systems/{system_id}/inverters/{inverter_id}",
+            axum::routing::put(update).delete(remove),
         )
         .with_state(InverterState {
             service,
@@ -135,42 +152,98 @@ pub fn inverters_router(
         })
 }
 
+async fn update(
+    State(state): State<InverterState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path((system_id, inverter_id)): Path<(SystemId, InverterId)>,
+    Json(input): Json<InverterInput>,
+) -> Result<Response, InverterApiError> {
+    let authorized =
+        authorize(&state, principal, system_id, true, "system.inverter.update").await?;
+    let record = state
+        .service
+        .update(
+            authorized.actor_user_id,
+            authorized.account_id,
+            system_id,
+            inverter_id,
+            input,
+        )
+        .await?;
+    Ok(versioned_response(StatusCode::OK, record))
+}
+
 async fn list(
     State(state): State<InverterState>,
     principal: Option<Extension<RequestPrincipal>>,
-    Path((account_id, system_id)): Path<(AccountId, SystemId)>,
+    Path(system_id): Path<SystemId>,
 ) -> Result<Json<Vec<InverterResponse>>, InverterApiError> {
-    authorize(&state, principal, account_id, system_id, false).await?;
+    let authorized = authorize(&state, principal, system_id, false, "system.inverter.list").await?;
     Ok(Json(
-        state.service.list(account_id, system_id, now()).await?,
+        state
+            .service
+            .list(authorized.account_id, system_id, now())
+            .await?,
     ))
 }
 
 async fn create(
     State(state): State<InverterState>,
     principal: Option<Extension<RequestPrincipal>>,
-    Path((account_id, system_id)): Path<(AccountId, SystemId)>,
+    Path(system_id): Path<SystemId>,
     Json(input): Json<InverterInput>,
 ) -> Result<Response, InverterApiError> {
-    let actor = authorize(&state, principal, account_id, system_id, true).await?;
+    let authorized =
+        authorize(&state, principal, system_id, true, "system.inverter.create").await?;
     let record = state
         .service
-        .create(actor, account_id, system_id, input)
+        .create(
+            authorized.actor_user_id,
+            authorized.account_id,
+            system_id,
+            input,
+        )
         .await?;
-    let mut response = (StatusCode::CREATED, Json(record)).into_response();
+    Ok(versioned_response(StatusCode::CREATED, record))
+}
+
+async fn remove(
+    State(state): State<InverterState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path((system_id, inverter_id)): Path<(SystemId, InverterId)>,
+) -> Result<StatusCode, InverterApiError> {
+    let authorized =
+        authorize(&state, principal, system_id, true, "system.inverter.delete").await?;
+    state
+        .service
+        .delete(
+            authorized.actor_user_id,
+            authorized.account_id,
+            system_id,
+            inverter_id,
+        )
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn versioned_response(status: StatusCode, record: InverterResponse) -> Response {
+    let version = record.version;
+    let mut response = (status, Json(record)).into_response();
+    response.headers_mut().insert(
+        header::ETAG,
+        HeaderValue::from_str(&format!("\"{version}\""))
+            .unwrap_or_else(|_| HeaderValue::from_static("\"1\"")),
+    );
     response
-        .headers_mut()
-        .insert(header::ETAG, HeaderValue::from_static("\"1\""));
-    Ok(response)
 }
 
 async fn authorize(
     state: &InverterState,
     principal: Option<Extension<RequestPrincipal>>,
-    account_id: AccountId,
     system_id: SystemId,
     write: bool,
-) -> Result<UserId, InverterApiError> {
+    action: &'static str,
+) -> Result<AuthorizedRequest, InverterApiError> {
     let Extension(principal) = principal.ok_or(InverterApiError::Forbidden)?;
     if let RequestPrincipal::ApiCredential { scopes, .. } = &principal {
         let scope = if write {
@@ -185,24 +258,17 @@ async fn authorize(
     let authorized = state
         .authorizer
         .authorize_system(
-            principal_identity(&principal),
+            principal_identity(&principal)?,
             system_id,
             if write {
                 Permission::SystemManage
             } else {
                 Permission::SystemRead
             },
-            if write {
-                "system.inverter.create"
-            } else {
-                "system.inverter.list"
-            },
+            action,
         )
         .await?;
-    if authorized.account_id != account_id {
-        return Err(InverterApiError::Forbidden);
-    }
-    Ok(authorized.actor_user_id)
+    Ok(authorized)
 }
 
 fn now() -> i64 {
@@ -213,6 +279,7 @@ fn now() -> i64 {
 #[derive(Debug)]
 pub enum InverterApiError {
     Forbidden,
+    NotFound,
     InvalidInput(&'static str),
     Unavailable,
 }
@@ -252,11 +319,31 @@ impl IntoResponse for InverterApiError {
             );
             return response;
         }
-        match self {
-            Self::Forbidden => StatusCode::FORBIDDEN,
-            Self::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
+        let (status, title, detail) = match self {
+            Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden", "system_access_denied"),
+            Self::NotFound => (StatusCode::NOT_FOUND, "not_found", "inverter_not_found"),
+            Self::Unavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "service_unavailable",
+                "inverter_service_unavailable",
+            ),
             Self::InvalidInput(_) => unreachable!(),
-        }
-        .into_response()
+        };
+        let mut response = (
+            status,
+            Json(Problem {
+                problem_type: "https://pvlog.example/problems/inverter-management",
+                title,
+                status: status.as_u16(),
+                detail,
+                request_id: None,
+            }),
+        )
+            .into_response();
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/problem+json"),
+        );
+        response
     }
 }

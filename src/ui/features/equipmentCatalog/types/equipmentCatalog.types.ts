@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-const optionalPositiveInteger = z.number().int().positive().optional();
+const optionalPositiveInteger = z
+  .number()
+  .int()
+  .positive()
+  .nullable()
+  .optional();
 const provenanceSchema = z.object({
   sourceName: z.string().min(1),
   sourceReference: z.url(),
@@ -55,9 +60,9 @@ export const inverterCatalogEntrySchema = z.object({
       maximumEfficiencyBasisPoints: optionalPositiveInteger,
       europeanEfficiencyBasisPoints: optionalPositiveInteger,
       communicationInterfaces: z.array(z.string()).default([]),
-      dimensionsMillimetres: dimensionsSchema.optional(),
+      dimensionsMillimetres: dimensionsSchema.nullable().optional(),
       weightGrams: optionalPositiveInteger,
-      operatingTemperature: temperatureRangeSchema.optional(),
+      operatingTemperature: temperatureRangeSchema.nullable().optional(),
     })
     .loose(),
 });
@@ -85,13 +90,13 @@ export const solarModuleCatalogEntrySchema = z.object({
       shortCircuitCurrentTemperatureCoefficientPpmPerCelsius: z.number().int(),
       openCircuitVoltageTemperatureCoefficientPpmPerCelsius: z.number().int(),
       peakPowerTemperatureCoefficientPpmPerCelsius: z.number().int(),
-      maximumSystemVoltageMillivolts: z.number().int().positive(),
-      operatingTemperature: temperatureRangeSchema,
-      maximumSeriesFuseMilliamperes: z.number().int().positive(),
-      maximumFrontStaticLoadPascals: z.number().int().positive(),
-      maximumRearStaticLoadPascals: z.number().int().positive(),
-      dimensionsMillimetres: dimensionsSchema,
-      weightGrams: z.number().int().positive(),
+      maximumSystemVoltageMillivolts: optionalPositiveInteger,
+      operatingTemperature: temperatureRangeSchema.nullable().optional(),
+      maximumSeriesFuseMilliamperes: optionalPositiveInteger,
+      maximumFrontStaticLoadPascals: optionalPositiveInteger,
+      maximumRearStaticLoadPascals: optionalPositiveInteger,
+      dimensionsMillimetres: dimensionsSchema.nullable().optional(),
+      weightGrams: optionalPositiveInteger,
     })
     .loose(),
 });

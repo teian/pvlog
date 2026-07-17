@@ -1,13 +1,17 @@
 use std::{error::Error, sync::Arc};
 
 use pvlog_application::{
-    Clock, CreateSystem, SystemLifecycleService, SystemLifecycleUseCases, UpdateSystem,
+    Clock, CreateSystem, RbacRepository, SystemLifecycleService, SystemLifecycleUseCases,
+    UpdateSystem, built_in_account_roles,
 };
-use pvlog_domain::{AccountId, SystemLifecycle, UserId, UtcTimestamp, Visibility};
+use pvlog_domain::{
+    AccountId, BuiltInRole, MembershipId, PrincipalId, RoleKind, RoleScope, SystemLifecycle,
+    UserId, UtcTimestamp, Visibility,
+};
 use pvlog_storage::{
-    AccountRecord, DatabaseTarget, ManagementRepository, SqliteAccountPoolConfig,
+    AccountRecord, DatabaseTarget, ManagementRepository, MembershipRecord, SqliteAccountPoolConfig,
     SqliteAccountPoolRouter, SqliteAccountProvisioner, SqliteManagementRepository,
-    SqliteSystemLifecycleRepository, UserRecord, apply_migrations,
+    SqliteRbacRepository, SqliteSystemLifecycleRepository, UserRecord, apply_migrations,
 };
 use tempfile::TempDir;
 
@@ -48,6 +52,21 @@ async fn sqlite_system_lifecycle_uses_registry_and_optimistic_concurrency()
             updated_at: NOW,
         })
         .await?;
+    management
+        .save_membership(&MembershipRecord {
+            id: MembershipId::new(),
+            account_id,
+            user_id,
+            status: "active".to_owned(),
+            joined_at: Some(NOW),
+            created_at: NOW,
+            updated_at: NOW,
+        })
+        .await?;
+    let rbac = Arc::new(SqliteRbacRepository::new(management_path.clone()));
+    for role in built_in_account_roles(account_id, user_id, NOW) {
+        rbac.save_role(&role).await?;
+    }
     SqliteAccountProvisioner::new(management_path.clone(), accounts_dir.clone())
         .provision(account_id)
         .await?;
@@ -61,6 +80,7 @@ async fn sqlite_system_lifecycle_uses_registry_and_optimistic_concurrency()
             router,
             management.clone(),
         )),
+        rbac.clone(),
         Arc::new(FixedClock),
     );
     let created = service
@@ -72,6 +92,26 @@ async fn sqlite_system_lifecycle_uses_registry_and_optimistic_concurrency()
         })
         .await?;
     assert_eq!(created.lifecycle, SystemLifecycle::Active);
+    let assignments = rbac
+        .active_assignments(PrincipalId::User(user_id), NOW + 1)
+        .await?;
+    let owner_assignment = assignments
+        .iter()
+        .find(|assignment| {
+            assignment.scope
+                == (RoleScope::System {
+                    account_id,
+                    system_id: created.id,
+                })
+        })
+        .ok_or("system owner assignment missing")?;
+    assert!(
+        rbac.role(owner_assignment.role_id)
+            .await?
+            .is_some_and(|record| {
+                record.role.kind == RoleKind::BuiltIn(BuiltInRole::AccountOwner)
+            })
+    );
     assert_eq!(
         management
             .system_registry(created.id)

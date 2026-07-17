@@ -172,13 +172,13 @@ pub struct SolarModuleSpecification {
     pub short_circuit_current_temperature_coefficient_ppm_per_celsius: i32,
     pub open_circuit_voltage_temperature_coefficient_ppm_per_celsius: i32,
     pub peak_power_temperature_coefficient_ppm_per_celsius: i32,
-    pub maximum_system_voltage_millivolts: u32,
-    pub operating_temperature: TemperatureRange,
-    pub maximum_series_fuse_milliamperes: u32,
-    pub maximum_front_static_load_pascals: u32,
-    pub maximum_rear_static_load_pascals: u32,
-    pub dimensions_millimetres: DimensionsMillimetres,
-    pub weight_grams: u32,
+    pub maximum_system_voltage_millivolts: Option<u32>,
+    pub operating_temperature: Option<TemperatureRange>,
+    pub maximum_series_fuse_milliamperes: Option<u32>,
+    pub maximum_front_static_load_pascals: Option<u32>,
+    pub maximum_rear_static_load_pascals: Option<u32>,
+    pub dimensions_millimetres: Option<DimensionsMillimetres>,
+    pub weight_grams: Option<u32>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

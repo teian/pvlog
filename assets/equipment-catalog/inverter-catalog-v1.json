@@ -1,0 +1,463 @@
+{
+  "schemaVersion": 1,
+  "revision": "pvlog-2026.07.17.2",
+  "inverters": [
+    {
+      "id": "fronius-symo-gen24-10-0",
+      "revision": "pvlog-2026.07.17.2",
+      "manufacturer": "Fronius",
+      "model": "Symo GEN24 10.0",
+      "dc": {
+        "topology": "transformerless",
+        "totalStringInputCount": 3,
+        "maximumInputVoltageMillivolts": 1000000,
+        "startVoltageMillivolts": 80000,
+        "nominalInputVoltageMillivolts": 610000,
+        "minimumMpptVoltageMillivolts": 278000,
+        "maximumMpptVoltageMillivolts": 800000,
+        "maximumInputCurrentMilliamperes": 37500,
+        "maximumShortCircuitCurrentMilliamperes": 60000,
+        "mpptInputs": [
+          {
+            "trackerIndex": 1,
+            "stringInputCount": 2,
+            "maximumOperatingCurrentMilliamperes": 25000,
+            "maximumShortCircuitCurrentMilliamperes": 40000
+          },
+          {
+            "trackerIndex": 2,
+            "stringInputCount": 1,
+            "maximumOperatingCurrentMilliamperes": 12500,
+            "maximumShortCircuitCurrentMilliamperes": 20000
+          }
+        ]
+      },
+      "ac": {
+        "phaseCount": 3,
+        "nominalGridVoltageMillivolts": 400000,
+        "ratedActivePowerWatts": 10000,
+        "maximumApparentPowerVoltAmperes": 10000
+      },
+      "operational": {
+        "communicationInterfaces": ["Ethernet", "WLAN", "Modbus TCP"]
+      },
+      "provenance": {
+        "sourceName": "Fronius Symo GEN24 technical data",
+        "sourceReference": "https://www.fronius.com/de/help-center/solar-energie/products/solarwechselrichter/gen24/symo-gen24/fronius-symo-gen24-10-0",
+        "retrievedOn": "2026-07-11"
+      }
+    },
+    {
+      "id": "goodwe-gw10k-et",
+      "revision": "pvlog-2026.07.17.2",
+      "manufacturer": "GoodWe",
+      "model": "GW10K-ET",
+      "dc": {
+        "topology": "hybrid",
+        "totalStringInputCount": 2,
+        "maximumInputVoltageMillivolts": 1000000,
+        "startVoltageMillivolts": 180000,
+        "nominalInputVoltageMillivolts": 620000,
+        "minimumMpptVoltageMillivolts": 200000,
+        "maximumMpptVoltageMillivolts": 850000,
+        "maximumInputCurrentMilliamperes": 25000,
+        "maximumShortCircuitCurrentMilliamperes": 30400,
+        "mpptInputs": [
+          {
+            "trackerIndex": 1,
+            "stringInputCount": 1,
+            "maximumOperatingCurrentMilliamperes": 12500,
+            "maximumShortCircuitCurrentMilliamperes": 15200
+          },
+          {
+            "trackerIndex": 2,
+            "stringInputCount": 1,
+            "maximumOperatingCurrentMilliamperes": 12500,
+            "maximumShortCircuitCurrentMilliamperes": 15200
+          }
+        ]
+      },
+      "ac": {
+        "phaseCount": 3,
+        "nominalGridVoltageMillivolts": 400000,
+        "minimumGridFrequencyMillihertz": 45000,
+        "maximumGridFrequencyMillihertz": 65000,
+        "ratedActivePowerWatts": 10000,
+        "maximumApparentPowerVoltAmperes": 11000,
+        "maximumOutputCurrentMilliamperes": 16500,
+        "minimumPowerFactorBasisPoints": -8000,
+        "maximumPowerFactorBasisPoints": 8000,
+        "totalHarmonicDistortionBasisPoints": 300
+      },
+      "operational": {
+        "maximumEfficiencyBasisPoints": 9820,
+        "europeanEfficiencyBasisPoints": 9750,
+        "communicationInterfaces": ["WiFi", "LAN", "RS485"]
+      },
+      "provenance": {
+        "sourceName": "GoodWe ET PLUS+ Series datasheet",
+        "sourceReference": "https://it.goodwe.com/Ftp/EN/Downloads/Datasheet/GW_ET%20PLUS%2B_Datasheet-EN.pdf",
+        "retrievedOn": "2026-07-11"
+      }
+    },
+    {
+      "id": "huawei-sun2000-10ktl-m1",
+      "revision": "pvlog-2026.07.17.2",
+      "manufacturer": "Huawei",
+      "model": "SUN2000-10KTL-M1",
+      "dc": {
+        "topology": "hybrid",
+        "totalStringInputCount": 2,
+        "maximumInputVoltageMillivolts": 1100000,
+        "minimumMpptVoltageMillivolts": 140000,
+        "maximumMpptVoltageMillivolts": 980000,
+        "maximumInputCurrentMilliamperes": 27000,
+        "maximumShortCircuitCurrentMilliamperes": 39000,
+        "mpptInputs": [
+          {
+            "trackerIndex": 1,
+            "stringInputCount": 1,
+            "maximumOperatingCurrentMilliamperes": 13500,
+            "maximumShortCircuitCurrentMilliamperes": 19500
+          },
+          {
+            "trackerIndex": 2,
+            "stringInputCount": 1,
+            "maximumOperatingCurrentMilliamperes": 13500,
+            "maximumShortCircuitCurrentMilliamperes": 19500
+          }
+        ]
+      },
+      "ac": {
+        "phaseCount": 3,
+        "nominalGridVoltageMillivolts": 400000,
+        "ratedActivePowerWatts": 10000,
+        "maximumApparentPowerVoltAmperes": 10000,
+        "maximumOutputCurrentMilliamperes": 16900
+      },
+      "operational": {
+        "operatingTemperature": {
+          "minimumMilliCelsius": -25000,
+          "maximumMilliCelsius": 60000
+        },
+        "deratingStartMilliCelsius": 45000,
+        "ingressProtectionRating": "IP65",
+        "communicationInterfaces": ["WLAN", "Fast Ethernet", "4G", "RS485"]
+      },
+      "provenance": {
+        "sourceName": "Huawei SUN2000-3-10KTL-M1 datasheet",
+        "sourceReference": "https://solar.huawei.com/en-GB/download?p=%2F-%2Fmedia%2FSolar%2Fdatasheet%2FSUN2000-3_4_5_6_8_10KTL-M1_High_Current_Version.pdf",
+        "retrievedOn": "2026-07-11"
+      }
+    },
+    {
+      "id": "sma-sunny-boy-1200",
+      "revision": "pvlog-2026.07.17.2",
+      "manufacturer": "SMA",
+      "model": "Sunny Boy 1200 (SB 1200)",
+      "dc": {
+        "topology": "line_frequency_transformer",
+        "totalStringInputCount": 2,
+        "maximumInputVoltageMillivolts": 400000,
+        "startVoltageMillivolts": 120000,
+        "nominalInputVoltageMillivolts": 120000,
+        "minimumMpptVoltageMillivolts": 100000,
+        "maximumMpptVoltageMillivolts": 320000,
+        "maximumInputCurrentMilliamperes": 12600,
+        "mpptInputs": [
+          {
+            "trackerIndex": 1,
+            "stringInputCount": 2,
+            "maximumOperatingCurrentMilliamperes": 12600
+          }
+        ]
+      },
+      "ac": {
+        "phaseCount": 1,
+        "nominalGridVoltageMillivolts": 230000,
+        "minimumGridVoltageMillivolts": 180000,
+        "maximumGridVoltageMillivolts": 265000,
+        "ratedActivePowerWatts": 1200,
+        "maximumApparentPowerVoltAmperes": 1200,
+        "maximumOutputCurrentMilliamperes": 6100,
+        "minimumPowerFactorBasisPoints": 10000,
+        "maximumPowerFactorBasisPoints": 10000
+      },
+      "operational": {
+        "maximumEfficiencyBasisPoints": 9210,
+        "europeanEfficiencyBasisPoints": 9090,
+        "operatingTemperature": {
+          "minimumMilliCelsius": -25000,
+          "maximumMilliCelsius": 60000
+        },
+        "coolingMethod": "natural_convection",
+        "acousticNoiseMillidecibels": 41000,
+        "ingressProtectionRating": "IP65",
+        "communicationInterfaces": ["RS485 (optional)", "Bluetooth (optional)"],
+        "weightGrams": 23000
+      },
+      "provenance": {
+        "sourceName": "SMA Sunny Boy 1200 / 1700 / 2500 / 3000 datasheet",
+        "sourceReference": "https://files.sma.de/downloads/SB1200_3000-DEN110712W.pdf",
+        "retrievedOn": "2026-07-17"
+      }
+    },
+    {
+      "id": "sma-sunny-boy-1700",
+      "revision": "pvlog-2026.07.17.2",
+      "manufacturer": "SMA",
+      "model": "Sunny Boy 1700 (SB 1700)",
+      "dc": {
+        "topology": "line_frequency_transformer",
+        "totalStringInputCount": 2,
+        "maximumInputVoltageMillivolts": 400000,
+        "startVoltageMillivolts": 180000,
+        "nominalInputVoltageMillivolts": 180000,
+        "minimumMpptVoltageMillivolts": 147000,
+        "maximumMpptVoltageMillivolts": 320000,
+        "maximumInputCurrentMilliamperes": 12600,
+        "mpptInputs": [
+          {
+            "trackerIndex": 1,
+            "stringInputCount": 2,
+            "maximumOperatingCurrentMilliamperes": 12600
+          }
+        ]
+      },
+      "ac": {
+        "phaseCount": 1,
+        "nominalGridVoltageMillivolts": 230000,
+        "minimumGridVoltageMillivolts": 180000,
+        "maximumGridVoltageMillivolts": 265000,
+        "ratedActivePowerWatts": 1550,
+        "maximumApparentPowerVoltAmperes": 1700,
+        "maximumOutputCurrentMilliamperes": 8600,
+        "minimumPowerFactorBasisPoints": 10000,
+        "maximumPowerFactorBasisPoints": 10000
+      },
+      "operational": {
+        "maximumEfficiencyBasisPoints": 9350,
+        "europeanEfficiencyBasisPoints": 9180,
+        "operatingTemperature": {
+          "minimumMilliCelsius": -25000,
+          "maximumMilliCelsius": 60000
+        },
+        "coolingMethod": "natural_convection",
+        "acousticNoiseMillidecibels": 46000,
+        "ingressProtectionRating": "IP65",
+        "communicationInterfaces": ["RS485 (optional)", "Bluetooth (optional)"],
+        "weightGrams": 25000
+      },
+      "provenance": {
+        "sourceName": "SMA Sunny Boy 1200 / 1700 / 2500 / 3000 datasheet",
+        "sourceReference": "https://files.sma.de/downloads/SB1200_3000-DEN110712W.pdf",
+        "retrievedOn": "2026-07-17"
+      }
+    },
+    {
+      "id": "sma-sunny-boy-2500",
+      "revision": "pvlog-2026.07.17.2",
+      "manufacturer": "SMA",
+      "model": "Sunny Boy 2500 (SB 2500)",
+      "dc": {
+        "topology": "line_frequency_transformer",
+        "totalStringInputCount": 3,
+        "maximumInputVoltageMillivolts": 600000,
+        "startVoltageMillivolts": 300000,
+        "nominalInputVoltageMillivolts": 300000,
+        "minimumMpptVoltageMillivolts": 224000,
+        "maximumMpptVoltageMillivolts": 480000,
+        "maximumInputCurrentMilliamperes": 12000,
+        "mpptInputs": [
+          {
+            "trackerIndex": 1,
+            "stringInputCount": 3,
+            "maximumOperatingCurrentMilliamperes": 12000
+          }
+        ]
+      },
+      "ac": {
+        "phaseCount": 1,
+        "nominalGridVoltageMillivolts": 230000,
+        "minimumGridVoltageMillivolts": 180000,
+        "maximumGridVoltageMillivolts": 265000,
+        "ratedActivePowerWatts": 2300,
+        "maximumApparentPowerVoltAmperes": 2500,
+        "maximumOutputCurrentMilliamperes": 12500,
+        "minimumPowerFactorBasisPoints": 10000,
+        "maximumPowerFactorBasisPoints": 10000
+      },
+      "operational": {
+        "maximumEfficiencyBasisPoints": 9410,
+        "europeanEfficiencyBasisPoints": 9320,
+        "operatingTemperature": {
+          "minimumMilliCelsius": -25000,
+          "maximumMilliCelsius": 60000
+        },
+        "coolingMethod": "natural_convection",
+        "acousticNoiseMillidecibels": 33000,
+        "ingressProtectionRating": "IP65",
+        "communicationInterfaces": ["RS485 (optional)", "Bluetooth (optional)"],
+        "weightGrams": 28000
+      },
+      "provenance": {
+        "sourceName": "SMA Sunny Boy 1200 / 1700 / 2500 / 3000 datasheet",
+        "sourceReference": "https://files.sma.de/downloads/SB1200_3000-DEN110712W.pdf",
+        "retrievedOn": "2026-07-17"
+      }
+    },
+    {
+      "id": "sma-sunny-boy-3000",
+      "revision": "pvlog-2026.07.17.2",
+      "manufacturer": "SMA",
+      "model": "Sunny Boy 3000 (SB 3000)",
+      "dc": {
+        "topology": "line_frequency_transformer",
+        "totalStringInputCount": 3,
+        "maximumInputVoltageMillivolts": 600000,
+        "startVoltageMillivolts": 330000,
+        "nominalInputVoltageMillivolts": 350000,
+        "minimumMpptVoltageMillivolts": 268000,
+        "maximumMpptVoltageMillivolts": 480000,
+        "maximumInputCurrentMilliamperes": 12000,
+        "mpptInputs": [
+          {
+            "trackerIndex": 1,
+            "stringInputCount": 3,
+            "maximumOperatingCurrentMilliamperes": 12000
+          }
+        ]
+      },
+      "ac": {
+        "phaseCount": 1,
+        "nominalGridVoltageMillivolts": 230000,
+        "minimumGridVoltageMillivolts": 180000,
+        "maximumGridVoltageMillivolts": 265000,
+        "ratedActivePowerWatts": 2750,
+        "maximumApparentPowerVoltAmperes": 3000,
+        "maximumOutputCurrentMilliamperes": 15000,
+        "minimumPowerFactorBasisPoints": 10000,
+        "maximumPowerFactorBasisPoints": 10000
+      },
+      "operational": {
+        "maximumEfficiencyBasisPoints": 9500,
+        "europeanEfficiencyBasisPoints": 9360,
+        "operatingTemperature": {
+          "minimumMilliCelsius": -25000,
+          "maximumMilliCelsius": 60000
+        },
+        "coolingMethod": "natural_convection",
+        "acousticNoiseMillidecibels": 30000,
+        "ingressProtectionRating": "IP65",
+        "communicationInterfaces": ["RS485 (optional)", "Bluetooth (optional)"],
+        "weightGrams": 32000
+      },
+      "provenance": {
+        "sourceName": "SMA Sunny Boy 1200 / 1700 / 2500 / 3000 datasheet",
+        "sourceReference": "https://files.sma.de/downloads/SB1200_3000-DEN110712W.pdf",
+        "retrievedOn": "2026-07-17"
+      }
+    },
+    {
+      "id": "sma-sunny-boy-5000tl-20",
+      "revision": "pvlog-2026.07.17.2",
+      "manufacturer": "SMA",
+      "model": "Sunny Boy 5000TL (SB 5000TL-20)",
+      "dc": {
+        "topology": "transformerless",
+        "totalStringInputCount": 4,
+        "maximumInputVoltageMillivolts": 550000,
+        "startVoltageMillivolts": 150000,
+        "nominalInputVoltageMillivolts": 400000,
+        "minimumMpptVoltageMillivolts": 175000,
+        "maximumMpptVoltageMillivolts": 440000,
+        "maximumInputCurrentMilliamperes": 30000,
+        "mpptInputs": [
+          {
+            "trackerIndex": 1,
+            "stringInputCount": 2,
+            "maximumOperatingCurrentMilliamperes": 15000
+          },
+          {
+            "trackerIndex": 2,
+            "stringInputCount": 2,
+            "maximumOperatingCurrentMilliamperes": 15000
+          }
+        ]
+      },
+      "ac": {
+        "phaseCount": 1,
+        "nominalGridVoltageMillivolts": 230000,
+        "minimumGridVoltageMillivolts": 180000,
+        "maximumGridVoltageMillivolts": 280000,
+        "ratedActivePowerWatts": 4600,
+        "maximumApparentPowerVoltAmperes": 5000,
+        "maximumOutputCurrentMilliamperes": 22000,
+        "minimumPowerFactorBasisPoints": 10000,
+        "maximumPowerFactorBasisPoints": 10000
+      },
+      "operational": {
+        "maximumEfficiencyBasisPoints": 9700,
+        "europeanEfficiencyBasisPoints": 9650,
+        "operatingTemperature": {
+          "minimumMilliCelsius": -25000,
+          "maximumMilliCelsius": 60000
+        },
+        "acousticNoiseMillidecibels": 29000,
+        "ingressProtectionRating": "IP65",
+        "maximumHumidityBasisPoints": 10000,
+        "communicationInterfaces": ["Bluetooth"],
+        "weightGrams": 25000
+      },
+      "provenance": {
+        "sourceName": "SMA Sunny Boy 3000TL / 4000TL / 5000TL datasheet",
+        "sourceReference": "https://files.sma.de/downloads/SB5000TL-DDE112440W.pdf",
+        "retrievedOn": "2026-07-17"
+      }
+    },
+    {
+      "id": "sma-sunny-tripower-25000tl",
+      "revision": "pvlog-2026.07.17.2",
+      "manufacturer": "SMA",
+      "model": "Sunny Tripower 25000TL",
+      "dc": {
+        "topology": "transformerless",
+        "totalStringInputCount": 6,
+        "maximumInputVoltageMillivolts": 1000000,
+        "startVoltageMillivolts": 188000,
+        "nominalInputVoltageMillivolts": 600000,
+        "minimumMpptVoltageMillivolts": 390000,
+        "maximumMpptVoltageMillivolts": 800000,
+        "maximumInputCurrentMilliamperes": 66000,
+        "maximumShortCircuitCurrentMilliamperes": 86000,
+        "mpptInputs": [
+          {
+            "trackerIndex": 1,
+            "stringInputCount": 3,
+            "maximumOperatingCurrentMilliamperes": 33000,
+            "maximumShortCircuitCurrentMilliamperes": 43000
+          },
+          {
+            "trackerIndex": 2,
+            "stringInputCount": 3,
+            "maximumOperatingCurrentMilliamperes": 33000,
+            "maximumShortCircuitCurrentMilliamperes": 43000
+          }
+        ]
+      },
+      "ac": {
+        "phaseCount": 3,
+        "nominalGridVoltageMillivolts": 400000,
+        "ratedActivePowerWatts": 25000
+      },
+      "operational": {
+        "communicationInterfaces": ["Ethernet", "Speedwire", "Modbus"]
+      },
+      "provenance": {
+        "sourceName": "SMA Sunny Tripower 15000TL/20000TL/25000TL datasheet",
+        "sourceReference": "https://files.sma.de/downloads/STP15-25TL-30-DS-de-41.pdf",
+        "retrievedOn": "2026-07-11"
+      }
+    }
+  ]
+}

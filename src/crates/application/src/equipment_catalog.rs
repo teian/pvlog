@@ -9,15 +9,25 @@ use serde::Deserialize;
 use thiserror::Error;
 use url::Url;
 
-const BUNDLED_CATALOG: &str = include_str!("../../../../assets/equipment-catalog/catalog-v1.json");
+const BUNDLED_INVERTER_CATALOG: &str =
+    include_str!("../../../../assets/equipment-catalog/inverter-catalog-v1.json");
+const BUNDLED_MODULE_CATALOG: &str =
+    include_str!("../../../../assets/equipment-catalog/pv-module-catalog-v1.json");
 const MAXIMUM_PAGE_SIZE: usize = 100;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct CatalogDocument {
+struct InverterCatalogDocument {
     schema_version: u16,
     revision: CatalogRevision,
     inverters: Vec<InverterCatalogEntry>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ModuleCatalogDocument {
+    schema_version: u16,
+    revision: CatalogRevision,
     solar_modules: Vec<SolarModuleCatalogEntry>,
 }
 
@@ -43,7 +53,8 @@ pub struct EquipmentCatalogPage<T> {
 /// Immutable parsed catalog used identically by all persistence profiles.
 #[derive(Clone, Debug)]
 pub struct EquipmentCatalog {
-    revision: CatalogRevision,
+    inverter_revision: CatalogRevision,
+    module_revision: CatalogRevision,
     inverters: BTreeMap<CatalogEntryId, InverterCatalogEntry>,
     solar_modules: BTreeMap<CatalogEntryId, SolarModuleCatalogEntry>,
 }
@@ -54,28 +65,35 @@ impl EquipmentCatalog {
     /// # Errors
     /// Returns a safe error when the embedded asset cannot be decoded.
     pub fn bundled() -> Result<Self, EquipmentCatalogError> {
-        Self::parse(BUNDLED_CATALOG)
+        Self::parse(BUNDLED_INVERTER_CATALOG, BUNDLED_MODULE_CATALOG)
     }
 
-    /// Parses catalog JSON for tooling and controlled tests.
+    /// Parses independent inverter and PV-module catalog JSON for tooling and controlled tests.
     ///
     /// # Errors
-    /// Returns a safe error for malformed or unsupported documents.
-    pub fn parse(document: &str) -> Result<Self, EquipmentCatalogError> {
-        let document: CatalogDocument =
-            serde_json::from_str(document).map_err(|_| EquipmentCatalogError::InvalidAsset)?;
-        if document.schema_version != 1 {
+    /// Returns a safe error when either document is malformed or unsupported.
+    pub fn parse(
+        inverter_document: &str,
+        module_document: &str,
+    ) -> Result<Self, EquipmentCatalogError> {
+        let inverter_document: InverterCatalogDocument = serde_json::from_str(inverter_document)
+            .map_err(|_| EquipmentCatalogError::InvalidAsset)?;
+        let module_document: ModuleCatalogDocument = serde_json::from_str(module_document)
+            .map_err(|_| EquipmentCatalogError::InvalidAsset)?;
+        if inverter_document.schema_version != 1 || module_document.schema_version != 1 {
             return Err(EquipmentCatalogError::UnsupportedSchema);
         }
-        validate_document(&document)?;
+        validate_inverter_document(&inverter_document)?;
+        validate_module_document(&module_document)?;
         Ok(Self {
-            revision: document.revision,
-            inverters: document
+            inverter_revision: inverter_document.revision,
+            module_revision: module_document.revision,
+            inverters: inverter_document
                 .inverters
                 .into_iter()
                 .map(|entry| (entry.id.clone(), entry))
                 .collect(),
-            solar_modules: document
+            solar_modules: module_document
                 .solar_modules
                 .into_iter()
                 .map(|entry| (entry.id.clone(), entry))
@@ -84,8 +102,13 @@ impl EquipmentCatalog {
     }
 
     #[must_use]
-    pub fn revision(&self) -> &CatalogRevision {
-        &self.revision
+    pub fn inverter_revision(&self) -> &CatalogRevision {
+        &self.inverter_revision
+    }
+
+    #[must_use]
+    pub fn module_revision(&self) -> &CatalogRevision {
+        &self.module_revision
     }
 
     #[must_use]
@@ -103,9 +126,12 @@ impl EquipmentCatalog {
         &self,
         query: &EquipmentCatalogQuery,
     ) -> EquipmentCatalogPage<InverterCatalogEntry> {
-        page(&self.revision, self.inverters.values(), query, |entry| {
-            (&entry.id, &entry.manufacturer, &entry.model)
-        })
+        page(
+            &self.inverter_revision,
+            self.inverters.values(),
+            query,
+            |entry| (&entry.id, &entry.manufacturer, &entry.model),
+        )
     }
 
     #[must_use]
@@ -114,7 +140,7 @@ impl EquipmentCatalog {
         query: &EquipmentCatalogQuery,
     ) -> EquipmentCatalogPage<SolarModuleCatalogEntry> {
         page(
-            &self.revision,
+            &self.module_revision,
             self.solar_modules.values(),
             query,
             |entry| (&entry.id, &entry.manufacturer, &entry.model),
@@ -157,15 +183,13 @@ fn normalize(value: &str) -> String {
     value.trim().to_lowercase()
 }
 
-fn validate_document(document: &CatalogDocument) -> Result<(), EquipmentCatalogError> {
+fn validate_inverter_document(
+    document: &InverterCatalogDocument,
+) -> Result<(), EquipmentCatalogError> {
     if document.revision.0.trim().is_empty() {
-        return invalid("catalog revision is empty");
+        return invalid("inverter catalog revision is empty");
     }
     validate_order_and_ids(document.inverters.iter().map(|entry| &entry.id), "inverter")?;
-    validate_order_and_ids(
-        document.solar_modules.iter().map(|entry| &entry.id),
-        "solar module",
-    )?;
     for entry in &document.inverters {
         if entry.revision != document.revision {
             return invalid(format!("{} has a mismatching revision", entry.id.0));
@@ -178,6 +202,17 @@ fn validate_document(document: &CatalogDocument) -> Result<(), EquipmentCatalogE
         )?;
         validate_inverter(entry)?;
     }
+    Ok(())
+}
+
+fn validate_module_document(document: &ModuleCatalogDocument) -> Result<(), EquipmentCatalogError> {
+    if document.revision.0.trim().is_empty() {
+        return invalid("PV module catalog revision is empty");
+    }
+    validate_order_and_ids(
+        document.solar_modules.iter().map(|entry| &entry.id),
+        "solar module",
+    )?;
     for entry in &document.solar_modules {
         if entry.revision != document.revision {
             return invalid(format!("{} has a mismatching revision", entry.id.0));
@@ -313,13 +348,17 @@ fn validate_module(entry: &SolarModuleCatalogEntry) -> Result<(), EquipmentCatal
             >= specification.short_circuit_current_milliamperes
         || specification.efficiency_basis_points == 0
         || specification.efficiency_basis_points > 10_000
-        || specification.operating_temperature.minimum_milli_celsius
-            >= specification.operating_temperature.maximum_milli_celsius
         || specification.short_circuit_current_temperature_coefficient_ppm_per_celsius < 0
         || specification.open_circuit_voltage_temperature_coefficient_ppm_per_celsius > 0
         || specification.peak_power_temperature_coefficient_ppm_per_celsius > 0
     {
         return invalid(format!("{} has invalid electrical ratings", entry.id.0));
+    }
+    if specification
+        .operating_temperature
+        .is_some_and(|range| range.minimum_milli_celsius >= range.maximum_milli_celsius)
+    {
+        return invalid(format!("{} has invalid operating temperature", entry.id.0));
     }
     let calculated_power = u64::from(specification.maximum_power_voltage_millivolts)
         * u64::from(specification.maximum_power_current_milliamperes)
@@ -329,11 +368,15 @@ fn validate_module(entry: &SolarModuleCatalogEntry) -> Result<(), EquipmentCatal
     {
         return invalid(format!("{} has inconsistent peak power", entry.id.0));
     }
-    if specification.bifacial != specification.bifaciality_factor_basis_points.is_some()
-        || specification.dimensions_millimetres.length == 0
-        || specification.dimensions_millimetres.width == 0
-        || specification.dimensions_millimetres.height == 0
-        || specification.weight_grams == 0
+    if specification
+        .bifaciality_factor_basis_points
+        .is_some_and(|value| !specification.bifacial || value > 10_000)
+        || specification
+            .dimensions_millimetres
+            .is_some_and(|dimensions| {
+                dimensions.length == 0 || dimensions.width == 0 || dimensions.height == 0
+            })
+        || specification.weight_grams == Some(0)
     {
         return invalid(format!("{} has invalid physical ratings", entry.id.0));
     }

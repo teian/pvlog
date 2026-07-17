@@ -106,7 +106,7 @@ async fn verify_contract(
     let module_snapshot = prefill_module_from_catalog(&catalog, &module_entry_id)?;
     let mut catalog_inverter = inverter(system_id, 20, None);
     catalog_inverter.catalog_entry_id = Some(inverter_entry_id.0.clone());
-    catalog_inverter.catalog_revision = Some(catalog.revision().0.clone());
+    catalog_inverter.catalog_revision = Some(catalog.inverter_revision().0.clone());
     catalog_inverter.value_provenance = EquipmentValueProvenance::CatalogCopied;
     catalog_inverter.specification_snapshot = Some(inverter_snapshot);
     let string = &mut catalog_inverter.strings[0];
@@ -115,7 +115,7 @@ async fn verify_contract(
     string.panel_model = Some(module_snapshot.model.clone());
     string.rated_power_watts = 8_100;
     string.module_catalog_entry_id = Some(module_entry_id.0.clone());
-    string.module_catalog_revision = Some(catalog.revision().0.clone());
+    string.module_catalog_revision = Some(catalog.module_revision().0.clone());
     string.value_provenance = EquipmentValueProvenance::CatalogCopied;
     string.module_specification_snapshot = Some(module_snapshot);
     string.module_peak_power_watts = Some(450);
@@ -162,6 +162,17 @@ async fn verify_contract(
     repository.save_inverter_aggregate(&historical).await?;
     assert!(
         repository
+            .effective_inverters(system_id, 30)
+            .await?
+            .contains(&historical)
+    );
+    assert!(
+        repository
+            .delete_inverter_aggregate(system_id, historical.id)
+            .await?
+    );
+    assert!(
+        !repository
             .effective_inverters(system_id, 30)
             .await?
             .contains(&historical)

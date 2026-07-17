@@ -92,11 +92,9 @@ export function EquipmentConfirmationForm({
               t("features.equipmentCatalog.customManufacturer"),
             panelModel:
               moduleValue?.model ?? t("features.equipmentCatalog.customModel"),
-            ratedPowerWatts: count * watts,
             valueProvenance: moduleProvenance,
             moduleSpecificationSnapshot: moduleValue,
-            modulePeakPowerWatts: moduleValue ? watts : null,
-            totalPeakPowerWatts: moduleValue ? count * watts : null,
+            modulePeakPowerWatts: watts,
             effectiveFrom: now,
           },
         ],

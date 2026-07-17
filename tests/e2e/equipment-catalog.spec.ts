@@ -1,9 +1,12 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 
-const catalog = JSON.parse(
-  readFileSync("assets/equipment-catalog/catalog-v1.json", "utf8"),
-) as { revision: string; inverters: unknown[]; solarModules: unknown[] };
+const inverterCatalog = JSON.parse(
+  readFileSync("assets/equipment-catalog/inverter-catalog-v1.json", "utf8"),
+) as { revision: string; inverters: unknown[] };
+const moduleCatalog = JSON.parse(
+  readFileSync("assets/equipment-catalog/pv-module-catalog-v1.json", "utf8"),
+) as { revision: string; solarModules: unknown[] };
 
 test("reviews edited prefills and keeps validation recoverable", async ({
   page,
@@ -27,36 +30,34 @@ test("reviews edited prefills and keeps validation recoverable", async ({
   await page.route("**/api/v1/equipment-catalog/inverters**", (route) =>
     route.fulfill({
       json: {
-        revision: catalog.revision,
-        total: catalog.inverters.length,
+        revision: inverterCatalog.revision,
+        total: inverterCatalog.inverters.length,
         offset: 0,
         limit: 25,
-        items: catalog.inverters,
+        items: inverterCatalog.inverters,
       },
     }),
   );
   await page.route("**/api/v1/equipment-catalog/solar-modules**", (route) =>
     route.fulfill({
       json: {
-        revision: catalog.revision,
-        total: catalog.solarModules.length,
+        revision: moduleCatalog.revision,
+        total: moduleCatalog.solarModules.length,
         offset: 0,
         limit: 25,
-        items: catalog.solarModules,
+        items: moduleCatalog.solarModules,
       },
     }),
   );
-  await page.route(
-    "**/api/v1/accounts/**/systems/**/inverters",
-    async (route) =>
-      route.request().method() === "POST"
-        ? route.fulfill({
-            status: 422,
-            json: { detail: "totalPeakPowerWatts" },
-          })
-        : route.fulfill({ json: [] }),
+  await page.route("**/api/v1/systems/**/inverters", async (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 422,
+          json: { detail: "totalPeakPowerWatts" },
+        })
+      : route.fulfill({ json: [] }),
   );
-  await page.goto("/administration");
+  await page.goto("/administration?section=data-sources");
   const confirmation = page
     .getByRole("heading", { name: "Confirm equipment snapshot" })
     .locator("..");

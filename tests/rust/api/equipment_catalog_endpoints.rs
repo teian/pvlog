@@ -79,10 +79,27 @@ async fn catalog_filters_pages_and_returns_typed_details() -> Result<(), Box<dyn
     assert_eq!(filtered.status(), StatusCode::OK);
     let document: serde_json::Value =
         serde_json::from_slice(&to_bytes(filtered.into_body(), usize::MAX).await?)?;
-    assert_eq!(document["revision"], "2026.07.11.1");
+    assert_eq!(document["revision"], "pvlog-2026.07.17.2");
     assert_eq!(document["total"], 1);
     assert_eq!(document["limit"], 100);
     assert_eq!(document["items"][0]["model"], "GW10K-ET");
+
+    let modules = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/equipment-catalog/solar-modules?search=JAM54D40-450")
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(modules.status(), StatusCode::OK);
+    let module_page: serde_json::Value =
+        serde_json::from_slice(&to_bytes(modules.into_body(), usize::MAX).await?)?;
+    assert_eq!(
+        module_page["revision"],
+        "open-pv-module-database-2026.07.12"
+    );
+    assert_eq!(module_page["total"], 1);
 
     let detail = app
         .clone()
@@ -126,7 +143,7 @@ fn equipment_write_schema_accepts_manual_and_edited_prefills() -> Result<(), Box
             "panelCount": 18,
             "panelManufacturer": "Manual modules",
             "panelModel": "M-450",
-            "ratedPowerWatts": 8100,
+            "modulePeakPowerWatts": 450,
             "effectiveFrom": 1
         }]
     }))?;
@@ -147,7 +164,7 @@ fn equipment_write_schema_accepts_manual_and_edited_prefills() -> Result<(), Box
         "valueProvenance": "catalog_customized",
         "specificationSnapshot": snapshot,
         "effectiveFrom": 1,
-        "strings": [{"name": "South roof", "panelCount": 18, "ratedPowerWatts": 8100, "effectiveFrom": 1}]
+        "strings": [{"name": "South roof", "panelCount": 18, "modulePeakPowerWatts": 450, "effectiveFrom": 1}]
     }))?;
     assert_eq!(
         edited.value_provenance,

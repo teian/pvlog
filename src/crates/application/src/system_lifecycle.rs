@@ -1,8 +1,11 @@
 //! Audited PV-system lifecycle with safe defaults and optimistic concurrency.
 
-use crate::{Clock, PortError};
+use crate::{Clock, PortError, RbacRepository};
 use async_trait::async_trait;
-use pvlog_domain::{AccountId, IanaTimezone, SystemId, SystemLifecycle, UserId, Visibility};
+use pvlog_domain::{
+    AccountId, BuiltInRole, IanaTimezone, PrincipalId, RoleAssignment, RoleAssignmentId, RoleKind,
+    RoleScope, SystemId, SystemLifecycle, UserId, Visibility,
+};
 use serde::Serialize;
 use std::{str::FromStr as _, sync::Arc};
 use thiserror::Error;
@@ -59,6 +62,7 @@ pub trait SystemLifecycleRepository: Send + Sync {
 
 #[async_trait]
 pub trait SystemLifecycleUseCases: Send + Sync {
+    async fn system(&self, id: SystemId) -> Result<SystemLifecycleRecord, SystemLifecycleError>;
     async fn create_system(
         &self,
         request: CreateSystem,
@@ -90,12 +94,21 @@ pub trait SystemLifecycleUseCases: Send + Sync {
 
 pub struct SystemLifecycleService {
     repository: Arc<dyn SystemLifecycleRepository>,
+    rbac_repository: Arc<dyn RbacRepository>,
     clock: Arc<dyn Clock>,
 }
 impl SystemLifecycleService {
     #[must_use]
-    pub fn new(repository: Arc<dyn SystemLifecycleRepository>, clock: Arc<dyn Clock>) -> Self {
-        Self { repository, clock }
+    pub fn new(
+        repository: Arc<dyn SystemLifecycleRepository>,
+        rbac_repository: Arc<dyn RbacRepository>,
+        clock: Arc<dyn Clock>,
+    ) -> Self {
+        Self {
+            repository,
+            rbac_repository,
+            clock,
+        }
     }
     /// Creates a private active system with validated required fields.
     /// # Errors
@@ -105,7 +118,10 @@ impl SystemLifecycleService {
         request: CreateSystem,
     ) -> Result<SystemLifecycleRecord, SystemLifecycleError> {
         validate(&request.name, &request.timezone)?;
-        let now = self.now()?;
+        let owner_role_id = self.owner_role_id(request.account_id).await?;
+        let granted_at = self.clock.now();
+        let now =
+            i64::try_from(granted_at.epoch_millis()).map_err(|_| SystemLifecycleError::Time)?;
         let record = SystemLifecycleRecord {
             id: SystemId::new(),
             account_id: request.account_id,
@@ -121,11 +137,48 @@ impl SystemLifecycleService {
             .create(record.clone())
             .await
             .map_err(SystemLifecycleError::Repository)?;
+        if let Err(error) = self
+            .rbac_repository
+            .save_assignment(&RoleAssignment {
+                id: RoleAssignmentId::new(),
+                principal: PrincipalId::User(request.actor),
+                role_id: owner_role_id,
+                scope: RoleScope::System {
+                    account_id: request.account_id,
+                    system_id: record.id,
+                },
+                granted_by: request.actor,
+                granted_at,
+                expires_at: None,
+            })
+            .await
+        {
+            let _ = self.repository.delete(record.id, record.version).await;
+            return Err(SystemLifecycleError::Repository(error));
+        }
         self.repository
             .audit(request.actor, record.id, "system.created", "succeeded", now)
             .await
             .map_err(SystemLifecycleError::Repository)?;
         Ok(record)
+    }
+
+    async fn owner_role_id(
+        &self,
+        account_id: AccountId,
+    ) -> Result<pvlog_domain::RoleId, SystemLifecycleError> {
+        self.rbac_repository
+            .roles(Some(account_id))
+            .await
+            .map_err(SystemLifecycleError::Repository)?
+            .into_iter()
+            .find(|record| record.role.kind == RoleKind::BuiltIn(BuiltInRole::AccountOwner))
+            .map(|record| record.role.id)
+            .ok_or_else(|| {
+                SystemLifecycleError::Repository(PortError::Rejected(
+                    "account_owner_role_missing".to_owned(),
+                ))
+            })
     }
     /// Updates mutable system fields using an expected version.
     /// # Errors
@@ -260,6 +313,10 @@ impl SystemLifecycleService {
 
 #[async_trait]
 impl SystemLifecycleUseCases for SystemLifecycleService {
+    async fn system(&self, id: SystemId) -> Result<SystemLifecycleRecord, SystemLifecycleError> {
+        self.load(id).await
+    }
+
     async fn create_system(
         &self,
         request: CreateSystem,

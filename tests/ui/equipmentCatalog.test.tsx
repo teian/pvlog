@@ -15,11 +15,25 @@ const entry = {
     sourceReference: "https://example.test/sma",
   },
   dc: {
+    topology: null,
     totalStringInputCount: 2,
-    mpptInputs: [{ trackerIndex: 1, stringInputCount: 2 }],
+    maximumInputVoltageMillivolts: null,
+    mpptInputs: [
+      {
+        trackerIndex: 1,
+        stringInputCount: 2,
+        maximumOperatingCurrentMilliamperes: null,
+      },
+    ],
   },
   ac: { phaseCount: 3, ratedActivePowerWatts: 10_000 },
-  operational: { communicationInterfaces: [] },
+  operational: {
+    maximumEfficiencyBasisPoints: null,
+    operatingTemperature: null,
+    communicationInterfaces: [],
+    dimensionsMillimetres: null,
+    weightGrams: null,
+  },
 };
 
 function renderSelector(onManual = vi.fn(), onSelect = vi.fn()) {

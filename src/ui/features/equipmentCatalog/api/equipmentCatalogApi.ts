@@ -66,14 +66,13 @@ export async function fetchSolarModuleCatalog(
     );
 }
 
-/** Persists confirmed editable equipment through the real aggregate API. @param accountId - Owning account. @param systemId - Owning system. @param input - Confirmed aggregate. @returns The stored server response. */
+/** Persists confirmed editable equipment through the real aggregate API. @param systemId - Owning system. @param input - Confirmed aggregate. @returns The stored server response. */
 export async function saveEquipmentConfiguration(
-  accountId: string,
   systemId: string,
   input: unknown,
 ): Promise<unknown> {
-  return sessionJsonRequest(
-    `/api/v1/accounts/${accountId}/systems/${systemId}/inverters`,
-    { method: "POST", body: JSON.stringify(input) },
-  );
+  return sessionJsonRequest(`/api/v1/systems/${systemId}/inverters`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }

@@ -22,6 +22,24 @@ async fn system_mutations_require_actor_and_etag_preconditions() -> Result<(), B
     let actor = UserId::new();
     let app = systems_router(Arc::new(Stub), Arc::new(AllowAuthorizer { actor }))
         .layer(Extension(pvlog_api::RequestPrincipal::User(actor)));
+    let system_id = SystemId::new();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::GET)
+                .uri(format!("/api/v1/systems/{system_id}"))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("etag")
+            .and_then(|value| value.to_str().ok()),
+        Some("\"1\"")
+    );
     let response = app
         .clone()
         .oneshot(
@@ -29,10 +47,7 @@ async fn system_mutations_require_actor_and_etag_preconditions() -> Result<(), B
                 .method(Method::POST)
                 .uri("/api/v1/systems")
                 .header("content-type", "application/json")
-                .body(Body::from(format!(
-                    r#"{{"accountId":"{}","name":"Roof","timezone":"Europe/Berlin"}}"#,
-                    AccountId::new()
-                )))?,
+                .body(Body::from(r#"{"name":"Roof","timezone":"Europe/Berlin"}"#))?,
         )
         .await?;
     assert_eq!(response.status(), StatusCode::CREATED);
@@ -47,7 +62,7 @@ async fn system_mutations_require_actor_and_etag_preconditions() -> Result<(), B
         .oneshot(
             Request::builder()
                 .method(Method::PUT)
-                .uri(format!("/api/v1/systems/{}", SystemId::new()))
+                .uri(format!("/api/v1/systems/{system_id}"))
                 .header("content-type", "application/json")
                 .body(Body::from(
                     r#"{"name":"Roof","timezone":"Europe/Berlin","visibility":"private"}"#,
@@ -121,6 +136,16 @@ fn record(
 }
 #[async_trait]
 impl SystemLifecycleUseCases for Stub {
+    async fn system(&self, id: SystemId) -> Result<SystemLifecycleRecord, SystemLifecycleError> {
+        Ok(record(
+            id,
+            AccountId::new(),
+            "x".to_owned(),
+            "UTC".to_owned(),
+            1,
+        ))
+    }
+
     async fn create_system(
         &self,
         request: CreateSystem,
