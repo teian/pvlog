@@ -11,10 +11,7 @@ export function HomePage() {
   const session = useSession();
 
   return (
-    <AppShell
-      accountId={session.data?.accountId}
-      systemIds={session.data?.systemIds}
-    >
+    <AppShell systemIds={session.data?.systemIds}>
       <DashboardPage />
     </AppShell>
   );

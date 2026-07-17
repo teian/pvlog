@@ -19,3 +19,6 @@ export const sessionSchema = z.object({
 
 /** Browser session returned by the backend bootstrap endpoint. */
 export type Session = z.infer<typeof sessionSchema>;
+
+/** External identity provider available on the login page. */
+export type AuthConnector = z.infer<typeof authConnectorSchema>;

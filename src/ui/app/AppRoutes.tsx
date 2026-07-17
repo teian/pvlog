@@ -2,26 +2,38 @@ import { AppErrorBoundary } from "@/app/AppErrorBoundary";
 import { ProtectedRoute } from "@/features/auth";
 import {
   ActivationPage,
+  AccountPage,
   AdministrationPage,
   AuthCallbackPage,
   DataQualityPage,
   ForbiddenPage,
   HomePage,
+  SystemForecastPage,
   LoginPage,
   OnboardingPage,
   RecoveryPage,
   SystemChartsPage,
   SystemLayoutPage,
+  SeasonalPage,
+  StatisticsPage,
+  SystemsPage,
+  WeatherPage,
 } from "@/pages";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/components";
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
-import { Route, Routes } from "react-router";
+import { Navigate, Route, Routes } from "react-router";
 
 const ApiReferencePage = lazy(async () => {
   const page = await import("@/pages/ApiReferencePage");
   return { default: page.ApiReferencePage };
 });
+
+const accountElement = (
+  <ProtectedRoute>
+    <AccountPage />
+  </ProtectedRoute>
+);
 
 /** Renders public and protected application routes with a localized error boundary. @returns The route tree. */
 export function AppRoutes() {
@@ -44,6 +56,11 @@ export function AppRoutes() {
           <Route element={<ActivationPage />} path="/activate" />
           <Route element={<AuthCallbackPage />} path="/auth/callback" />
           <Route element={<ForbiddenPage />} path="/forbidden" />
+          <Route element={accountElement} path="/account" />
+          <Route
+            element={<Navigate replace to="/account" />}
+            path="/account/api-keys"
+          />
           <Route
             element={
               <ProtectedRoute>
@@ -54,7 +71,7 @@ export function AppRoutes() {
           />
           <Route
             element={
-              <ProtectedRoute permission="systems:write">
+              <ProtectedRoute permission="system_manage">
                 <OnboardingPage />
               </ProtectedRoute>
             }
@@ -62,13 +79,46 @@ export function AppRoutes() {
           />
           <Route
             element={
-              <ProtectedRoute permission="analytics:read">
+              <ProtectedRoute permission="system_read">
+                <SystemsPage />
+              </ProtectedRoute>
+            }
+            path="/systems"
+          />
+          <Route
+            element={
+              <ProtectedRoute permission="telemetry_read">
+                <StatisticsPage />
+              </ProtectedRoute>
+            }
+            path="/statistics"
+          />
+          <Route
+            element={
+              <ProtectedRoute permission="telemetry_read">
+                <SeasonalPage />
+              </ProtectedRoute>
+            }
+            path="/seasonal"
+          />
+          <Route
+            element={
+              <ProtectedRoute permission="telemetry_read">
+                <WeatherPage />
+              </ProtectedRoute>
+            }
+            path="/weather"
+          />
+          <Route
+            element={
+              <ProtectedRoute permission="telemetry_read">
                 <SystemLayoutPage />
               </ProtectedRoute>
             }
             path="/systems/:systemId"
           >
             <Route element={<SystemChartsPage />} index />
+            <Route element={<SystemForecastPage />} path="forecast" />
             <Route element={<DataQualityPage />} path="data-quality" />
           </Route>
           <Route
@@ -84,5 +134,3 @@ export function AppRoutes() {
     </AppErrorBoundary>
   );
 }
-  SystemForecastPage,
-            <Route element={<SystemForecastPage />} path="forecast" />

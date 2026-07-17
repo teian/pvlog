@@ -48,11 +48,11 @@ describe("authentication workflows", () => {
       />,
     );
     expect(
-      await screen.findByRole("heading", { name: "Sign in to PVLog" }),
+      await screen.findByRole("heading", { name: "Sign in" }),
     ).toBeVisible();
     expect(screen.getByLabelText("Email address")).toBeVisible();
     expect(
-      await screen.findByRole("link", { name: "Continue with Company SSO" }),
+      await screen.findByRole("link", { name: "Sign in with Company SSO" }),
     ).toHaveAttribute("href", "https://identity.example/authorize");
     expect(
       screen.getByRole("link", { name: "Forgot password?" }),

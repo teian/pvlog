@@ -50,7 +50,7 @@ export function HistoricalCharts({ systemId }: HistoricalChartsProps) {
           {t("charts.noCategories")}
         </p>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-5">
           {visibleCategories.map((category) => (
             <CategoryChart
               category={category}

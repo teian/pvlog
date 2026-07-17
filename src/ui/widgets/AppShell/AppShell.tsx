@@ -1,114 +1,68 @@
-import { Button } from "@/shared/components";
-import { cn } from "@/shared/lib/utils";
-import { MenuIcon, PanelLeftCloseIcon, SunMediumIcon } from "lucide-react";
 import { useState, type PropsWithChildren } from "react";
 import { useTranslation } from "react-i18next";
-import { Link, NavLink } from "react-router";
-import { SessionControls } from "./SessionControls";
+import { AppSidebar } from "./AppSidebar";
+import { AdministrationSidebar } from "./AdministrationSidebar";
+import { MobileNavigationHeader } from "./MobileNavigationHeader";
 
 /** Responsive application shell properties. */
 export interface AppShellProps extends PropsWithChildren {
-  /** Account shown in navigation. */ accountId?: string | null | undefined;
   /** Systems available to the user. */ systemIds?: string[] | undefined;
+  /** Navigation and layout context rendered by the shell. */
+  variant?: "application" | "administration";
 }
 
-/** Renders account/system navigation, skip link, header, and main content. @param props - Shell content and navigation context. @returns The responsive shell. */
+/** Renders the sidebar-owned application frame and main content. @param props - Shell content and navigation context. @returns The responsive shell. */
 export function AppShell({
-  accountId,
   children,
   systemIds = [],
+  variant = "application",
 }: AppShellProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <a
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground"
+        className="sr-only focus:fixed focus:left-4 focus:top-4 focus:z-40 focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-primary-foreground focus:not-sr-only"
         href="#main-content"
       >
         {t("shell.skip")}
       </a>
-      <aside
-        className={cn(
-          "fixed inset-y-0 left-0 w-60 border-r border-sidebar-border bg-sidebar p-4 md:block",
-          open ? "block" : "hidden",
-        )}
-      >
-        <div className="flex items-center justify-between">
-          <Link className="font-bold tracking-tight" to="/">
-            {t("home.title")}
-          </Link>
-          <Button
-            aria-label={t("shell.closeNavigation")}
-            className="md:hidden"
-            onClick={() => {
-              setOpen(false);
-            }}
-            size="icon"
-            variant="ghost"
-          >
-            <PanelLeftCloseIcon />
-          </Button>
-        </div>
-        <nav
-          aria-label={t("shell.primaryNavigation")}
-          className="mt-6 flex flex-col gap-2"
-        >
-          <NavLink
-            className="rounded-md px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent"
-            to="/"
-          >
-            {t("nav.dashboard")}
-          </NavLink>
-          <NavLink
-            className="rounded-md px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent"
-            to="/alerts"
-          >
-            {t("nav.alerts")}
-          </NavLink>
-          <NavLink
-            className="rounded-md px-3 py-2 text-sm transition-colors hover:bg-sidebar-accent"
-            to="/administration"
-          >
-            {t("nav.administration")}
-          </NavLink>
-          {accountId ? (
-            <p className="mt-4 truncate text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-              {t("nav.account", { id: accountId.slice(0, 8) })}
-            </p>
-          ) : null}
-          {systemIds.map((id) => (
-            <NavLink
-              className="truncate rounded-md px-3 py-2 font-mono text-xs transition-colors hover:bg-sidebar-accent"
-              key={id}
-              to={`/systems/${id}`}
-            >
-              {t("nav.system", { id: id.slice(0, 8) })}
-            </NavLink>
-          ))}
-        </nav>
-      </aside>
-      <div className="md:ml-60">
-        <header className="flex h-14 items-center justify-between border-b border-border px-4">
-          <Button
-            aria-label={t("shell.openNavigation")}
-            className="md:hidden"
-            onClick={() => {
-              setOpen(true);
-            }}
-            size="icon"
-            variant="ghost"
-          >
-            <MenuIcon />
-          </Button>
-          <span className="text-sm font-medium">{t("shell.title")}</span>
-          <Button aria-label={t("shell.theme")} size="icon" variant="ghost">
-            <SunMediumIcon />
-          </Button>
-          <SessionControls />
-        </header>
+      {open ? (
+        <button
+          aria-label={t("shell.closeNavigation")}
+          className="fixed inset-0 z-20 bg-foreground/25 md:hidden"
+          onClick={() => {
+            setOpen(false);
+          }}
+          type="button"
+        />
+      ) : null}
+      {variant === "administration" ? (
+        <AdministrationSidebar
+          onClose={() => {
+            setOpen(false);
+          }}
+          open={open}
+          systemIds={systemIds}
+        />
+      ) : (
+        <AppSidebar
+          onClose={() => {
+            setOpen(false);
+          }}
+          open={open}
+          systemIds={systemIds}
+        />
+      )}
+      <div className="min-h-screen md:ml-[15.75rem]">
+        <MobileNavigationHeader
+          onOpen={() => {
+            setOpen(true);
+          }}
+        />
         <main
-          className="mx-auto flex max-w-screen-xl flex-col gap-6 px-6 py-6"
+          className="mx-auto flex max-w-screen-xl flex-col gap-6 px-4 py-6 sm:px-6 md:px-8 md:py-8"
           id="main-content"
         >
           {children}

@@ -114,7 +114,7 @@ async function mockSession(page: import("@playwright/test").Page) {
         user: { id, displayName: "Ada" },
         accountId: id,
         systemIds: [id],
-        permissions: ["analytics:read"],
+        permissions: ["telemetry_read"],
         connectors: [],
       },
     }),

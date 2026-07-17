@@ -106,7 +106,9 @@ export function ForecastYieldPanel({
       <CardHeader>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <CardTitle>{t("forecasting.forward.title")}</CardTitle>
+            <CardTitle className="text-sm font-semibold">
+              {t("forecasting.forward.title")}
+            </CardTitle>
             <CardDescription>
               {t("forecasting.forward.description")}
             </CardDescription>

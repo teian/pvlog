@@ -45,7 +45,9 @@ export function ForecastCompletenessPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t("forecasting.completeness.title")}</CardTitle>
+        <CardTitle className="text-sm font-semibold">
+          {t("forecasting.completeness.title")}
+        </CardTitle>
         <CardDescription>
           {t("forecasting.completeness.description")}
         </CardDescription>
@@ -74,7 +76,7 @@ export function ForecastCompletenessPanel({
           </span>
         </div>
         {completeness.reasons.length > 0 ? (
-          <ul className="list-disc space-y-1 pl-5 text-sm">
+          <ul className="flex list-disc flex-col gap-1 pl-5 text-sm">
             {completeness.reasons.map((reason) => (
               <li key={reason}>{t(`forecasting.reasons.${reason}`)}</li>
             ))}

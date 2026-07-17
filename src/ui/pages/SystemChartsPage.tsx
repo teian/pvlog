@@ -9,7 +9,14 @@ export function SystemChartsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-bold tracking-tight">{t("charts.title")}</h1>
+      <header className="flex flex-col gap-1">
+        <h1 className="text-2xl font-extrabold tracking-tight">
+          {t("charts.title")}
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          {t("charts.description")}
+        </p>
+      </header>
       {systemId ? <HistoricalCharts systemId={systemId} /> : null}
     </div>
   );

@@ -29,7 +29,7 @@ Fonts are **Noto Sans** (body/UI) and **Noto Serif** (editorial), defined in `sr
 
 All colors use semantic tokens. Raw hex/OKLCH forbidden outside `src/index.css`. Full palette in [frontend-design-system.md](frontend-design-system.md).
 
-**Brand accent:** `orange-500` — logo mark only. Do not use on interactive elements or data.
+**Brand accent:** `brand` — logo and energy emphasis. Interactive controls use `primary`; modeled energy may use `chart-2`/`brand` when labels or legends explain the distinction.
 
 **Status palette (contextual, not global):**
 
@@ -41,7 +41,7 @@ All colors use semantic tokens. Raw hex/OKLCH forbidden outside `src/index.css`.
 | Corrective / open badge    | `border-blue-200 bg-blue-50 dark:bg-blue-950/30 dark:border-blue-800`     | `text-blue-700 dark:text-blue-400`       |
 | Positive trend / completed | —                                                                         | `text-emerald-600 dark:text-emerald-400` |
 
-**Sidebar:** `bg-neutral-900` (outside token system); nav items `text-neutral-400`; active `bg-neutral-800 text-white`; hover `hover:text-neutral-200 hover:bg-neutral-800/60`.
+**Sidebar:** `bg-sidebar text-sidebar-foreground`; active items use `bg-sidebar-accent text-sidebar-accent-foreground` with a `border-brand` left accent.
 
 **Avatar colors:** deterministic cycle by initials — `bg-emerald-600`, `bg-blue-600`, `bg-violet-600`, `bg-amber-600`, `bg-rose-600`.
 
@@ -49,8 +49,8 @@ All colors use semantic tokens. Raw hex/OKLCH forbidden outside `src/index.css`.
 
 ## Layout
 
-- **Sidebar:** fixed `w-60 bg-neutral-900`, `z-30`
-- **Content area:** `ml-60 flex-1`, inner max-width `max-w-screen-xl mx-auto px-6 py-6`
+- **Sidebar:** fixed `w-[15.75rem] bg-sidebar`, `z-30`
+- **Content area:** `md:ml-[15.75rem] flex-1`, inner max-width `max-w-screen-xl mx-auto px-4 sm:px-6 md:px-8 py-6 md:py-8`
 - **Page stack:** `flex flex-col gap-6` — consistent vertical rhythm between all major sections
 - **KPI grid:** `grid grid-cols-2 sm:grid-cols-4 gap-4`
 - **Data table rows:** explicit `gridTemplateColumns` string (e.g. `140px 1fr 200px 120px 140px 120px`) — never flexbox for row alignment
@@ -66,7 +66,7 @@ This is a dense data application — no decorative gradients or geometric patter
 - Table header rows / muted strips: `bg-muted/30`
 - Urgent KPI: `bg-destructive/5` with `border-destructive/40`
 - Drawer overlay: `bg-black/25 backdrop-blur-sm`
-- Sidebar: `bg-neutral-900` (intentionally off-token for strong visual separation)
+- Sidebar: `bg-sidebar` for strong visual separation with theme-aware semantic contrast
 
 ## Motion
 

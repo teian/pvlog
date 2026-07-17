@@ -46,7 +46,7 @@ export function PerformanceMetricCard({
     return (
       <Card>
         <CardHeader>
-          <CardTitle>{title}</CardTitle>
+          <CardTitle className="text-sm font-semibold">{title}</CardTitle>
           <CardDescription>
             {t(`forecasting.performance.${type}.description`)}
           </CardDescription>
@@ -84,7 +84,7 @@ export function PerformanceMetricCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{title}</CardTitle>
+        <CardTitle className="text-sm font-semibold">{title}</CardTitle>
         <CardDescription>
           {t(`forecasting.performance.${type}.description`)}
         </CardDescription>
@@ -94,7 +94,7 @@ export function PerformanceMetricCard({
           <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
             {t("forecasting.performance.average")}
           </p>
-          <p className="text-4xl font-bold tabular-nums">
+          <p className="font-mono text-4xl font-bold text-primary tabular-nums">
             {averageRatio === null
               ? t("forecasting.notAvailable")
               : t("forecasting.percent", {

@@ -61,7 +61,7 @@ describe("DataQualityPage", () => {
             user: { id: SYSTEM_ID, displayName: "Ada" },
             accountId: SYSTEM_ID,
             systemIds: [SYSTEM_ID],
-            permissions: ["analytics:read", "telemetry:write"],
+            permissions: ["telemetry_read", "telemetry_write"],
             connectors: [],
           }),
           { status: 200, headers: { "content-type": "application/json" } },

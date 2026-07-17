@@ -47,7 +47,7 @@ describe("SystemChartsPage", () => {
               user: { id: SYSTEM_ID, displayName: "Ada" },
               accountId: SYSTEM_ID,
               systemIds: [SYSTEM_ID],
-              permissions: ["analytics:read"],
+              permissions: ["telemetry_read"],
               connectors: [],
             }),
             { status: 200, headers: { "content-type": "application/json" } },

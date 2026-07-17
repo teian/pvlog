@@ -60,9 +60,9 @@ export function SystemForecastPage() {
       aria-labelledby="forecast-page-title"
       className="flex flex-col gap-6"
     >
-      <div>
+      <header className="flex flex-col gap-1">
         <h1
-          className="text-2xl font-bold tracking-tight"
+          className="text-2xl font-extrabold tracking-tight"
           id="forecast-page-title"
         >
           {t("forecasting.page.title")}
@@ -70,7 +70,7 @@ export function SystemForecastPage() {
         <p className="text-sm text-muted-foreground">
           {t("forecasting.page.description")}
         </p>
-      </div>
+      </header>
       <div className="grid gap-4 xl:grid-cols-2">
         <ForecastCompletenessPanel
           {...(completeness.data === undefined

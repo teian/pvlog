@@ -19,26 +19,28 @@ The application follows the Bundesregierung Styleguide typography guidance for d
 
 ## Colour Scheme
 
-The current frontend theme is implemented in `src/index.css` as a neutral OKLCH token system based on shadcn/ui conventions.
+The current frontend theme is implemented in `src/index.css` as a semantic slate, steel-blue, and orange token system based on shadcn/ui conventions and the PVLog dashboard design.
 
 - **Theme definition**: `src/index.css` — CSS custom properties in `:root` for light mode and `.dark` for dark mode.
 - **Tailwind integration**: Variables are registered in the `@theme inline` block as `--color-*`, enabling utilities like `bg-primary`, `text-destructive`, `border-border`, `text-muted-foreground`, and `bg-sidebar`.
-- **Theme shape**: The palette is intentionally neutral, with semantic roles expressed through token names rather than brand colour names.
-- **Raw colour format**: Theme tokens currently use OKLCH values. Component code must consume semantic tokens instead of raw OKLCH, hex, RGB, HSL, or named colours.
+- **Theme shape**: Semantic roles express purpose while allowing a recognizable PV monitoring palette.
+- **Raw colour format**: Light tokens use exact design hex values and dark tokens use accessible equivalents. Component code must consume semantic tokens instead of raw OKLCH, hex, RGB, HSL, or named colours.
 
 ## Palette Reference
 
-The implemented palette is a semantic OKLCH scale rather than a named brand palette.
+The implemented palette uses semantic roles: cool slate surfaces, accessible steel-blue interaction, industrial-orange energy emphasis, and explicit success/warning states.
 
 | Token Group                          | Purpose                                              | Light Theme                                                   | Dark Theme                                            |
 | ------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------- |
-| `background` / `foreground`          | App surface and default text                         | Subtle warm off-white surface with dark warm-neutral text     | Near-black surface with near-white text               |
-| `card` / `card-foreground`           | Card surfaces and text                               | Almost-white raised surface                                   | Raised dark surface                                   |
+| `background` / `foreground`          | App surface and default text                         | Cool slate surface with slate-black text                      | Near-black surface with near-white text               |
+| `card` / `card-foreground`           | Card surfaces and text                               | White raised surface                                          | Raised dark surface                                   |
 | `popover` / `popover-foreground`     | Floating surfaces and text                           | Almost-white raised surface                                   | Raised dark surface                                   |
-| `primary` / `primary-foreground`     | Primary actions and emphasis                         | Dark warm-neutral with warm off-white text                    | Near-white with near-black text                       |
+| `primary` / `primary-foreground`     | Primary actions and emphasis                         | Accessible steel blue with white text                         | Near-white with near-black text                       |
 | `secondary` / `secondary-foreground` | Secondary surfaces and controls                      | Very light warm-neutral surface with dark text                | Dark neutral with light text                          |
 | `muted` / `muted-foreground`         | Subtle backgrounds and secondary text                | Soft warm-neutral surface with higher-contrast secondary text | Dark neutral with mid-gray text                       |
-| `accent` / `accent-foreground`       | Hover, selected, and low-emphasis interactive states | Soft cream hover state with dark text                         | Dark neutral with light text                          |
+| `accent` / `accent-foreground`       | Hover, selected, and low-emphasis interactive states | Pale blue hover state with dark-blue text                     | Dark neutral with light text                          |
+| `brand`                              | Energy and logo accent                               | Industrial orange                                             | Lighter orange                                        |
+| `success` / `warning`                | Positive and caution states                          | Green and amber                                               | Lighter green and amber                               |
 | `destructive`                        | Error and destructive actions                        | Saturated red OKLCH token                                     | Lighter red OKLCH token                               |
 | `border` / `input` / `ring`          | Borders, form chrome, and focus rings                | Soft warm-neutral borders and focus rings                     | Transparent light overlays and mid neutral ring       |
 | `chart-1` through `chart-5`          | Chart series colours                                 | Neutral ramp                                                  | Same neutral ramp                                     |
@@ -49,10 +51,10 @@ The implemented palette is a semantic OKLCH scale rather than a named brand pale
 
 | CSS Variable           | Light Theme                 | Dark Theme                   | Tailwind Utility                     |
 | ---------------------- | --------------------------- | ---------------------------- | ------------------------------------ |
-| `--background`         | `oklch(0.988 0.006 86)`     | `oklch(0.145 0 0)`           | `bg-background`                      |
-| `--foreground`         | `oklch(0.155 0.01 72)`      | `oklch(0.985 0 0)`           | `text-foreground`                    |
-| `--primary`            | `oklch(0.22 0.014 72)`      | `oklch(0.922 0 0)`           | `bg-primary`, `text-primary`         |
-| `--primary-foreground` | `oklch(0.99 0.004 86)`      | `oklch(0.205 0 0)`           | `text-primary-foreground`            |
+| `--background`         | `#f8fafc`                   | `oklch(0.145 0 0)`           | `bg-background`                      |
+| `--foreground`         | `#0f172a`                   | `oklch(0.985 0 0)`           | `text-foreground`                    |
+| `--primary`            | `#0369a1`                   | `oklch(0.922 0 0)`           | `bg-primary`, `text-primary`         |
+| `--primary-foreground` | `#fff`                      | `oklch(0.205 0 0)`           | `text-primary-foreground`            |
 | `--secondary`          | `oklch(0.966 0.007 84)`     | `oklch(0.269 0 0)`           | `bg-secondary`                       |
 | `--muted`              | `oklch(0.959 0.008 84)`     | `oklch(0.269 0 0)`           | `bg-muted`                           |
 | `--muted-foreground`   | `oklch(0.45 0.014 72)`      | `oklch(0.708 0 0)`           | `text-muted-foreground`              |
@@ -61,8 +63,12 @@ The implemented palette is a semantic OKLCH scale rather than a named brand pale
 | `--border`             | `oklch(0.882 0.008 82)`     | `oklch(1 0 0 / 10%)`         | `border-border`                      |
 | `--input`              | `oklch(0.86 0.01 82)`       | `oklch(1 0 0 / 15%)`         | `border-input`                       |
 | `--ring`               | `oklch(0.58 0.018 72)`      | `oklch(0.556 0 0)`           | `ring-ring`                          |
-| `--sidebar`            | `oklch(0.982 0.006 86)`     | `oklch(0.205 0 0)`           | `bg-sidebar`                         |
-| `--sidebar-primary`    | `oklch(0.22 0.014 72)`      | `oklch(0.488 0.243 264.376)` | `bg-sidebar-primary`                 |
+| `--sidebar`            | `#0c4a6e`                   | `oklch(0.205 0 0)`           | `bg-sidebar`                         |
+| `--sidebar-selected`   | `#1e293b`                   | `oklch(0.269 0 0)`           | `bg-sidebar-selected`                |
+| `--sidebar-primary`    | `#fff`                      | `oklch(0.488 0.243 264.376)` | `bg-sidebar-primary`                 |
+| `--brand`              | `#ea580c`                   | `#fb923c`                    | `bg-brand`, `text-brand`             |
+| `--success`            | `#16a34a`                   | `#4ade80`                    | `bg-success`, `text-success`         |
+| `--warning`            | `#d97706`                   | `#fbbf24`                    | `bg-warning`, `text-warning`         |
 | `--master-data-active` | `oklch(0.91 0.055 78)`      | `oklch(0.28 0.08 62)`        | `bg-master-data-active`              |
 | `--master-data-badge`  | `oklch(0.68 0.19 45)`       | `oklch(0.68 0.19 45)`        | `bg-master-data-badge`               |
 
@@ -70,7 +76,7 @@ The implemented palette is a semantic OKLCH scale rather than a named brand pale
 
 - Dark mode is activated through the `.dark` class and Tailwind's custom dark variant: `@custom-variant dark (&:is(.dark *));`.
 - Dark surfaces invert the neutral scale: app backgrounds become near-black, text becomes near-white, and raised surfaces use a slightly lighter dark neutral.
-- Primary actions invert from dark-on-light to light-on-dark so primary buttons remain high contrast.
+- Primary actions invert from blue-on-light to light-on-dark so primary buttons remain high contrast.
 - Secondary, muted, and accent surfaces share the same dark neutral token to keep low-emphasis UI quiet and consistent.
 - Borders and inputs use translucent light overlays in dark mode, avoiding heavy outlines while preserving visible structure.
 - The destructive token becomes lighter in dark mode to preserve contrast against dark surfaces.

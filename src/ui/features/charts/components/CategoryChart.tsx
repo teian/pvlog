@@ -2,7 +2,10 @@ import type {
   ResolutionParam,
   SeriesField,
 } from "@/features/charts/api/chartsApi";
-import { type ChartView, ChartActionsBar } from "@/features/charts/components/ChartActionsBar";
+import {
+  type ChartView,
+  ChartActionsBar,
+} from "@/features/charts/components/ChartActionsBar";
 import { CategoryChartBody } from "@/features/charts/components/CategoryChartBody";
 import { useAnalysisExport } from "@/features/charts/hooks/useAnalysisExport";
 import { useCategorySeriesData } from "@/features/charts/hooks/useCategorySeriesData";
@@ -95,7 +98,9 @@ export function CategoryChart({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{t(`charts.category.${category.key}`)}</CardTitle>
+        <CardTitle className="text-sm font-semibold">
+          {t(`charts.category.${category.key}`)}
+        </CardTitle>
         {category.fields.length > 1 ? (
           <CardDescription>
             <ToggleGroup

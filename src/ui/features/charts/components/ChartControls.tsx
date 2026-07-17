@@ -53,12 +53,13 @@ export function ChartControls({
       <div className="flex flex-wrap items-center gap-4">
         <ToggleGroup
           aria-label={t("charts.rangeLabel")}
+          className="max-w-full flex-wrap bg-muted p-1"
           onValueChange={(value: string) => {
             if (value) onRangeChange(value as RangePresetKey);
           }}
           type="single"
           value={rangeKey}
-          variant="outline"
+          size="sm"
         >
           {RANGE_PRESETS.map((preset) => (
             <ToggleGroupItem key={preset.key} value={preset.key}>
@@ -68,12 +69,13 @@ export function ChartControls({
         </ToggleGroup>
         <ToggleGroup
           aria-label={t("charts.resolutionLabel")}
+          className="max-w-full flex-wrap bg-muted p-1"
           onValueChange={(value: string) => {
             if (value) onResolutionChange(value as ResolutionParam);
           }}
           type="single"
           value={resolution}
-          variant="outline"
+          size="sm"
         >
           {RESOLUTIONS.map((value) => (
             <ToggleGroupItem key={value} value={value}>

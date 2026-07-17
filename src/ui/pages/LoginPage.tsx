@@ -1,23 +1,17 @@
-import { login, useSession } from "@/features/auth";
+import { LoginAlternatives, login, useSession } from "@/features/auth";
 import {
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
   Field,
   FieldError,
   FieldGroup,
   FieldLabel,
   Input,
-  Separator,
 } from "@/shared/components";
+import { AppBrand } from "@/widgets/AppShell";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Link, useNavigate } from "react-router";
+import { useNavigate } from "react-router";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -41,17 +35,32 @@ export function LoginPage() {
       await navigate("/");
     },
   });
+  const connectors = session.data?.connectors ?? [];
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-md items-center px-6 py-10">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle aria-level={1} role="heading">
-            {t("auth.loginTitle")}
-          </CardTitle>
-          <CardDescription>{t("auth.loginDescription")}</CardDescription>
-        </CardHeader>
-        <CardContent>
+    <main className="grid min-h-screen bg-background lg:grid-cols-[44%_56%]">
+      <section className="hidden items-center justify-center bg-sidebar px-12 text-sidebar-foreground lg:flex">
+        <div className="flex max-w-sm flex-col items-center gap-8 text-center">
+          <AppBrand size="hero" />
+          <p className="text-base leading-6 text-sidebar-foreground/85">
+            {t("auth.brandDescription")}
+          </p>
+        </div>
+      </section>
+
+      <section className="flex min-h-screen items-center justify-center px-6 py-10 sm:px-10">
+        <div className="w-full max-w-[18.25rem]">
+          <header className="mb-7 space-y-1">
+            <h1 className="text-2xl font-extrabold tracking-tight">
+              {t("auth.loginTitle")}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {t("auth.loginDescription")}
+            </p>
+          </header>
+
           <form
+            className="flex flex-col gap-5"
             id="login-form"
             onSubmit={(event) => {
               void form.handleSubmit((value) => {
@@ -66,6 +75,7 @@ export function LoginPage() {
                   aria-invalid={Boolean(form.formState.errors.email)}
                   autoComplete="email"
                   id="email"
+                  placeholder={t("auth.emailPlaceholder")}
                   type="email"
                   {...form.register("email")}
                 />
@@ -86,27 +96,18 @@ export function LoginPage() {
                 <FieldError>{t("auth.loginFailed")}</FieldError>
               ) : null}
             </FieldGroup>
+            <Button
+              className="w-full"
+              disabled={mutation.isPending}
+              type="submit"
+            >
+              {t("auth.signIn")}
+            </Button>
           </form>
-          <Separator className="my-6" />
-          <div className="flex flex-col gap-2">
-            {session.data?.connectors.map((connector) => (
-              <Button asChild key={connector.id} variant="outline">
-                <a href={connector.authorizationUrl}>
-                  {t("auth.continueWith", { name: connector.name })}
-                </a>
-              </Button>
-            ))}
-          </div>
-        </CardContent>
-        <CardFooter className="flex justify-between">
-          <Button asChild variant="link">
-            <Link to="/recovery">{t("auth.forgotPassword")}</Link>
-          </Button>
-          <Button disabled={mutation.isPending} form="login-form" type="submit">
-            {t("auth.signIn")}
-          </Button>
-        </CardFooter>
-      </Card>
+
+          <LoginAlternatives connectors={connectors} />
+        </div>
+      </section>
     </main>
   );
 }

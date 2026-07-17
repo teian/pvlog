@@ -11,7 +11,9 @@ export function ForecastMetadata({ label, value }: ForecastMetadataProps) {
       <dt className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
         {label}
       </dt>
-      <dd className="mt-1 break-words tabular-nums">{value}</dd>
+      <dd className="mt-1 break-words font-mono text-sm tabular-nums">
+        {value}
+      </dd>
     </div>
   );
 }

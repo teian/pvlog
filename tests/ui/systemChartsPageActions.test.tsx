@@ -62,7 +62,7 @@ describe("SystemChartsPage actions", () => {
             user: { id: SYSTEM_ID, displayName: "Ada" },
             accountId: SYSTEM_ID,
             systemIds: [SYSTEM_ID],
-            permissions: ["analytics:read", "exports:write"],
+            permissions: ["telemetry_read", "system_manage"],
             connectors: [],
           }),
           { status: 200, headers: { "content-type": "application/json" } },
@@ -91,7 +91,12 @@ describe("SystemChartsPage actions", () => {
       <App
         runtimeConfig={{
           apiBaseUrl: "/api",
-          telemetry: { enabled: false, headers: {}, serviceName: "pvlog-ui", serviceVersion: "test" },
+          telemetry: {
+            enabled: false,
+            headers: {},
+            serviceName: "pvlog-ui",
+            serviceVersion: "test",
+          },
         }}
       />,
     );
@@ -111,7 +116,12 @@ describe("SystemChartsPage actions", () => {
       <App
         runtimeConfig={{
           apiBaseUrl: "/api",
-          telemetry: { enabled: false, headers: {}, serviceName: "pvlog-ui", serviceVersion: "test" },
+          telemetry: {
+            enabled: false,
+            headers: {},
+            serviceName: "pvlog-ui",
+            serviceVersion: "test",
+          },
         }}
       />,
     );
@@ -119,7 +129,9 @@ describe("SystemChartsPage actions", () => {
     await waitFor(() => {
       expect(screen.getAllByText(/Resolution: Hourly/)).toHaveLength(2);
     });
-    const [firstExportCsv] = screen.getAllByRole("button", { name: "Export CSV" });
+    const [firstExportCsv] = screen.getAllByRole("button", {
+      name: "Export CSV",
+    });
     await user.click(firstExportCsv);
     await waitFor(() => {
       const exportCalls = fetchMock.mock.calls.filter(
@@ -137,7 +149,12 @@ describe("SystemChartsPage actions", () => {
       <App
         runtimeConfig={{
           apiBaseUrl: "/api",
-          telemetry: { enabled: false, headers: {}, serviceName: "pvlog-ui", serviceVersion: "test" },
+          telemetry: {
+            enabled: false,
+            headers: {},
+            serviceName: "pvlog-ui",
+            serviceVersion: "test",
+          },
         }}
       />,
     );

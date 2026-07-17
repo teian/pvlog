@@ -64,7 +64,7 @@ export function DataQualityView({ systemId }: DataQualityViewProps) {
     activeKinds.includes(issue.kind),
   );
   const canCorrect =
-    session.data?.permissions.includes("telemetry:write") ?? false;
+    session.data?.permissions.includes("telemetry_write") ?? false;
 
   return (
     <div className="flex flex-col gap-6">

@@ -14,10 +14,7 @@ describe("API response schema validation", () => {
     );
 
     await expect(
-      fetchInverters(
-        "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70",
-        "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f71",
-      ),
+      fetchInverters("019505c8-7c85-7f0b-9bc3-2a3c4d5e6f71"),
     ).rejects.toThrow();
   });
 });

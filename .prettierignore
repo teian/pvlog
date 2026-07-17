@@ -2,4 +2,4 @@ Cargo.lock
 dist
 node_modules
 pnpm-lock.yaml
-
+assets/equipment-catalog/pv-module-catalog-v1.json

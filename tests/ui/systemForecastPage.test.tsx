@@ -127,7 +127,7 @@ function mockResponse(
         user: { id: ID, displayName: "Ada" },
         accountId: ID,
         systemIds: [ID],
-        permissions: ["analytics:read"],
+        permissions: ["telemetry_read"],
         connectors: [],
       }),
     );
