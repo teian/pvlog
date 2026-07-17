@@ -73,6 +73,22 @@ impl fmt::Debug for PostgresUserLifecycleRepository {
 #[cfg(feature = "sqlite")]
 #[async_trait]
 impl UserLifecycleRepository for SqliteUserLifecycleRepository {
+    async fn users(&self, limit: u32) -> Result<Vec<LifecycleUserRecord>, PortError> {
+        let mut connection = self.connection().await.map_err(port)?;
+        let rows = sqlx::query(
+            "SELECT user.id,user.email,user.display_name,user.status,user.email_verified_at, \
+             user.disabled_at,credential.locked_until,user.created_at,user.updated_at \
+             FROM users user LEFT JOIN local_credentials credential ON credential.user_id=user.id \
+             WHERE user.status<>'deleted' ORDER BY lower(user.display_name),lower(user.email),user.id LIMIT ?",
+        )
+        .bind(i64::from(limit))
+        .fetch_all(&mut connection)
+        .await
+        .map_err(port)?;
+        connection.close().await.map_err(port)?;
+        rows.iter().map(sqlite_user).collect()
+    }
+
     async fn user(&self, id: UserId) -> Result<Option<LifecycleUserRecord>, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
         let row = sqlx::query(
@@ -115,6 +131,27 @@ impl UserLifecycleRepository for SqliteUserLifecycleRepository {
         } else {
             LifecycleCreateOutcome::Existing
         })
+    }
+
+    async fn update_display_name(
+        &self,
+        id: UserId,
+        display_name: &str,
+        now: i64,
+    ) -> Result<bool, PortError> {
+        let mut connection = self.connection().await.map_err(port)?;
+        let result = sqlx::query(
+            "UPDATE users SET display_name=?,updated_at=?,version=version+1 \
+             WHERE id=? AND status='active'",
+        )
+        .bind(display_name)
+        .bind(now)
+        .bind(blob(id.as_uuid()))
+        .execute(&mut connection)
+        .await
+        .map_err(port)?;
+        connection.close().await.map_err(port)?;
+        Ok(result.rows_affected() == 1)
     }
 
     async fn create_invitation(&self, invitation: &InvitationRecord) -> Result<(), PortError> {
@@ -315,6 +352,24 @@ impl UserLifecycleRepository for SqliteUserLifecycleRepository {
 #[cfg(feature = "postgres")]
 #[async_trait]
 impl UserLifecycleRepository for PostgresUserLifecycleRepository {
+    async fn users(&self, limit: u32) -> Result<Vec<LifecycleUserRecord>, PortError> {
+        let mut connection = self.connection().await.map_err(port)?;
+        let rows = sqlx::query(
+            "SELECT user_record.id,user_record.email,user_record.display_name,user_record.status, \
+             user_record.email_verified_at,user_record.disabled_at,credential.locked_until, \
+             user_record.created_at,user_record.updated_at FROM management.users user_record \
+             LEFT JOIN management.local_credentials credential ON credential.user_id=user_record.id \
+             WHERE user_record.status<>'deleted' \
+             ORDER BY lower(user_record.display_name),lower(user_record.email),user_record.id LIMIT $1",
+        )
+        .bind(i64::from(limit))
+        .fetch_all(&mut connection)
+        .await
+        .map_err(port)?;
+        connection.close().await.map_err(port)?;
+        rows.iter().map(postgres_user).collect()
+    }
+
     async fn user(&self, id: UserId) -> Result<Option<LifecycleUserRecord>, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
         let row=sqlx::query("SELECT user_record.id,user_record.email,user_record.display_name,user_record.status,user_record.email_verified_at,user_record.disabled_at,credential.locked_until,user_record.created_at,user_record.updated_at FROM management.users user_record LEFT JOIN management.local_credentials credential ON credential.user_id=user_record.id WHERE user_record.id=$1").bind(id.as_uuid()).fetch_optional(&mut connection).await.map_err(port)?;
@@ -334,6 +389,27 @@ impl UserLifecycleRepository for PostgresUserLifecycleRepository {
         } else {
             LifecycleCreateOutcome::Existing
         })
+    }
+
+    async fn update_display_name(
+        &self,
+        id: UserId,
+        display_name: &str,
+        now: i64,
+    ) -> Result<bool, PortError> {
+        let mut connection = self.connection().await.map_err(port)?;
+        let result = sqlx::query(
+            "UPDATE management.users SET display_name=$1,updated_at=$2,version=version+1 \
+             WHERE id=$3 AND status='active'",
+        )
+        .bind(display_name)
+        .bind(now)
+        .bind(id.as_uuid())
+        .execute(&mut connection)
+        .await
+        .map_err(port)?;
+        connection.close().await.map_err(port)?;
+        Ok(result.rows_affected() == 1)
     }
 
     async fn create_invitation(&self, invitation: &InvitationRecord) -> Result<(), PortError> {

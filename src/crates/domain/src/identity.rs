@@ -234,6 +234,25 @@ pub enum Permission {
     AuditRead,
 }
 
+impl Permission {
+    /// Complete stable permission catalog used by unrestricted instance administrators.
+    pub const ALL: [Self; 13] = [
+        Self::InstanceRead,
+        Self::InstanceManage,
+        Self::AccountRead,
+        Self::AccountManage,
+        Self::MembershipManage,
+        Self::RoleManage,
+        Self::SystemRead,
+        Self::SystemManage,
+        Self::TelemetryRead,
+        Self::TelemetryWrite,
+        Self::CredentialManage,
+        Self::IntegrationManage,
+        Self::AuditRead,
+    ];
+}
+
 /// Built-in least-privilege role templates.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]

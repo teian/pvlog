@@ -26,9 +26,8 @@ pub struct ApiTokenRecord {
 
 #[derive(Clone, Debug)]
 pub struct ApiToken {
-    pub id: ApiCredentialId,
     pub plaintext: SecretString,
-    pub expires_at: Option<i64>,
+    pub credential: ApiTokenRecord,
 }
 
 #[async_trait]
@@ -39,7 +38,16 @@ pub trait ApiTokenRepository: Send + Sync {
         digest: &[u8; 32],
         now: i64,
     ) -> Result<Option<ApiTokenRecord>, PortError>;
-    async fn revoke(&self, id: ApiCredentialId, now: i64) -> Result<(), PortError>;
+    async fn list_for_account(
+        &self,
+        account_id: AccountId,
+    ) -> Result<Vec<ApiTokenRecord>, PortError>;
+    async fn revoke(
+        &self,
+        account_id: AccountId,
+        id: ApiCredentialId,
+        now: i64,
+    ) -> Result<bool, PortError>;
 }
 
 pub struct ApiTokenService {
@@ -89,25 +97,25 @@ impl ApiTokenService {
             Uuid::new_v4().simple(),
             Uuid::new_v4().simple()
         ));
+        let credential = ApiTokenRecord {
+            id,
+            account_id,
+            owner_user_id,
+            system_id,
+            name,
+            digest: self.digest(&plaintext),
+            scopes,
+            created_at: now,
+            expires_at,
+            revoked_at: None,
+        };
         self.repository
-            .save(ApiTokenRecord {
-                id,
-                account_id,
-                owner_user_id,
-                system_id,
-                name,
-                digest: self.digest(&plaintext),
-                scopes,
-                created_at: now,
-                expires_at,
-                revoked_at: None,
-            })
+            .save(credential.clone())
             .await
             .map_err(ApiTokenError::Repository)?;
         Ok(ApiToken {
-            id,
             plaintext,
-            expires_at,
+            credential,
         })
     }
 
@@ -155,10 +163,14 @@ impl ApiTokenService {
         let record = self
             .verify(current, required_scope, account_id, system_id)
             .await?;
-        self.repository
-            .revoke(record.id, self.now()?)
+        let revoked = self
+            .repository
+            .revoke(record.account_id, record.id, self.now()?)
             .await
             .map_err(ApiTokenError::Repository)?;
+        if !revoked {
+            return Err(ApiTokenError::NotFound);
+        }
         self.issue(
             record.account_id,
             record.owner_user_id,
@@ -170,15 +182,36 @@ impl ApiTokenService {
         .await
     }
 
-    /// Revokes a token by its non-secret identifier.
+    /// Lists safe token metadata for an account.
     ///
     /// # Errors
-    /// Returns an error when time or persistence is unavailable.
-    pub async fn revoke(&self, id: ApiCredentialId) -> Result<(), ApiTokenError> {
+    /// Returns an error when persistence is unavailable.
+    pub async fn list(&self, account_id: AccountId) -> Result<Vec<ApiTokenRecord>, ApiTokenError> {
         self.repository
-            .revoke(id, self.now()?)
+            .list_for_account(account_id)
             .await
             .map_err(ApiTokenError::Repository)
+    }
+
+    /// Revokes a token owned by the specified account.
+    ///
+    /// # Errors
+    /// Returns not found for an unknown or foreign token and a persistence error on failure.
+    pub async fn revoke(
+        &self,
+        account_id: AccountId,
+        id: ApiCredentialId,
+    ) -> Result<(), ApiTokenError> {
+        let revoked = self
+            .repository
+            .revoke(account_id, id, self.now()?)
+            .await
+            .map_err(ApiTokenError::Repository)?;
+        if revoked {
+            Ok(())
+        } else {
+            Err(ApiTokenError::NotFound)
+        }
     }
     fn now(&self) -> Result<i64, ApiTokenError> {
         i64::try_from(self.clock.now().epoch_millis()).map_err(|_| ApiTokenError::Time)
@@ -203,6 +236,8 @@ pub enum ApiTokenError {
     InvalidRequest,
     #[error("API token is invalid, expired, revoked, or insufficiently scoped")]
     InvalidToken,
+    #[error("API token was not found")]
+    NotFound,
     #[error("clock value is invalid")]
     Time,
     #[error("API token persistence is unavailable")]

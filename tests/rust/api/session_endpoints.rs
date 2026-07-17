@@ -46,6 +46,13 @@ async fn local_login_issues_host_cookie_and_session_bootstrap() -> Result<(), Bo
             .and_then(|value| value.to_str().ok())
             .is_some_and(|value| value.starts_with("__Host-pvlog_session=session-token;"))
     );
+    assert!(
+        response
+            .headers()
+            .get("set-cookie")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.contains("Max-Age=604800"))
+    );
     assert_eq!(
         response
             .headers()
@@ -130,6 +137,7 @@ impl BrowserSessionUseCases for Sessions {
                 secure: true,
                 same_site: "Lax",
                 path: "/",
+                max_age_seconds: 604_800,
             },
             csrf_token: SecretString::from("csrf-token"),
             idle_expires_at: 0,

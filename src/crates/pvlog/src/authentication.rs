@@ -5,16 +5,19 @@ use std::{collections::BTreeSet, sync::Arc};
 use async_trait::async_trait;
 use pvlog_api::{RequestAuthenticationError, RequestAuthenticator, RequestPrincipal};
 use pvlog_application::{
-    AssignRole, AuthorizationBoundary, AuthorizationBoundaryError, AuthorizationBoundaryPorts,
-    AuthorizedAccountRoute, Clock, CreateCustomRole, ExternalIdentityLinkingUseCases,
-    ProtectedAccountRequest, ProtectedSystemRequest, RbacManagementError, RbacRepository,
-    RoleManagementService, UpdateCustomRole,
+    ApiTokenRecord, ApiTokenRepository, AssignRole, AuthorizationBoundary,
+    AuthorizationBoundaryError, AuthorizationBoundaryPorts, AuthorizedAccountRoute, Clock,
+    CreateCustomRole, ExternalIdentityLinkingUseCases, PortError, ProtectedAccountRequest,
+    ProtectedSystemRequest, RbacManagementError, RbacRepository, RoleManagementService,
+    UpdateCustomRole, built_in_account_roles,
 };
 use pvlog_domain::{
-    ApiScope, AuditEventId, Permission, PrincipalId, RequestId, RoleKind, SystemId, UserId,
+    AccountId, ApiScope, AuditEventId, BuiltInRole, MembershipId, Permission, PrincipalId,
+    RequestId, RoleAssignment, RoleAssignmentId, RoleKind, RoleScope, SystemId, UserId,
 };
 use pvlog_storage::{
-    AuditRecord, DatabaseTarget, ManagementRepository, RoutingRecord, probe_database,
+    AccountRecord, ApiCredentialRecord, AuditRecord, DatabaseTarget, ManagementRepository,
+    MembershipRecord, RoutingRecord, UserRecord, probe_database,
 };
 use secrecy::{ExposeSecret as _, SecretString};
 
@@ -23,6 +26,140 @@ pub struct ManagementRequestAuthenticator {
     repository: Arc<dyn ManagementRepository>,
     clock: Arc<dyn Clock>,
     digest_key: [u8; 32],
+}
+
+/// Bridges the application API-token lifecycle to management-plane persistence.
+pub struct ManagementApiTokenRepository {
+    repository: Arc<dyn ManagementRepository>,
+}
+
+impl ManagementApiTokenRepository {
+    #[must_use]
+    pub fn new(repository: Arc<dyn ManagementRepository>) -> Self {
+        Self { repository }
+    }
+}
+
+#[async_trait]
+impl ApiTokenRepository for ManagementApiTokenRepository {
+    async fn save(&self, record: ApiTokenRecord) -> Result<(), PortError> {
+        self.repository
+            .save_api_credential(&storage_api_credential(record))
+            .await
+            .map_err(management_port_error)
+    }
+
+    async fn active_by_digest(
+        &self,
+        digest: &[u8; 32],
+        now: i64,
+    ) -> Result<Option<ApiTokenRecord>, PortError> {
+        self.repository
+            .active_api_credential_by_digest(digest, now)
+            .await
+            .map_err(management_port_error)?
+            .map(application_api_token)
+            .transpose()
+    }
+
+    async fn list_for_account(
+        &self,
+        account_id: AccountId,
+    ) -> Result<Vec<ApiTokenRecord>, PortError> {
+        self.repository
+            .api_credentials_for_account(account_id)
+            .await
+            .map_err(management_port_error)?
+            .into_iter()
+            .map(application_api_token)
+            .collect()
+    }
+
+    async fn revoke(
+        &self,
+        account_id: AccountId,
+        id: pvlog_domain::ApiCredentialId,
+        now: i64,
+    ) -> Result<bool, PortError> {
+        self.repository
+            .revoke_api_credential(account_id, id, now)
+            .await
+            .map_err(management_port_error)
+    }
+}
+
+fn storage_api_credential(record: ApiTokenRecord) -> ApiCredentialRecord {
+    ApiCredentialRecord {
+        id: record.id,
+        account_id: record.account_id,
+        owner_user_id: record.owner_user_id,
+        system_id: record.system_id,
+        name: record.name,
+        credential_digest: record.digest,
+        scopes: record
+            .scopes
+            .into_iter()
+            .map(scope_storage_name)
+            .map(str::to_owned)
+            .collect(),
+        created_at: record.created_at,
+        expires_at: record.expires_at,
+        revoked_at: record.revoked_at,
+    }
+}
+
+fn application_api_token(record: ApiCredentialRecord) -> Result<ApiTokenRecord, PortError> {
+    Ok(ApiTokenRecord {
+        id: record.id,
+        account_id: record.account_id,
+        owner_user_id: record.owner_user_id,
+        system_id: record.system_id,
+        name: record.name,
+        digest: record.credential_digest,
+        scopes: record
+            .scopes
+            .into_iter()
+            .map(|scope| parse_stored_scope(&scope))
+            .collect::<Result<_, _>>()?,
+        created_at: record.created_at,
+        expires_at: record.expires_at,
+        revoked_at: record.revoked_at,
+    })
+}
+
+fn scope_storage_name(scope: ApiScope) -> &'static str {
+    match scope {
+        ApiScope::SystemsRead => "systems_read",
+        ApiScope::SystemsWrite => "systems_write",
+        ApiScope::TelemetryRead => "telemetry_read",
+        ApiScope::TelemetryWrite => "telemetry_write",
+        ApiScope::IntegrationsManage => "integrations_manage",
+    }
+}
+
+fn parse_stored_scope(scope: &str) -> Result<ApiScope, PortError> {
+    match scope {
+        "systems_read" => Ok(ApiScope::SystemsRead),
+        "systems_write" => Ok(ApiScope::SystemsWrite),
+        "telemetry_read" => Ok(ApiScope::TelemetryRead),
+        "telemetry_write" => Ok(ApiScope::TelemetryWrite),
+        "integrations_manage" => Ok(ApiScope::IntegrationsManage),
+        _ => Err(PortError::Rejected("unknown API scope".to_owned())),
+    }
+}
+
+fn management_port_error(error: pvlog_storage::ManagementRepositoryError) -> PortError {
+    match error {
+        pvlog_storage::ManagementRepositoryError::Sqlx(sqlx::Error::Database(error))
+            if error.is_unique_violation() =>
+        {
+            PortError::Conflict
+        }
+        pvlog_storage::ManagementRepositoryError::InvalidRecord(kind) => {
+            PortError::Rejected(kind.to_owned())
+        }
+        _ => PortError::Unavailable,
+    }
 }
 
 /// Derives the keyed digest material shared by browser-session issuance and verification.
@@ -75,6 +212,33 @@ impl ManagementRequestAuthorizer {
 
 #[async_trait]
 impl pvlog_api::ModernRequestAuthorizer for ManagementRequestAuthorizer {
+    async fn authorize_system_account_user(
+        &self,
+        user_id: UserId,
+        system_id: SystemId,
+    ) -> Result<pvlog_api::AuthorizedRequest, pvlog_api::RequestAuthorizationError> {
+        let account_id = self
+            .repository
+            .system_registry(system_id)
+            .await
+            .map_err(|_| pvlog_api::RequestAuthorizationError::Unavailable)?
+            .map(|record| record.account_id)
+            .ok_or(pvlog_api::RequestAuthorizationError::NotFound)?;
+        if self
+            .repository
+            .active_membership(account_id, user_id)
+            .await
+            .map_err(|_| pvlog_api::RequestAuthorizationError::Unavailable)?
+            .is_none()
+        {
+            return Err(pvlog_api::RequestAuthorizationError::Forbidden);
+        }
+        Ok(pvlog_api::AuthorizedRequest {
+            actor_user_id: user_id,
+            account_id,
+        })
+    }
+
     async fn authorize_instance(
         &self,
         principal: PrincipalId,
@@ -192,16 +356,49 @@ impl AuthorizationBoundaryPorts for ManagementAuthorizationPorts {
     ) -> Result<bool, pvlog_application::PortError> {
         let now = i64::try_from(self.clock.now().epoch_millis())
             .map_err(|_| pvlog_application::PortError::Unavailable)?;
-        self.repository
-            .principal_is_authorized(
-                request.principal,
-                request.account_id,
-                request.system_id,
-                request.permission,
-                now,
-            )
-            .await
-            .map_err(|_| pvlog_application::PortError::Unavailable)
+        match request.principal {
+            PrincipalId::User(user_id) => self
+                .repository
+                .user_is_authorized(
+                    user_id,
+                    request.account_id,
+                    request.system_id,
+                    request.permission,
+                    now,
+                )
+                .await
+                .map_err(|_| pvlog_application::PortError::Unavailable),
+            PrincipalId::ApiCredential(id) => {
+                let Some(credential) = self
+                    .repository
+                    .api_credential(request.account_id, id)
+                    .await
+                    .map_err(|_| pvlog_application::PortError::Unavailable)?
+                else {
+                    return Ok(false);
+                };
+                let scope_allowed = permission_api_scope(request.permission)
+                    .is_some_and(|scope| credential.scopes.contains(scope));
+                let system_allowed = credential
+                    .system_id
+                    .is_none_or(|system_id| Some(system_id) == request.system_id);
+                let active = credential.revoked_at.is_none()
+                    && credential.expires_at.is_none_or(|expiry| expiry > now);
+                if !scope_allowed || !system_allowed || !active {
+                    return Ok(false);
+                }
+                self.repository
+                    .user_is_authorized(
+                        credential.owner_user_id,
+                        request.account_id,
+                        request.system_id,
+                        request.permission,
+                        now,
+                    )
+                    .await
+                    .map_err(|_| pvlog_application::PortError::Unavailable)
+            }
+        }
     }
 
     async fn account_route(
@@ -265,6 +462,17 @@ impl AuthorizationBoundaryPorts for ManagementAuthorizationPorts {
     }
 }
 
+fn permission_api_scope(permission: Permission) -> Option<&'static str> {
+    match permission {
+        Permission::SystemRead => Some("systems_read"),
+        Permission::SystemManage => Some("systems_write"),
+        Permission::TelemetryRead => Some("telemetry_read"),
+        Permission::TelemetryWrite => Some("telemetry_write"),
+        Permission::IntegrationManage => Some("integrations_manage"),
+        _ => None,
+    }
+}
+
 fn authorized_route(record: RoutingRecord) -> Option<AuthorizedAccountRoute> {
     let ready = matches!(record.state.as_str(), "active" | "ready");
     ready.then(|| AuthorizedAccountRoute {
@@ -314,6 +522,10 @@ impl ManagementRequestAuthenticator {
 /// Management-backed session bootstrap used by the browser application shell.
 pub struct ManagementSessionBootstrap {
     repository: Arc<dyn ManagementRepository>,
+    rbac_repository: Arc<dyn RbacRepository>,
+    role_management: RoleManagementService,
+    clock: Arc<dyn Clock>,
+    target: DatabaseTarget,
 }
 
 /// Read-only management adapter for account audit HTTP resources.
@@ -325,6 +537,7 @@ pub struct ManagementAuditApi {
 pub struct ManagementRbacApi {
     repository: Arc<dyn RbacRepository>,
     service: RoleManagementService,
+    clock: Arc<dyn Clock>,
 }
 
 /// Browser-session view over provider-neutral external identity links.
@@ -428,14 +641,25 @@ impl ManagementRbacApi {
     #[must_use]
     pub fn new(repository: Arc<dyn RbacRepository>, clock: Arc<dyn Clock>) -> Self {
         Self {
-            service: RoleManagementService::new(repository.clone(), clock),
+            service: RoleManagementService::new(repository.clone(), clock.clone()),
             repository,
+            clock,
         }
     }
 }
 
 #[async_trait]
 impl pvlog_api::RbacApiUseCases for ManagementRbacApi {
+    async fn instance_roles(
+        &self,
+    ) -> Result<Vec<pvlog_api::RoleResponse>, pvlog_api::RbacApiError> {
+        self.repository
+            .roles(None)
+            .await
+            .map(|records| records.into_iter().map(role_response).collect())
+            .map_err(|_| pvlog_api::RbacApiError::Unavailable)
+    }
+
     async fn roles(
         &self,
         account_id: pvlog_domain::AccountId,
@@ -561,6 +785,67 @@ impl pvlog_api::RbacApiUseCases for ManagementRbacApi {
         assignment_response(&assignment)
     }
 
+    async fn assignments(
+        &self,
+        account_id: pvlog_domain::AccountId,
+        principal: PrincipalId,
+    ) -> Result<Vec<pvlog_api::RoleAssignmentResponse>, pvlog_api::RbacApiError> {
+        let now = i64::try_from(self.clock.now().epoch_millis())
+            .map_err(|_| pvlog_api::RbacApiError::Unavailable)?;
+        self.repository
+            .active_assignments(principal, now)
+            .await
+            .map_err(|_| pvlog_api::RbacApiError::Unavailable)?
+            .iter()
+            .filter(|assignment| match assignment.scope {
+                pvlog_domain::RoleScope::Account(id)
+                | pvlog_domain::RoleScope::System { account_id: id, .. } => id == account_id,
+                pvlog_domain::RoleScope::Instance => false,
+            })
+            .map(assignment_response)
+            .collect()
+    }
+
+    async fn instance_assignments(
+        &self,
+        principal: PrincipalId,
+    ) -> Result<Vec<pvlog_api::RoleAssignmentResponse>, pvlog_api::RbacApiError> {
+        let now = i64::try_from(self.clock.now().epoch_millis())
+            .map_err(|_| pvlog_api::RbacApiError::Unavailable)?;
+        self.repository
+            .active_assignments(principal, now)
+            .await
+            .map_err(|_| pvlog_api::RbacApiError::Unavailable)?
+            .iter()
+            .filter(|assignment| assignment.scope == pvlog_domain::RoleScope::Instance)
+            .map(instance_assignment_response)
+            .collect()
+    }
+
+    async fn assign_instance_role(
+        &self,
+        actor: UserId,
+        input: pvlog_api::RoleAssignmentInput,
+    ) -> Result<pvlog_api::RoleAssignmentResponse, pvlog_api::RbacApiError> {
+        if input.system_id.is_some() {
+            return Err(pvlog_api::RbacApiError::Invalid);
+        }
+        let assignment = self
+            .service
+            .assign_role(
+                actor,
+                AssignRole {
+                    principal: input.principal()?,
+                    role_id: input.role_id,
+                    scope: pvlog_domain::RoleScope::Instance,
+                    expires_at: input.expires_at,
+                },
+            )
+            .await
+            .map_err(|error| map_rbac_error(&error))?;
+        instance_assignment_response(&assignment)
+    }
+
     async fn revoke_assignment(
         &self,
         actor: UserId,
@@ -640,8 +925,33 @@ fn assignment_response(
         role_id: assignment.role_id,
         principal_type,
         principal_id,
-        account_id,
+        account_id: Some(account_id),
         system_id,
+        expires_at: assignment
+            .expires_at
+            .map(|timestamp| i64::try_from(timestamp.epoch_millis()))
+            .transpose()
+            .map_err(|_| pvlog_api::RbacApiError::Invalid)?,
+    })
+}
+
+fn instance_assignment_response(
+    assignment: &pvlog_domain::RoleAssignment,
+) -> Result<pvlog_api::RoleAssignmentResponse, pvlog_api::RbacApiError> {
+    let (principal_type, principal_id) = match assignment.principal {
+        PrincipalId::User(id) => ("user".to_owned(), id.as_uuid()),
+        PrincipalId::ApiCredential(id) => ("api_credential".to_owned(), id.as_uuid()),
+    };
+    if assignment.scope != pvlog_domain::RoleScope::Instance {
+        return Err(pvlog_api::RbacApiError::Invalid);
+    }
+    Ok(pvlog_api::RoleAssignmentResponse {
+        id: assignment.id,
+        role_id: assignment.role_id,
+        principal_type,
+        principal_id,
+        account_id: None,
+        system_id: None,
         expires_at: assignment
             .expires_at
             .map(|timestamp| i64::try_from(timestamp.epoch_millis()))
@@ -689,9 +999,151 @@ impl pvlog_api::AuditApiUseCases for ManagementAuditApi {
 
 impl ManagementSessionBootstrap {
     #[must_use]
-    pub fn new(repository: Arc<dyn ManagementRepository>) -> Self {
-        Self { repository }
+    pub fn new(
+        repository: Arc<dyn ManagementRepository>,
+        rbac_repository: Arc<dyn RbacRepository>,
+        clock: Arc<dyn Clock>,
+        target: DatabaseTarget,
+    ) -> Self {
+        Self {
+            repository,
+            rbac_repository: rbac_repository.clone(),
+            role_management: RoleManagementService::new(rbac_repository, clock.clone()),
+            clock,
+            target,
+        }
     }
+}
+
+async fn provision_personal_account(
+    repository: Arc<dyn ManagementRepository>,
+    rbac_repository: Arc<dyn RbacRepository>,
+    clock: Arc<dyn Clock>,
+    target: DatabaseTarget,
+    user: UserRecord,
+) -> Result<AccountRecord, pvlog_api::SessionApiError> {
+    let account_id = AccountId::from_uuid(user.id.as_uuid())
+        .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?;
+    let granted_at = clock.now();
+    let now = i64::try_from(granted_at.epoch_millis())
+        .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?;
+    let status = match &target {
+        DatabaseTarget::Sqlite { .. } => "provisioning",
+        DatabaseTarget::Postgres { .. } => "active",
+    };
+    let account = AccountRecord {
+        id: account_id,
+        slug: format!("user-{account_id}"),
+        display_name: user.display_name.clone(),
+        status: status.to_owned(),
+        created_by: Some(user.id),
+        created_at: user.created_at,
+        updated_at: now,
+    };
+    repository
+        .save_account(&account)
+        .await
+        .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?;
+    repository
+        .save_membership(&MembershipRecord {
+            id: MembershipId::new(),
+            account_id,
+            user_id: user.id,
+            status: "active".to_owned(),
+            joined_at: Some(now),
+            created_at: now,
+            updated_at: now,
+        })
+        .await
+        .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?;
+    if let DatabaseTarget::Sqlite {
+        management_path,
+        accounts_dir,
+    } = &target
+    {
+        #[cfg(feature = "sqlite")]
+        {
+            let provisioner = pvlog_storage::SqliteAccountProvisioner::new(
+                management_path.clone(),
+                accounts_dir.clone(),
+            );
+            tokio::task::spawn_blocking(move || {
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .map_err(|_| ())?
+                    .block_on(provisioner.provision(account_id))
+                    .map_err(|_| ())
+            })
+            .await
+            .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?
+            .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?;
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (management_path, accounts_dir);
+            return Err(pvlog_api::SessionApiError::Bootstrap);
+        }
+    }
+    ensure_personal_owner(rbac_repository, user.id, account_id, granted_at, now).await?;
+    repository
+        .account(account_id)
+        .await
+        .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?
+        .ok_or(pvlog_api::SessionApiError::Bootstrap)
+}
+
+async fn ensure_personal_owner(
+    rbac_repository: Arc<dyn RbacRepository>,
+    user_id: UserId,
+    account_id: AccountId,
+    granted_at: pvlog_domain::UtcTimestamp,
+    now: i64,
+) -> Result<(), pvlog_api::SessionApiError> {
+    let mut roles = rbac_repository
+        .roles(Some(account_id))
+        .await
+        .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?;
+    for role in built_in_account_roles(account_id, user_id, now) {
+        if !roles
+            .iter()
+            .any(|existing| existing.role.kind == role.role.kind)
+        {
+            rbac_repository
+                .save_role(&role)
+                .await
+                .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?;
+            roles.push(role);
+        }
+    }
+    let owner_role = roles
+        .into_iter()
+        .find(|role| role.role.kind == RoleKind::BuiltIn(BuiltInRole::AccountOwner))
+        .ok_or(pvlog_api::SessionApiError::Bootstrap)?;
+    if rbac_repository
+        .active_assignments(PrincipalId::User(user_id), now)
+        .await
+        .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?
+        .iter()
+        .any(|assignment| {
+            assignment.role_id == owner_role.role.id
+                && assignment.scope == RoleScope::Account(account_id)
+        })
+    {
+        return Ok(());
+    }
+    rbac_repository
+        .save_assignment(&RoleAssignment {
+            id: RoleAssignmentId::new(),
+            principal: PrincipalId::User(user_id),
+            role_id: owner_role.role.id,
+            scope: RoleScope::Account(account_id),
+            granted_by: user_id,
+            granted_at,
+            expires_at: None,
+        })
+        .await
+        .map_err(|_| pvlog_api::SessionApiError::Bootstrap)
 }
 
 #[async_trait]
@@ -706,13 +1158,43 @@ impl pvlog_api::SessionBootstrapUseCases for ManagementSessionBootstrap {
             .await
             .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?
             .ok_or(pvlog_api::SessionApiError::Bootstrap)?;
-        let account = self
+        let mut account = self
             .repository
             .active_accounts_for_user(user_id)
             .await
             .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?
             .into_iter()
             .next();
+        if account.is_none() {
+            account = Some(
+                provision_personal_account(
+                    self.repository.clone(),
+                    self.rbac_repository.clone(),
+                    self.clock.clone(),
+                    self.target.clone(),
+                    user.clone(),
+                )
+                .await?,
+            );
+        }
+        let personal_account_id = AccountId::from_uuid(user_id.as_uuid())
+            .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?;
+        if account
+            .as_ref()
+            .is_some_and(|account| account.id == personal_account_id)
+        {
+            let granted_at = self.clock.now();
+            let now = i64::try_from(granted_at.epoch_millis())
+                .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?;
+            ensure_personal_owner(
+                self.rbac_repository.clone(),
+                user_id,
+                personal_account_id,
+                granted_at,
+                now,
+            )
+            .await?;
+        }
         let system_ids = match account.as_ref() {
             Some(account) => self
                 .repository
@@ -721,6 +1203,18 @@ impl pvlog_api::SessionBootstrapUseCases for ManagementSessionBootstrap {
                 .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?,
             None => Vec::new(),
         };
+        let permission_scope = account.as_ref().map_or(RoleScope::Instance, |account| {
+            RoleScope::Account(account.id)
+        });
+        let permissions = self
+            .role_management
+            .effective_permissions(PrincipalId::User(user_id), permission_scope)
+            .await
+            .map_err(|_| pvlog_api::SessionApiError::Bootstrap)?
+            .into_iter()
+            .map(permission_name)
+            .map(str::to_owned)
+            .collect();
         Ok(pvlog_api::SessionBootstrap {
             authenticated: true,
             user: Some(pvlog_api::SessionUser {
@@ -729,9 +1223,27 @@ impl pvlog_api::SessionBootstrapUseCases for ManagementSessionBootstrap {
             }),
             account_id: account.map(|account| account.id),
             system_ids,
-            permissions: Vec::new(),
+            permissions,
             connectors: Vec::new(),
         })
+    }
+}
+
+const fn permission_name(permission: Permission) -> &'static str {
+    match permission {
+        Permission::InstanceRead => "instance_read",
+        Permission::InstanceManage => "instance_manage",
+        Permission::AccountRead => "account_read",
+        Permission::AccountManage => "account_manage",
+        Permission::MembershipManage => "membership_manage",
+        Permission::RoleManage => "role_manage",
+        Permission::SystemRead => "system_read",
+        Permission::SystemManage => "system_manage",
+        Permission::TelemetryRead => "telemetry_read",
+        Permission::TelemetryWrite => "telemetry_write",
+        Permission::CredentialManage => "credential_manage",
+        Permission::IntegrationManage => "integration_manage",
+        Permission::AuditRead => "audit_read",
     }
 }
 

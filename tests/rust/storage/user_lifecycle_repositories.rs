@@ -172,6 +172,18 @@ where
         .await?;
     assert_eq!(managed.email, format!("managed-{suffix}@example.test"));
     assert_eq!(managed.display_name, "Managed user");
+    assert_eq!(service.own_profile(managed.id).await?, managed);
+    let updated_profile = service
+        .update_own_profile(managed.id, " Updated profile ".to_owned())
+        .await?;
+    assert_eq!(updated_profile.display_name, "Updated profile");
+    assert_eq!(updated_profile.email, managed.email);
+    assert!(matches!(
+        service
+            .update_own_profile(managed.id, "   ".to_owned())
+            .await,
+        Err(UserLifecycleError::InvalidInput("display_name"))
+    ));
     assert!(matches!(
         service
             .create_user(

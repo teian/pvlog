@@ -155,6 +155,11 @@ pub trait AccountConfigurationRepository: Send + Sync {
         &self,
         record: &InverterRecord,
     ) -> Result<(), AccountRepositoryError>;
+    async fn delete_inverter_aggregate(
+        &self,
+        system_id: SystemId,
+        inverter_id: InverterId,
+    ) -> Result<bool, AccountRepositoryError>;
     async fn effective_inverters(
         &self,
         system_id: SystemId,
@@ -311,6 +316,19 @@ impl AccountConfigurationRepository for SqliteAccountConfigurationRepository {
         }
         Ok(records)
     }
+    async fn delete_inverter_aggregate(
+        &self,
+        system_id: SystemId,
+        inverter_id: InverterId,
+    ) -> Result<bool, AccountRepositoryError> {
+        let mut writer = self.account.acquire_writer().await?;
+        let result = sqlx::query("DELETE FROM inverters WHERE id=? AND system_id=?")
+            .bind(blob(inverter_id.as_uuid()))
+            .bind(blob(system_id.as_uuid()))
+            .execute(writer.connection())
+            .await?;
+        Ok(result.rows_affected() == 1)
+    }
     async fn save_equipment(&self, r: &EquipmentRecord) -> Result<(), AccountRepositoryError> {
         validate_range(r.effective_from, r.effective_to)?;
         let mut writer = self.account.acquire_writer().await?;
@@ -453,6 +471,23 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
         }
         connection.close().await?;
         Ok(records)
+    }
+    async fn delete_inverter_aggregate(
+        &self,
+        system_id: SystemId,
+        inverter_id: InverterId,
+    ) -> Result<bool, AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        let result = sqlx::query(
+            "DELETE FROM account_data.inverters WHERE account_id=$1 AND id=$2 AND system_id=$3",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(inverter_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .execute(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(result.rows_affected() == 1)
     }
     async fn save_equipment(&self, r: &EquipmentRecord) -> Result<(), AccountRepositoryError> {
         validate_range(r.effective_from, r.effective_to)?;

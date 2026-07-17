@@ -77,15 +77,14 @@ async fn inverter_routes_authorize_system_and_emit_nested_aggregate() -> Result<
     )
     .layer(Extension(RequestPrincipal::User(user)));
     let response = app
+        .clone()
         .oneshot(
             Request::builder()
                 .method(Method::POST)
-                .uri(format!(
-                    "/api/v1/accounts/{account}/systems/{system}/inverters"
-                ))
+                .uri(format!("/api/v1/systems/{system}/inverters"))
                 .header("content-type", "application/json")
                 .body(Body::from(
-                    r#"{"name":"Roof inverter","ratedPowerWatts":8000,"effectiveFrom":1,"strings":[{"name":"South roof","panelCount":20,"ratedPowerWatts":8000,"orientationDegrees":180,"tiltDegrees":35,"effectiveFrom":1}]}"#,
+                    r#"{"name":"Roof inverter","ratedPowerWatts":8000,"effectiveFrom":1,"strings":[{"name":"South roof","panelCount":20,"modulePeakPowerWatts":400,"orientationDegrees":180,"tiltDegrees":35,"effectiveFrom":1}]}"#,
                 ))?,
         )
         .await?;
@@ -97,6 +96,31 @@ async fn inverter_routes_authorize_system_and_emit_nested_aggregate() -> Result<
             .and_then(|value| value.to_str().ok()),
         Some("\"1\"")
     );
+    let inverter_id = InverterId::new();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(format!(
+                    "/api/v1/systems/{system}/inverters/{inverter_id}"
+                ))
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    r#"{"name":"Updated inverter","ratedPowerWatts":9000,"effectiveFrom":1,"strings":[{"name":"West roof","panelCount":20,"modulePeakPowerWatts":450,"orientationDegrees":270,"tiltDegrees":30,"effectiveFrom":1}]}"#,
+                ))?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::DELETE)
+                .uri(format!("/api/v1/systems/{system}/inverters/{inverter_id}"))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
     Ok(())
 }
 
@@ -176,13 +200,16 @@ impl InverterApiUseCases for InverterStub {
                     panel_count: string.panel_count,
                     panel_manufacturer: string.panel_manufacturer,
                     panel_model: string.panel_model,
-                    rated_power_watts: string.rated_power_watts,
+                    rated_power_watts: i64::from(string.panel_count)
+                        * string.module_peak_power_watts,
                     module_catalog_entry_id: None,
                     module_catalog_revision: None,
                     value_provenance: pvlog_domain::EquipmentValueProvenance::Manual,
                     module_specification_snapshot: string.module_specification_snapshot,
-                    module_peak_power_watts: string.module_peak_power_watts,
-                    total_peak_power_watts: string.total_peak_power_watts,
+                    module_peak_power_watts: Some(string.module_peak_power_watts),
+                    total_peak_power_watts: Some(
+                        i64::from(string.panel_count) * string.module_peak_power_watts,
+                    ),
                     orientation_degrees: string.orientation_degrees,
                     tilt_degrees: string.tilt_degrees,
                     effective_from: string.effective_from,
@@ -190,6 +217,28 @@ impl InverterApiUseCases for InverterStub {
                 })
                 .collect(),
         })
+    }
+
+    async fn update(
+        &self,
+        actor: UserId,
+        account_id: AccountId,
+        system_id: SystemId,
+        _inverter_id: pvlog_domain::InverterId,
+        input: InverterInput,
+    ) -> Result<InverterResponse, InverterApiError> {
+        self.create(actor, account_id, system_id, input).await
+    }
+
+    async fn delete(
+        &self,
+        _actor: UserId,
+        _account_id: AccountId,
+        system_id: SystemId,
+        _inverter_id: InverterId,
+    ) -> Result<(), InverterApiError> {
+        assert_eq!(system_id, self.system);
+        Ok(())
     }
 }
 

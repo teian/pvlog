@@ -75,6 +75,39 @@ async fn administration_requires_an_authorized_actor() -> Result<(), Box<dyn Err
     )
     .await?;
     assert_eq!(created.0, 201);
+    let listed = request_with_method(&with_actor, Method::GET, "/api/v1/admin/users", "").await?;
+    assert_eq!(listed.0, 200);
+    assert!(String::from_utf8(listed.1)?.contains("admin@example.test"));
+    Ok(())
+}
+
+#[tokio::test]
+async fn current_user_can_read_and_update_only_their_safe_profile() -> Result<(), Box<dyn Error>> {
+    let actor = UserId::new();
+    let app = user_lifecycle_router(Arc::new(StubLifecycle), Arc::new(DenyAuthorizer))
+        .layer(Extension(RequestPrincipal::User(actor)));
+
+    let profile = request_with_method(&app, Method::GET, "/api/v1/account/profile", "").await?;
+    assert_eq!(profile.0, 200);
+    let profile = String::from_utf8(profile.1)?;
+    assert!(profile.contains(&actor.to_string()));
+    assert!(profile.contains("user@example.test"));
+    assert!(!profile.contains("status"));
+
+    let updated = request_with_method(
+        &app,
+        Method::PUT,
+        "/api/v1/account/profile",
+        r#"{"displayName":"Updated User"}"#,
+    )
+    .await?;
+    assert_eq!(updated.0, 200);
+    assert!(String::from_utf8(updated.1)?.contains("Updated User"));
+
+    let unauthenticated = user_lifecycle_router(Arc::new(StubLifecycle), Arc::new(DenyAuthorizer));
+    let denied =
+        request_with_method(&unauthenticated, Method::GET, "/api/v1/account/profile", "").await?;
+    assert_eq!(denied.0, 403);
     Ok(())
 }
 
@@ -281,6 +314,31 @@ struct StubLifecycle;
 
 #[async_trait]
 impl UserLifecycleUseCases for StubLifecycle {
+    async fn own_profile(&self, id: UserId) -> Result<LifecycleUserRecord, UserLifecycleError> {
+        Ok(user_with_id(id))
+    }
+
+    async fn update_own_profile(
+        &self,
+        id: UserId,
+        display_name: String,
+    ) -> Result<LifecycleUserRecord, UserLifecycleError> {
+        let mut record = user_with_id(id);
+        record.display_name = display_name;
+        Ok(record)
+    }
+
+    async fn users(
+        &self,
+        _actor: AdminUserActor,
+        _limit: u32,
+    ) -> Result<Vec<LifecycleUserRecord>, UserLifecycleError> {
+        Ok(vec![user(
+            "admin@example.test".to_owned(),
+            "Administrator".to_owned(),
+        )])
+    }
+
     async fn create_user(
         &self,
         _actor: AdminUserActor,

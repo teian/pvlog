@@ -10,8 +10,8 @@ use pvlog_application::{
     ModernTelemetryUseCases, NormalizeObservation, PowerUnit,
 };
 use pvlog_domain::{
-    BatteryFlowState, MeasurementValues, ObservationId, ObservationSource, ObservationSourceKind,
-    QualityFlags, SystemId, UserId, UtcTimestamp, Watts,
+    ApiScope, BatteryFlowState, MeasurementValues, ObservationId, ObservationSource,
+    ObservationSourceKind, Permission, QualityFlags, SystemId, UserId, UtcTimestamp, Watts,
 };
 use serde::Deserialize;
 use std::{
@@ -22,8 +22,12 @@ use std::{
 #[derive(Clone)]
 struct TelemetryState {
     service: Arc<dyn ModernTelemetryUseCases>,
+    authorizer: Arc<dyn crate::ModernRequestAuthorizer>,
 }
-pub fn telemetry_router(service: Arc<dyn ModernTelemetryUseCases>) -> Router {
+pub fn telemetry_router(
+    service: Arc<dyn ModernTelemetryUseCases>,
+    authorizer: Arc<dyn crate::ModernRequestAuthorizer>,
+) -> Router {
     Router::new()
         .route("/api/v1/systems/{system_id}/observations", post(single))
         .route(
@@ -34,7 +38,10 @@ pub fn telemetry_router(service: Arc<dyn ModernTelemetryUseCases>) -> Router {
             "/api/v1/systems/{system_id}/observations/{observation_id}",
             patch(correct).delete(remove),
         )
-        .with_state(TelemetryState { service })
+        .with_state(TelemetryState {
+            service,
+            authorizer,
+        })
 }
 
 #[derive(Clone, Deserialize)]
@@ -78,27 +85,36 @@ struct CorrectionBody {
 
 async fn single(
     State(state): State<TelemetryState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<crate::RequestPrincipal>>,
     Path(system_id): Path<SystemId>,
     headers: HeaderMap,
     Json(body): Json<ObservationBody>,
 ) -> Result<Response, TelemetryApiError> {
-    let _actor = actor_id(actor)?;
-    let command = command(system_id, idempotency_key(&headers)?, body)?;
+    let (_, identity) =
+        authorize_telemetry_write(&state, principal, system_id, "telemetry.ingest").await?;
+    let command = command(system_id, identity, idempotency_key(&headers)?, body)?;
     let observation = state.service.ingest(command).await?;
     Ok((StatusCode::CREATED, Json(observation)).into_response())
 }
 async fn batch(
     State(state): State<TelemetryState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<crate::RequestPrincipal>>,
     Path(system_id): Path<SystemId>,
     Json(body): Json<BatchBody>,
 ) -> Result<Response, TelemetryApiError> {
-    let _actor = actor_id(actor)?;
+    let (_, identity) =
+        authorize_telemetry_write(&state, principal, system_id, "telemetry.ingest_batch").await?;
     let commands = body
         .items
         .into_iter()
-        .map(|item| command(system_id, item.idempotency_key, item.observation))
+        .map(|item| {
+            command(
+                system_id,
+                identity.clone(),
+                item.idempotency_key,
+                item.observation,
+            )
+        })
         .collect::<Result<Vec<_>, _>>()?;
     let mode = match body.mode {
         BatchModeBody::Atomic => BatchIngestionMode::Atomic,
@@ -112,7 +128,7 @@ async fn batch(
 }
 async fn correct(
     State(state): State<TelemetryState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<crate::RequestPrincipal>>,
     Path((system_id, observation_id)): Path<(SystemId, ObservationId)>,
     Json(body): Json<CorrectionBody>,
 ) -> Result<Response, TelemetryApiError> {
@@ -120,12 +136,14 @@ async fn correct(
         generation_power: body.generation_power_watts.map(Watts::new),
         ..MeasurementValues::default()
     });
+    let (actor, _) =
+        authorize_telemetry_write(&state, principal, system_id, "telemetry.correct").await?;
     let visible = state
         .service
         .correct(CorrectObservation {
             observation_id,
             system_id,
-            actor: actor_id(actor)?,
+            actor,
             expected_version: body.expected_version,
             replacement,
             reason: body.reason,
@@ -135,7 +153,7 @@ async fn correct(
 }
 async fn remove(
     State(state): State<TelemetryState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<crate::RequestPrincipal>>,
     Path((system_id, observation_id)): Path<(SystemId, ObservationId)>,
     headers: HeaderMap,
 ) -> Result<StatusCode, TelemetryApiError> {
@@ -149,12 +167,14 @@ async fn remove(
         .and_then(|value| value.to_str().ok())
         .map(ToOwned::to_owned)
         .ok_or(TelemetryApiError::Invalid)?;
+    let (actor, _) =
+        authorize_telemetry_write(&state, principal, system_id, "telemetry.delete").await?;
     state
         .service
         .delete(CorrectObservation {
             observation_id,
             system_id,
-            actor: actor_id(actor)?,
+            actor,
             expected_version: version,
             replacement: None,
             reason,
@@ -163,10 +183,36 @@ async fn remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn actor_id(actor: Option<Extension<UserId>>) -> Result<UserId, TelemetryApiError> {
-    actor
-        .map(|Extension(actor)| actor)
-        .ok_or(TelemetryApiError::Forbidden)
+async fn authorize_telemetry_write(
+    state: &TelemetryState,
+    principal: Option<Extension<crate::RequestPrincipal>>,
+    system_id: SystemId,
+    action: &'static str,
+) -> Result<(UserId, String), TelemetryApiError> {
+    let Extension(principal) = principal.ok_or(TelemetryApiError::Forbidden)?;
+    if let crate::RequestPrincipal::ApiCredential {
+        system_id: allowed_system,
+        scopes,
+        ..
+    } = &principal
+    {
+        if !scopes.contains(&ApiScope::TelemetryWrite)
+            || allowed_system.is_some_and(|allowed| allowed != system_id)
+        {
+            return Err(TelemetryApiError::Forbidden);
+        }
+    }
+    let identity = principal.safe_ingestion_identity();
+    let authorized = state
+        .authorizer
+        .authorize_system(
+            crate::principal_identity(&principal)?,
+            system_id,
+            Permission::TelemetryWrite,
+            action,
+        )
+        .await?;
+    Ok((authorized.actor_user_id, identity))
 }
 fn idempotency_key(headers: &HeaderMap) -> Result<String, TelemetryApiError> {
     headers
@@ -178,6 +224,7 @@ fn idempotency_key(headers: &HeaderMap) -> Result<String, TelemetryApiError> {
 }
 fn command(
     system_id: SystemId,
+    idempotency_namespace: String,
     idempotency_key: String,
     body: ObservationBody,
 ) -> Result<NormalizeObservation, TelemetryApiError> {
@@ -217,7 +264,7 @@ fn command(
             kind: ObservationSourceKind::ModernApi,
             source_reference: body.source_reference,
         },
-        idempotency_namespace: "modern_api".to_owned(),
+        idempotency_namespace,
         idempotency_key,
         quality: QualityFlags::NONE,
     })
@@ -225,6 +272,8 @@ fn command(
 
 enum TelemetryApiError {
     Forbidden,
+    NotFound,
+    Unavailable,
     Invalid,
     Domain(ModernTelemetryError),
 }
@@ -233,10 +282,21 @@ impl From<ModernTelemetryError> for TelemetryApiError {
         Self::Domain(value)
     }
 }
+impl From<crate::RequestAuthorizationError> for TelemetryApiError {
+    fn from(value: crate::RequestAuthorizationError) -> Self {
+        match value {
+            crate::RequestAuthorizationError::Forbidden => Self::Forbidden,
+            crate::RequestAuthorizationError::NotFound => Self::NotFound,
+            crate::RequestAuthorizationError::Unavailable => Self::Unavailable,
+        }
+    }
+}
 impl IntoResponse for TelemetryApiError {
     fn into_response(self) -> Response {
         let (status, retry) = match self {
             Self::Forbidden => (StatusCode::FORBIDDEN, None),
+            Self::NotFound => (StatusCode::NOT_FOUND, None),
+            Self::Unavailable => (StatusCode::SERVICE_UNAVAILABLE, None),
             Self::Invalid | Self::Domain(ModernTelemetryError::Invalid) => {
                 (StatusCode::UNPROCESSABLE_ENTITY, None)
             }

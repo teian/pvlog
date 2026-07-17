@@ -232,7 +232,7 @@ impl RoleManagementService {
         let evaluator = RbacEvaluator::new(&roles);
         let assignments = self.repository.active_assignments(principal, now).await?;
         let evaluated_at = timestamp(now)?;
-        Ok(all_permissions()
+        Ok(Permission::ALL
             .into_iter()
             .filter(|permission| {
                 evaluator
@@ -400,24 +400,6 @@ fn timestamp(value: i64) -> Result<pvlog_domain::UtcTimestamp, RbacManagementErr
     pvlog_domain::UtcTimestamp::from_epoch_millis(value)
         .map_err(|_| RbacManagementError::Internal("timestamp_out_of_range"))
 }
-fn all_permissions() -> [Permission; 13] {
-    [
-        Permission::InstanceRead,
-        Permission::InstanceManage,
-        Permission::AccountRead,
-        Permission::AccountManage,
-        Permission::MembershipManage,
-        Permission::RoleManage,
-        Permission::SystemRead,
-        Permission::SystemManage,
-        Permission::TelemetryRead,
-        Permission::TelemetryWrite,
-        Permission::CredentialManage,
-        Permission::IntegrationManage,
-        Permission::AuditRead,
-    ]
-}
-
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum RbacManagementError {
     #[error("RBAC operation is forbidden")]

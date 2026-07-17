@@ -24,7 +24,7 @@ async fn sqlite_management_and_accounts_plan_apply_and_verify_independently()
     assert_eq!(initial.len(), 3);
     assert_eq!(initial[0].kind, MigrationKind::SqliteManagement);
     assert!(initial.iter().all(|status| !status.compatible));
-    assert_eq!(migration_plan(&target).await?.len(), 22);
+    assert_eq!(migration_plan(&target).await?.len(), 24);
     assert!(ensure_schema_compatible(&target).await.is_err());
 
     let applied = apply_migrations(&target).await?;
@@ -93,6 +93,38 @@ async fn sqlite_management_schema_enforces_identity_security_routing_and_project
     }));
 
     connection.close().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_retired_ingestion_key_history_remains_compatible() -> Result<(), Box<dyn Error>> {
+    let directory = TempDir::new()?;
+    let target = sqlite_target(directory.path(), &[])?;
+    apply_migrations(&target).await?;
+
+    let management_path = directory.path().join("management.sqlite3");
+    let mut connection = sqlite_connection(&management_path).await?;
+    let migrations = sqlx::query_as::<_, (i64, String)>(
+        "SELECT version, description FROM _sqlx_migrations WHERE version IN (7, 8) ORDER BY version",
+    )
+    .fetch_all(&mut connection)
+    .await?;
+    assert_eq!(
+        migrations,
+        vec![
+            (7, "system ingestion keys".to_owned()),
+            (8, "remove system ingestion keys".to_owned()),
+        ]
+    );
+    let legacy_table: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='system_ingestion_keys'",
+    )
+    .fetch_one(&mut connection)
+    .await?;
+    assert_eq!(legacy_table, 0);
+    connection.close().await?;
+
+    ensure_schema_compatible(&target).await?;
     Ok(())
 }
 

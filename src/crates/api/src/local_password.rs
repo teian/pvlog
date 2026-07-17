@@ -139,7 +139,7 @@ async fn admin(
     let user_id = state
         .authorizer
         .authorize_instance(
-            principal_identity(&principal),
+            principal_identity(&principal)?,
             Permission::InstanceManage,
             "user.password.initialize",
         )

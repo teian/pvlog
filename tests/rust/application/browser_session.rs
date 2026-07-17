@@ -33,6 +33,7 @@ async fn sessions_enforce_cookie_csrf_rotation_expiry_limit_and_logout()
     assert!(session.session_cookie.http_only && session.session_cookie.secure);
     assert_eq!(session.session_cookie.same_site, "Lax");
     assert_eq!(session.session_cookie.path, "/");
+    assert_eq!(session.session_cookie.max_age_seconds, 3_600);
     assert!(!repository.contains_plaintext(session.session_cookie.value.expose_secret())?);
     assert!(
         service

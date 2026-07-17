@@ -59,7 +59,7 @@ async fn list(
     state
         .authorizer
         .authorize_instance(
-            principal_identity(&principal),
+            principal_identity(&principal)?,
             Permission::InstanceManage,
             "connector.list",
         )

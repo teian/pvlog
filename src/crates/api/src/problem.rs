@@ -81,7 +81,7 @@ pub async fn not_found(request: Request<Body>) -> Response {
     )
 }
 
-fn problem(
+pub(crate) fn problem(
     request: &Request,
     status: StatusCode,
     title: &'static str,

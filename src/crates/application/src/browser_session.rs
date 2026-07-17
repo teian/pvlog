@@ -39,6 +39,7 @@ pub struct SessionCookie {
     pub secure: bool,
     pub same_site: &'static str,
     pub path: &'static str,
+    pub max_age_seconds: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -164,6 +165,7 @@ impl BrowserSessionService {
                 secure: self.policy.secure_cookies,
                 same_site: "Lax",
                 path: "/",
+                max_age_seconds: self.policy.absolute_lifetime_seconds,
             },
             csrf_token,
             idle_expires_at,

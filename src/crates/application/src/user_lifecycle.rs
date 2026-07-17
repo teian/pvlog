@@ -142,11 +142,18 @@ pub enum PublicLifecycleOutcome {
 /// Persistence boundary with atomic lifecycle operations.
 #[async_trait]
 pub trait UserLifecycleRepository: Send + Sync {
+    async fn users(&self, limit: u32) -> Result<Vec<LifecycleUserRecord>, PortError>;
     async fn user(&self, id: UserId) -> Result<Option<LifecycleUserRecord>, PortError>;
     async fn create_user(
         &self,
         record: &LifecycleUserRecord,
     ) -> Result<LifecycleCreateOutcome, PortError>;
+    async fn update_display_name(
+        &self,
+        id: UserId,
+        display_name: &str,
+        now: i64,
+    ) -> Result<bool, PortError>;
     async fn create_invitation(&self, invitation: &InvitationRecord) -> Result<(), PortError>;
     async fn accept_invitation(
         &self,
@@ -170,6 +177,17 @@ pub trait UserLifecycleRepository: Send + Sync {
 /// Object-safe local-user lifecycle use cases consumed by HTTP adapters.
 #[async_trait]
 pub trait UserLifecycleUseCases: Send + Sync {
+    async fn own_profile(&self, id: UserId) -> Result<LifecycleUserRecord, UserLifecycleError>;
+    async fn update_own_profile(
+        &self,
+        id: UserId,
+        display_name: String,
+    ) -> Result<LifecycleUserRecord, UserLifecycleError>;
+    async fn users(
+        &self,
+        actor: AdminUserActor,
+        limit: u32,
+    ) -> Result<Vec<LifecycleUserRecord>, UserLifecycleError>;
     async fn create_user(
         &self,
         actor: AdminUserActor,
@@ -246,6 +264,42 @@ impl UserLifecycleService {
 
 #[async_trait]
 impl UserLifecycleUseCases for UserLifecycleService {
+    async fn own_profile(&self, id: UserId) -> Result<LifecycleUserRecord, UserLifecycleError> {
+        let user = self.changed_user(id).await?;
+        if user.status != UserStatus::Active {
+            return Err(UserLifecycleError::NotFound);
+        }
+        Ok(user)
+    }
+
+    async fn update_own_profile(
+        &self,
+        id: UserId,
+        display_name: String,
+    ) -> Result<LifecycleUserRecord, UserLifecycleError> {
+        let display_name = normalize_display_name(&display_name)?;
+        if !self
+            .repository
+            .update_display_name(id, &display_name, self.now()?)
+            .await?
+        {
+            return Err(UserLifecycleError::NotFound);
+        }
+        self.changed_user(id).await
+    }
+
+    async fn users(
+        &self,
+        actor: AdminUserActor,
+        limit: u32,
+    ) -> Result<Vec<LifecycleUserRecord>, UserLifecycleError> {
+        authorize(actor)?;
+        if !(1..=500).contains(&limit) {
+            return Err(UserLifecycleError::InvalidInput("limit"));
+        }
+        Ok(self.repository.users(limit).await?)
+    }
+
     async fn create_user(
         &self,
         actor: AdminUserActor,

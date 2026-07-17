@@ -217,27 +217,12 @@ fn role_can_apply_at(role: &Role, scope: RoleScope) -> bool {
 #[must_use]
 pub fn built_in_permissions(role: BuiltInRole) -> BTreeSet<Permission> {
     use Permission::{
-        AccountManage, AccountRead, AuditRead, CredentialManage, InstanceManage, InstanceRead,
-        IntegrationManage, MembershipManage, RoleManage, SystemManage, SystemRead, TelemetryRead,
-        TelemetryWrite,
+        AccountManage, AccountRead, AuditRead, CredentialManage, IntegrationManage,
+        MembershipManage, RoleManage, SystemManage, SystemRead, TelemetryRead, TelemetryWrite,
     };
 
     let values: &[Permission] = match role {
-        BuiltInRole::InstanceAdministrator => &[
-            InstanceRead,
-            InstanceManage,
-            AccountRead,
-            AccountManage,
-            MembershipManage,
-            RoleManage,
-            SystemRead,
-            SystemManage,
-            TelemetryRead,
-            TelemetryWrite,
-            CredentialManage,
-            IntegrationManage,
-            AuditRead,
-        ],
+        BuiltInRole::InstanceAdministrator => &Permission::ALL,
         BuiltInRole::AccountOwner | BuiltInRole::AccountAdministrator => &[
             AccountRead,
             AccountManage,

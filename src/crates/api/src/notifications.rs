@@ -2,17 +2,19 @@
 
 use async_trait::async_trait;
 use axum::{
-    Json, Router,
+    Extension, Json, Router,
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use pvlog_domain::{AccountId, AlertRuleId, WebhookDeliveryId, WebhookSubscriptionId};
+use pvlog_domain::{AccountId, AlertRuleId, Permission, WebhookDeliveryId, WebhookSubscriptionId};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
 use thiserror::Error;
+
+use crate::{ModernRequestAuthorizer, RequestPrincipal, principal_identity};
 
 #[async_trait]
 pub trait NotificationApiUseCases: Send + Sync {
@@ -69,8 +71,23 @@ pub trait NotificationApiUseCases: Send + Sync {
 #[derive(Clone)]
 struct NotificationState {
     service: Arc<dyn NotificationApiUseCases>,
+    authorizer: Option<Arc<dyn ModernRequestAuthorizer>>,
 }
 pub fn notifications_router(service: Arc<dyn NotificationApiUseCases>) -> Router {
+    build_router(service, None)
+}
+
+pub fn authorized_notifications_router(
+    service: Arc<dyn NotificationApiUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
+) -> Router {
+    build_router(service, Some(authorizer))
+}
+
+fn build_router(
+    service: Arc<dyn NotificationApiUseCases>,
+    authorizer: Option<Arc<dyn ModernRequestAuthorizer>>,
+) -> Router {
     Router::new()
         .route(
             "/api/v1/accounts/{account_id}/alerts",
@@ -104,20 +121,27 @@ pub fn notifications_router(service: Arc<dyn NotificationApiUseCases>) -> Router
             "/api/v1/accounts/{account_id}/webhook-deliveries/{delivery_id}/replay",
             post(replay),
         )
-        .with_state(NotificationState { service })
+        .with_state(NotificationState {
+            service,
+            authorizer,
+        })
 }
 
 async fn list_alerts(
     State(state): State<NotificationState>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(account): Path<AccountId>,
 ) -> Result<Json<Vec<Value>>, NotificationApiError> {
+    authorize(&state, principal, account, false, "alert.list").await?;
     Ok(Json(state.service.list_alerts(account).await?))
 }
 async fn create_alert(
     State(state): State<NotificationState>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(account): Path<AccountId>,
     Json(input): Json<Value>,
 ) -> Result<Response, NotificationApiError> {
+    authorize(&state, principal, account, true, "alert.create").await?;
     Ok((
         StatusCode::CREATED,
         Json(state.service.create_alert(account, input).await?),
@@ -126,35 +150,45 @@ async fn create_alert(
 }
 async fn update_alert(
     State(state): State<NotificationState>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path((account, id)): Path<(AccountId, AlertRuleId)>,
     Json(input): Json<Value>,
 ) -> Result<Json<Value>, NotificationApiError> {
+    authorize(&state, principal, account, true, "alert.update").await?;
     Ok(Json(state.service.update_alert(account, id, input).await?))
 }
 async fn delete_alert(
     State(state): State<NotificationState>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path((account, id)): Path<(AccountId, AlertRuleId)>,
 ) -> Result<StatusCode, NotificationApiError> {
+    authorize(&state, principal, account, true, "alert.delete").await?;
     state.service.delete_alert(account, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 async fn list_events(
     State(state): State<NotificationState>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(account): Path<AccountId>,
 ) -> Result<Json<Vec<Value>>, NotificationApiError> {
+    authorize(&state, principal, account, false, "alert_event.list").await?;
     Ok(Json(state.service.list_events(account).await?))
 }
 async fn list_webhooks(
     State(state): State<NotificationState>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(account): Path<AccountId>,
 ) -> Result<Json<Vec<Value>>, NotificationApiError> {
+    authorize(&state, principal, account, false, "webhook.list").await?;
     Ok(Json(state.service.list_webhooks(account).await?))
 }
 async fn create_webhook(
     State(state): State<NotificationState>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(account): Path<AccountId>,
     Json(input): Json<Value>,
 ) -> Result<Response, NotificationApiError> {
+    authorize(&state, principal, account, true, "webhook.create").await?;
     Ok((
         StatusCode::CREATED,
         Json(state.service.create_webhook(account, input).await?),
@@ -167,9 +201,11 @@ struct VerifyBody {
 }
 async fn verify_webhook(
     State(state): State<NotificationState>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path((account, id)): Path<(AccountId, WebhookSubscriptionId)>,
     Json(body): Json<VerifyBody>,
 ) -> Result<Json<Value>, NotificationApiError> {
+    authorize(&state, principal, account, true, "webhook.verify").await?;
     Ok(Json(
         state
             .service
@@ -179,22 +215,59 @@ async fn verify_webhook(
 }
 async fn delete_webhook(
     State(state): State<NotificationState>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path((account, id)): Path<(AccountId, WebhookSubscriptionId)>,
 ) -> Result<StatusCode, NotificationApiError> {
+    authorize(&state, principal, account, true, "webhook.delete").await?;
     state.service.delete_webhook(account, id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 async fn attempts(
     State(state): State<NotificationState>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path((account, id)): Path<(AccountId, WebhookSubscriptionId)>,
 ) -> Result<Json<Vec<Value>>, NotificationApiError> {
+    authorize(&state, principal, account, false, "webhook_attempt.list").await?;
     Ok(Json(state.service.attempts(account, id).await?))
 }
 async fn replay(
     State(state): State<NotificationState>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path((account, id)): Path<(AccountId, WebhookDeliveryId)>,
 ) -> Result<Json<Value>, NotificationApiError> {
+    authorize(&state, principal, account, true, "webhook.replay").await?;
     Ok(Json(state.service.replay(account, id).await?))
+}
+
+async fn authorize(
+    state: &NotificationState,
+    principal: Option<Extension<RequestPrincipal>>,
+    account_id: AccountId,
+    write: bool,
+    action: &'static str,
+) -> Result<(), NotificationApiError> {
+    let Some(authorizer) = &state.authorizer else {
+        return Ok(());
+    };
+    let Extension(principal) = principal.ok_or(NotificationApiError::Forbidden)?;
+    authorizer
+        .authorize_account(
+            principal_identity(&principal).map_err(|_| NotificationApiError::Forbidden)?,
+            account_id,
+            if write {
+                Permission::IntegrationManage
+            } else {
+                Permission::AccountRead
+            },
+            action,
+        )
+        .await
+        .map_err(|error| match error {
+            crate::RequestAuthorizationError::Forbidden
+            | crate::RequestAuthorizationError::NotFound => NotificationApiError::Forbidden,
+            crate::RequestAuthorizationError::Unavailable => NotificationApiError::Unavailable,
+        })?;
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]

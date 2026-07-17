@@ -76,7 +76,7 @@ async fn account_audit(
     state
         .authorizer
         .authorize_account(
-            principal_identity(&principal),
+            principal_identity(&principal)?,
             account_id,
             Permission::AuditRead,
             "audit.list",

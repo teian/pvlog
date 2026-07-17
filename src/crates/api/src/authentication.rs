@@ -1,6 +1,10 @@
 //! HTTP credential extraction for bearer tokens and browser session cookies.
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use async_trait::async_trait;
 use axum::{
@@ -30,6 +34,17 @@ pub enum RequestPrincipal {
     },
 }
 
+impl RequestPrincipal {
+    /// Returns a stable non-secret identity for quotas, idempotency, and audit correlation.
+    #[must_use]
+    pub fn safe_ingestion_identity(&self) -> String {
+        match self {
+            Self::User(id) => format!("user:{id}"),
+            Self::ApiCredential { id, .. } => format!("api_credential:{id}"),
+        }
+    }
+}
+
 /// Backend-neutral credential verification required by the HTTP adapter.
 #[async_trait]
 pub trait RequestAuthenticator: Send + Sync {
@@ -55,7 +70,10 @@ pub fn with_request_authentication(
     service: Arc<dyn RequestAuthenticator>,
 ) -> Router {
     router.layer(middleware::from_fn_with_state(
-        AuthenticationState { service },
+        AuthenticationState {
+            service,
+            ingestion_quota: Arc::new(IngestionQuota::default()),
+        },
         authenticate,
     ))
 }
@@ -63,6 +81,7 @@ pub fn with_request_authentication(
 #[derive(Clone)]
 struct AuthenticationState {
     service: Arc<dyn RequestAuthenticator>,
+    ingestion_quota: Arc<IngestionQuota>,
 }
 
 async fn authenticate(
@@ -72,17 +91,15 @@ async fn authenticate(
 ) -> Response {
     let path = request.uri().path().to_owned();
     let method = request.method().clone();
-    let state_changing = !matches!(
-        request.method(),
-        &Method::GET | &Method::HEAD | &Method::OPTIONS
-    );
+    let state_changing = is_state_changing(request.method());
+    let ingestion_route = is_ingestion_route(&path);
+    if ingestion_route && has_credential_query(request.uri().query()) {
+        return authentication_error(&request, RequestAuthenticationError::Invalid);
+    }
     let bearer = match bearer_token(request.headers()) {
         Ok(token) => token,
-        Err(RequestAuthenticationError::Invalid) => {
-            return StatusCode::UNAUTHORIZED.into_response();
-        }
-        Err(RequestAuthenticationError::Unavailable) => {
-            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        Err(error) => {
+            return authentication_error(&request, error);
         }
     };
     let used_session_cookie = bearer.is_none() && session_cookie_token(request.headers()).is_some();
@@ -100,6 +117,9 @@ async fn authenticate(
 
     match result {
         Ok(Some(principal)) => {
+            if ingestion_route && let Err(error) = state.ingestion_quota.admit(&principal) {
+                return error.into_response();
+            }
             request.extensions_mut().insert(principal);
             next.run(request).await
         }
@@ -113,11 +133,113 @@ async fn authenticate(
             }
             response
         }
-        Err(RequestAuthenticationError::Invalid) => StatusCode::UNAUTHORIZED.into_response(),
-        Err(RequestAuthenticationError::Unavailable) => {
-            StatusCode::SERVICE_UNAVAILABLE.into_response()
-        }
+        Err(error) => authentication_error(&request, error),
     }
+}
+
+const INGESTION_REQUESTS_PER_MINUTE: u32 = 600;
+
+#[derive(Default)]
+struct IngestionQuota {
+    windows: Mutex<HashMap<String, (u64, u32)>>,
+}
+
+impl IngestionQuota {
+    fn admit(&self, principal: &RequestPrincipal) -> Result<(), IngestionQuotaError> {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| IngestionQuotaError::Unavailable)?
+            .as_secs();
+        let window = now / 60;
+        let mut windows = self
+            .windows
+            .lock()
+            .map_err(|_| IngestionQuotaError::Unavailable)?;
+        let entry = windows
+            .entry(principal.safe_ingestion_identity())
+            .or_insert((window, 0));
+        if entry.0 != window {
+            *entry = (window, 0);
+        }
+        entry.1 = entry.1.saturating_add(1);
+        if entry.1 <= INGESTION_REQUESTS_PER_MINUTE {
+            return Ok(());
+        }
+        Err(IngestionQuotaError::Limited {
+            retry_after: 60 - now % 60,
+        })
+    }
+}
+
+enum IngestionQuotaError {
+    Unavailable,
+    Limited { retry_after: u64 },
+}
+
+impl IngestionQuotaError {
+    fn into_response(self) -> Response {
+        let Self::Limited { retry_after } = self else {
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        };
+        let mut response = StatusCode::TOO_MANY_REQUESTS.into_response();
+        if let Ok(value) = axum::http::HeaderValue::from_str(&retry_after.to_string()) {
+            response.headers_mut().insert(header::RETRY_AFTER, value);
+        }
+        response.headers_mut().insert(
+            "ratelimit-limit",
+            axum::http::HeaderValue::from_static("600"),
+        );
+        response.headers_mut().insert(
+            "ratelimit-remaining",
+            axum::http::HeaderValue::from_static("0"),
+        );
+        response
+    }
+}
+
+fn is_state_changing(method: &Method) -> bool {
+    !matches!(method, &Method::GET | &Method::HEAD | &Method::OPTIONS)
+}
+
+fn authentication_error(request: &Request, error: RequestAuthenticationError) -> Response {
+    let (status, title) = match error {
+        RequestAuthenticationError::Invalid => (StatusCode::UNAUTHORIZED, "authentication_failed"),
+        RequestAuthenticationError::Unavailable => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "authentication_unavailable",
+        ),
+    };
+    crate::problem::problem(
+        request,
+        status,
+        title,
+        "The request could not be authenticated.",
+    )
+}
+
+fn is_ingestion_route(path: &str) -> bool {
+    let Some(path) = path.strip_prefix("/api/v1/systems/") else {
+        return false;
+    };
+    let mut segments = path.split('/');
+    segments.next().is_some()
+        && segments.next() == Some("observations")
+        && matches!(
+            (segments.next(), segments.next()),
+            (None | Some("batch"), None)
+        )
+}
+
+fn has_credential_query(query: Option<&str>) -> bool {
+    query.is_some_and(|query| {
+        query.split('&').any(|pair| {
+            let name = pair.split_once('=').map_or(pair, |(name, _)| name);
+            matches!(
+                name.to_ascii_lowercase().as_str(),
+                "api_key" | "api-key" | "ingestion_key" | "ingestion-key"
+            )
+        })
+    })
 }
 
 fn allows_stale_session_cookie(method: &Method, path: &str) -> bool {

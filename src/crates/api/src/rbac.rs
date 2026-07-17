@@ -8,7 +8,7 @@ use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{delete, get, patch, post},
+    routing::{delete, get, patch},
 };
 use pvlog_domain::{
     AccountId, ApiCredentialId, Permission, PrincipalId, RoleAssignmentId, RoleId, RoleScope,
@@ -40,13 +40,14 @@ pub struct RoleAssignmentResponse {
     pub role_id: RoleId,
     pub principal_type: String,
     pub principal_id: uuid::Uuid,
-    pub account_id: AccountId,
+    pub account_id: Option<AccountId>,
     pub system_id: Option<SystemId>,
     pub expires_at: Option<i64>,
 }
 
 #[async_trait]
 pub trait RbacApiUseCases: Send + Sync {
+    async fn instance_roles(&self) -> Result<Vec<RoleResponse>, RbacApiError>;
     async fn roles(&self, account_id: AccountId) -> Result<Vec<RoleResponse>, RbacApiError>;
     async fn create_role(
         &self,
@@ -73,6 +74,20 @@ pub trait RbacApiUseCases: Send + Sync {
         account_id: AccountId,
         input: RoleAssignmentInput,
     ) -> Result<RoleAssignmentResponse, RbacApiError>;
+    async fn assignments(
+        &self,
+        account_id: AccountId,
+        principal: PrincipalId,
+    ) -> Result<Vec<RoleAssignmentResponse>, RbacApiError>;
+    async fn instance_assignments(
+        &self,
+        principal: PrincipalId,
+    ) -> Result<Vec<RoleAssignmentResponse>, RbacApiError>;
+    async fn assign_instance_role(
+        &self,
+        actor: UserId,
+        input: RoleAssignmentInput,
+    ) -> Result<RoleAssignmentResponse, RbacApiError>;
     async fn revoke_assignment(
         &self,
         actor: UserId,
@@ -93,13 +108,18 @@ pub fn rbac_router(
     authorizer: Arc<dyn ModernRequestAuthorizer>,
 ) -> Router {
     Router::new()
+        .route("/api/v1/admin/roles", get(instance_roles))
+        .route(
+            "/api/v1/admin/role-assignments",
+            get(instance_assignments).post(assign_instance_role),
+        )
         .route(
             "/api/v1/accounts/{account_id}/roles",
             get(roles).post(create_role),
         )
         .route(
             "/api/v1/accounts/{account_id}/role-assignments",
-            post(assign_role),
+            get(assignments).post(assign_role),
         )
         .route(
             "/api/v1/accounts/{account_id}/role-assignments/{assignment_id}",
@@ -115,6 +135,85 @@ pub fn rbac_router(
         })
 }
 
+async fn instance_roles(
+    State(state): State<RbacState>,
+    principal: Option<Extension<RequestPrincipal>>,
+) -> Result<Json<Vec<RoleResponse>>, RbacApiError> {
+    authorize_instance_actor(&state, principal, "instance_role.list").await?;
+    Ok(Json(state.service.instance_roles().await?))
+}
+
+async fn instance_assignments(
+    State(state): State<RbacState>,
+    Query(query): Query<RoleAssignmentListQuery>,
+    principal: Option<Extension<RequestPrincipal>>,
+) -> Result<Json<Vec<RoleAssignmentResponse>>, RbacApiError> {
+    authorize_instance_actor(&state, principal, "instance_role_assignment.list").await?;
+    Ok(Json(
+        state
+            .service
+            .instance_assignments(query.principal()?)
+            .await?,
+    ))
+}
+
+async fn assign_instance_role(
+    State(state): State<RbacState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Json(input): Json<RoleAssignmentInput>,
+) -> Result<Response, RbacApiError> {
+    let actor = authorize_instance_actor(&state, principal, "instance_role.assign").await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(state.service.assign_instance_role(actor, input).await?),
+    )
+        .into_response())
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RoleAssignmentListQuery {
+    principal_type: AssignmentPrincipalType,
+    principal_id: uuid::Uuid,
+}
+
+impl RoleAssignmentListQuery {
+    fn principal(&self) -> Result<PrincipalId, RbacApiError> {
+        match self.principal_type {
+            AssignmentPrincipalType::User => UserId::from_uuid(self.principal_id)
+                .map(PrincipalId::User)
+                .map_err(|_| RbacApiError::Invalid),
+            AssignmentPrincipalType::ApiCredential => ApiCredentialId::from_uuid(self.principal_id)
+                .map(PrincipalId::ApiCredential)
+                .map_err(|_| RbacApiError::Invalid),
+        }
+    }
+}
+
+async fn assignments(
+    State(state): State<RbacState>,
+    Path(account_id): Path<AccountId>,
+    Query(query): Query<RoleAssignmentListQuery>,
+    principal: Option<Extension<RequestPrincipal>>,
+) -> Result<Json<Vec<RoleAssignmentResponse>>, RbacApiError> {
+    let Extension(principal) = principal.ok_or(RbacApiError::Forbidden)?;
+    state
+        .authorizer
+        .authorize_account(
+            principal_identity(&principal)?,
+            account_id,
+            Permission::RoleManage,
+            "role_assignment.list",
+        )
+        .await?;
+    Ok(Json(
+        state
+            .service
+            .assignments(account_id, query.principal()?)
+            .await?,
+    ))
+}
+
 async fn roles(
     State(state): State<RbacState>,
     Path(account_id): Path<AccountId>,
@@ -124,7 +223,7 @@ async fn roles(
     state
         .authorizer
         .authorize_account(
-            principal_identity(&principal),
+            principal_identity(&principal)?,
             account_id,
             Permission::RoleManage,
             "role.list",
@@ -285,13 +384,33 @@ async fn authorize_actor(
     state
         .authorizer
         .authorize_account(
-            principal_identity(&principal),
+            principal_identity(&principal)?,
             account_id,
             Permission::RoleManage,
             action,
         )
         .await
         .map(|authorized| authorized.actor_user_id)
+        .map_err(Into::into)
+}
+
+async fn authorize_instance_actor(
+    state: &RbacState,
+    principal: Option<Extension<RequestPrincipal>>,
+    action: &'static str,
+) -> Result<UserId, RbacApiError> {
+    let Extension(principal) = principal.ok_or(RbacApiError::Forbidden)?;
+    if !matches!(principal, RequestPrincipal::User(_)) {
+        return Err(RbacApiError::Forbidden);
+    }
+    state
+        .authorizer
+        .authorize_instance(
+            principal_identity(&principal)?,
+            Permission::RoleManage,
+            action,
+        )
+        .await
         .map_err(Into::into)
 }
 

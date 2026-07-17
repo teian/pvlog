@@ -155,6 +155,8 @@ pub trait OperationalRepository: Send + Sync {
         &self,
         id: AlertRuleId,
     ) -> Result<Option<AlertRuleRecord>, OperationalRepositoryError>;
+    async fn alerts(&self) -> Result<Vec<AlertRuleRecord>, OperationalRepositoryError>;
+    async fn delete_alert(&self, id: AlertRuleId) -> Result<bool, OperationalRepositoryError>;
     async fn save_webhook(
         &self,
         r: &WebhookSubscriptionRecord,
@@ -163,6 +165,11 @@ pub trait OperationalRepository: Send + Sync {
         &self,
         id: WebhookSubscriptionId,
     ) -> Result<Option<WebhookSubscriptionRecord>, OperationalRepositoryError>;
+    async fn webhooks(&self) -> Result<Vec<WebhookSubscriptionRecord>, OperationalRepositoryError>;
+    async fn delete_webhook(
+        &self,
+        id: WebhookSubscriptionId,
+    ) -> Result<bool, OperationalRepositoryError>;
     async fn save_provider(&self, r: &ProviderRecord) -> Result<(), OperationalRepositoryError>;
     async fn provider(
         &self,
@@ -327,6 +334,19 @@ impl OperationalRepository for SqliteOperationalRepository {
         let row=sqlx::query("SELECT id,system_id,name,alert_kind,enabled,condition_json,schedule_json,debounce_seconds,cooldown_seconds,created_at,updated_at FROM alert_rules WHERE id=?").bind(blob(id.as_uuid())).fetch_optional(&mut *c).await?;
         row.map(|r| sqlite_alert(&r)).transpose()
     }
+    async fn alerts(&self) -> Result<Vec<AlertRuleRecord>, OperationalRepositoryError> {
+        let mut c = self.account.acquire().await?;
+        let rows = sqlx::query("SELECT id,system_id,name,alert_kind,enabled,condition_json,schedule_json,debounce_seconds,cooldown_seconds,created_at,updated_at FROM alert_rules ORDER BY name,id").fetch_all(&mut *c).await?;
+        rows.iter().map(sqlite_alert).collect()
+    }
+    async fn delete_alert(&self, id: AlertRuleId) -> Result<bool, OperationalRepositoryError> {
+        let mut w = self.account.acquire_writer().await?;
+        let result = sqlx::query("DELETE FROM alert_rules WHERE id=?")
+            .bind(blob(id.as_uuid()))
+            .execute(w.connection())
+            .await?;
+        Ok(result.rows_affected() == 1)
+    }
     async fn save_webhook(
         &self,
         r: &WebhookSubscriptionRecord,
@@ -342,6 +362,22 @@ impl OperationalRepository for SqliteOperationalRepository {
         let mut c = self.account.acquire().await?;
         let row=sqlx::query("SELECT id,name,endpoint_url,state,event_types_json,encryption_key_id,encrypted_signing_secret,created_at,updated_at FROM webhook_subscriptions WHERE id=?").bind(blob(id.as_uuid())).fetch_optional(&mut *c).await?;
         row.map(|r| sqlite_webhook(&r)).transpose()
+    }
+    async fn webhooks(&self) -> Result<Vec<WebhookSubscriptionRecord>, OperationalRepositoryError> {
+        let mut c = self.account.acquire().await?;
+        let rows = sqlx::query("SELECT id,name,endpoint_url,state,event_types_json,encryption_key_id,encrypted_signing_secret,created_at,updated_at FROM webhook_subscriptions WHERE state<>'deleted' ORDER BY name,id").fetch_all(&mut *c).await?;
+        rows.iter().map(sqlite_webhook).collect()
+    }
+    async fn delete_webhook(
+        &self,
+        id: WebhookSubscriptionId,
+    ) -> Result<bool, OperationalRepositoryError> {
+        let mut w = self.account.acquire_writer().await?;
+        let result = sqlx::query("UPDATE webhook_subscriptions SET state='deleted',updated_at=updated_at+1,version=version+1 WHERE id=? AND state<>'deleted'")
+            .bind(blob(id.as_uuid()))
+            .execute(w.connection())
+            .await?;
+        Ok(result.rows_affected() == 1)
     }
     async fn save_provider(&self, r: &ProviderRecord) -> Result<(), OperationalRepositoryError> {
         let mut w = self.account.acquire_writer().await?;
@@ -537,6 +573,24 @@ impl OperationalRepository for PostgresOperationalRepository {
         c.close().await?;
         row.map(|r| pg_alert(&r)).transpose()
     }
+    async fn alerts(&self) -> Result<Vec<AlertRuleRecord>, OperationalRepositoryError> {
+        let mut c = self.connection().await?;
+        let rows = sqlx::query("SELECT id,system_id,name,alert_kind,enabled,condition,schedule,debounce_seconds,cooldown_seconds,created_at,updated_at FROM account_data.alert_rules WHERE account_id=$1 ORDER BY name,id")
+            .bind(self.account_id.as_uuid()).fetch_all(&mut c).await?;
+        c.close().await?;
+        rows.iter().map(pg_alert).collect()
+    }
+    async fn delete_alert(&self, id: AlertRuleId) -> Result<bool, OperationalRepositoryError> {
+        let mut c = self.connection().await?;
+        let result =
+            sqlx::query("DELETE FROM account_data.alert_rules WHERE account_id=$1 AND id=$2")
+                .bind(self.account_id.as_uuid())
+                .bind(id.as_uuid())
+                .execute(&mut c)
+                .await?;
+        c.close().await?;
+        Ok(result.rows_affected() == 1)
+    }
     async fn save_webhook(
         &self,
         r: &WebhookSubscriptionRecord,
@@ -554,6 +608,23 @@ impl OperationalRepository for PostgresOperationalRepository {
         let row=sqlx::query("SELECT id,name,endpoint_url,state,event_types,encryption_key_id,encrypted_signing_secret,created_at,updated_at FROM integrations.webhook_subscriptions WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut c).await?;
         c.close().await?;
         row.map(|r| pg_webhook(&r)).transpose()
+    }
+    async fn webhooks(&self) -> Result<Vec<WebhookSubscriptionRecord>, OperationalRepositoryError> {
+        let mut c = self.connection().await?;
+        let rows = sqlx::query("SELECT id,name,endpoint_url,state,event_types,encryption_key_id,encrypted_signing_secret,created_at,updated_at FROM integrations.webhook_subscriptions WHERE account_id=$1 AND state<>'deleted' ORDER BY name,id")
+            .bind(self.account_id.as_uuid()).fetch_all(&mut c).await?;
+        c.close().await?;
+        rows.iter().map(pg_webhook).collect()
+    }
+    async fn delete_webhook(
+        &self,
+        id: WebhookSubscriptionId,
+    ) -> Result<bool, OperationalRepositoryError> {
+        let mut c = self.connection().await?;
+        let result = sqlx::query("UPDATE integrations.webhook_subscriptions SET state='deleted',updated_at=updated_at+1 WHERE account_id=$1 AND id=$2 AND state<>'deleted'")
+            .bind(self.account_id.as_uuid()).bind(id.as_uuid()).execute(&mut c).await?;
+        c.close().await?;
+        Ok(result.rows_affected() == 1)
     }
     async fn save_provider(&self, r: &ProviderRecord) -> Result<(), OperationalRepositoryError> {
         let mut c = self.connection().await?;

@@ -376,6 +376,31 @@ async fn verify_contract(
     assert_eq!(credential.scopes.len(), 2);
     assert_eq!(
         repository
+            .api_credentials_for_account(fixture.account_a)
+            .await?
+            .into_iter()
+            .map(|credential| credential.id)
+            .collect::<Vec<_>>(),
+        vec![fixture.credential_id]
+    );
+    assert!(
+        !repository
+            .revoke_api_credential(fixture.account_b, fixture.credential_id, 60)
+            .await?
+    );
+    assert!(
+        repository
+            .revoke_api_credential(fixture.account_a, fixture.credential_id, 60)
+            .await?
+    );
+    assert!(
+        repository
+            .active_api_credential_by_digest(&fixture.credential_digest, 70)
+            .await?
+            .is_none()
+    );
+    assert_eq!(
+        repository
             .system_registry(fixture.system_a)
             .await?
             .map(|record| record.account_id),

@@ -136,10 +136,11 @@ fn login_response(browser_session: &BrowserSession, bootstrap: SessionBootstrap)
         ""
     };
     let cookie = format!(
-        "{}={}; Path={}; HttpOnly; SameSite={}{}",
+        "{}={}; Path={}; Max-Age={}; HttpOnly; SameSite={}{}",
         browser_session.session_cookie.name,
         browser_session.session_cookie.value.expose_secret(),
         browser_session.session_cookie.path,
+        browser_session.session_cookie.max_age_seconds,
         browser_session.session_cookie.same_site,
         secure,
     );

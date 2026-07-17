@@ -26,6 +26,13 @@ async fn api_tokens_are_one_time_scoped_rotatable_and_revocable() -> Result<(), 
         .await?;
     assert!(issued.plaintext.expose_secret().starts_with("pvlog_"));
     assert!(!repository.contains_plaintext(issued.plaintext.expose_secret())?);
+    assert_eq!(service.list(account).await?.len(), 1);
+    assert!(
+        service
+            .revoke(AccountId::new(), issued.credential.id)
+            .await
+            .is_err()
+    );
     service
         .verify(&issued.plaintext, ApiScope::TelemetryWrite, account, None)
         .await?;
@@ -44,7 +51,7 @@ async fn api_tokens_are_one_time_scoped_rotatable_and_revocable() -> Result<(), 
             .await
             .is_err()
     );
-    service.revoke(rotated.id).await?;
+    service.revoke(account, rotated.credential.id).await?;
     assert!(
         service
             .verify(&rotated.plaintext, ApiScope::TelemetryWrite, account, None)
@@ -100,16 +107,37 @@ impl ApiTokenRepository for FakeRepository {
             })
             .cloned())
     }
-    async fn revoke(&self, id: ApiCredentialId, now: i64) -> Result<(), PortError> {
+    async fn list_for_account(
+        &self,
+        account_id: AccountId,
+    ) -> Result<Vec<ApiTokenRecord>, PortError> {
+        Ok(self
+            .0
+            .lock()
+            .map_err(|_| PortError::Unavailable)?
+            .iter()
+            .filter(|record| record.account_id == account_id)
+            .cloned()
+            .collect())
+    }
+    async fn revoke(
+        &self,
+        account_id: AccountId,
+        id: ApiCredentialId,
+        now: i64,
+    ) -> Result<bool, PortError> {
         if let Some(record) = self
             .0
             .lock()
             .map_err(|_| PortError::Unavailable)?
             .iter_mut()
-            .find(|record| record.id == id)
+            .find(|record| {
+                record.account_id == account_id && record.id == id && record.revoked_at.is_none()
+            })
         {
             record.revoked_at = Some(now);
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 }

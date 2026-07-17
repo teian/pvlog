@@ -28,6 +28,38 @@ async fn role_catalog_requires_role_manage_permission() -> Result<(), Box<dyn Er
         )
         .await?;
     assert_eq!(response.status(), StatusCode::OK);
+    let principal_id = UserId::new();
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/accounts/{account_id}/role-assignments?principalType=user&principalId={principal_id}"
+                ))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/admin/roles")
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/admin/role-assignments?principalType=user&principalId={principal_id}"
+                ))
+                .body(Body::empty())?,
+        )
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
     let response = app
         .oneshot(
             Request::builder()
@@ -46,6 +78,9 @@ async fn role_catalog_requires_role_manage_permission() -> Result<(), Box<dyn Er
 struct Roles;
 #[async_trait]
 impl RbacApiUseCases for Roles {
+    async fn instance_roles(&self) -> Result<Vec<RoleResponse>, RbacApiError> {
+        self.roles(AccountId::new()).await
+    }
     async fn roles(&self, _account_id: AccountId) -> Result<Vec<RoleResponse>, RbacApiError> {
         Ok(vec![RoleResponse {
             id: RoleId::new(),
@@ -100,6 +135,26 @@ impl RbacApiUseCases for Roles {
     ) -> Result<RoleAssignmentResponse, RbacApiError> {
         Err(RbacApiError::Unavailable)
     }
+    async fn assignments(
+        &self,
+        _account_id: AccountId,
+        _principal: PrincipalId,
+    ) -> Result<Vec<RoleAssignmentResponse>, RbacApiError> {
+        Ok(Vec::new())
+    }
+    async fn instance_assignments(
+        &self,
+        _principal: PrincipalId,
+    ) -> Result<Vec<RoleAssignmentResponse>, RbacApiError> {
+        Ok(Vec::new())
+    }
+    async fn assign_instance_role(
+        &self,
+        _actor: UserId,
+        _input: RoleAssignmentInput,
+    ) -> Result<RoleAssignmentResponse, RbacApiError> {
+        Err(RbacApiError::Unavailable)
+    }
     async fn revoke_assignment(
         &self,
         _actor: UserId,
@@ -119,10 +174,14 @@ impl ModernRequestAuthorizer for Authorizer {
     async fn authorize_instance(
         &self,
         _principal: PrincipalId,
-        _permission: Permission,
+        permission: Permission,
         _action: &'static str,
     ) -> Result<UserId, RequestAuthorizationError> {
-        Err(RequestAuthorizationError::Forbidden)
+        if permission == Permission::RoleManage {
+            Ok(UserId::new())
+        } else {
+            Err(RequestAuthorizationError::Forbidden)
+        }
     }
     async fn authorize_account(
         &self,

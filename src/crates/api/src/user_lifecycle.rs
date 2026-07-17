@@ -7,7 +7,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{delete, post},
+    routing::{delete, get, post},
 };
 use pvlog_application::{
     AcceptInvitation, AdminUserActor, CreateLocalUser, InviteLocalUser, RegisterLocalUser,
@@ -33,7 +33,11 @@ pub fn user_lifecycle_router(
     authorizer: Arc<dyn ModernRequestAuthorizer>,
 ) -> Router {
     Router::new()
-        .route("/api/v1/admin/users", post(create_user))
+        .route(
+            "/api/v1/account/profile",
+            get(own_profile).put(update_own_profile),
+        )
+        .route("/api/v1/admin/users", get(list_users).post(create_user))
         .route("/api/v1/admin/user-invitations", post(invite_user))
         .route("/api/v1/admin/users/{id}/activate", post(activate_user))
         .route("/api/v1/admin/users/{id}/disable", post(disable_user))
@@ -83,6 +87,20 @@ struct ActivationBody {
     email_verified: bool,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UpdateOwnProfileBody {
+    display_name: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OwnProfileResponse {
+    id: UserId,
+    email: String,
+    display_name: String,
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct InvitationResponse {
@@ -94,6 +112,58 @@ struct InvitationResponse {
 #[derive(Debug, Serialize)]
 struct AcceptedResponse {
     status: &'static str,
+}
+
+async fn own_profile(
+    State(state): State<LifecycleApiState>,
+    principal: Option<Extension<RequestPrincipal>>,
+) -> Result<Json<OwnProfileResponse>, LifecycleApiError> {
+    let profile = state.service.own_profile(current_user(principal)?).await?;
+    Ok(Json(profile.into()))
+}
+
+async fn update_own_profile(
+    State(state): State<LifecycleApiState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Json(body): Json<UpdateOwnProfileBody>,
+) -> Result<Json<OwnProfileResponse>, LifecycleApiError> {
+    let profile = state
+        .service
+        .update_own_profile(current_user(principal)?, body.display_name)
+        .await?;
+    Ok(Json(profile.into()))
+}
+
+fn current_user(
+    principal: Option<Extension<RequestPrincipal>>,
+) -> Result<UserId, LifecycleApiError> {
+    match principal {
+        Some(Extension(RequestPrincipal::User(user_id))) => Ok(user_id),
+        Some(Extension(RequestPrincipal::ApiCredential { .. })) | None => {
+            Err(UserLifecycleError::Forbidden.into())
+        }
+    }
+}
+
+impl From<pvlog_application::LifecycleUserRecord> for OwnProfileResponse {
+    fn from(value: pvlog_application::LifecycleUserRecord) -> Self {
+        Self {
+            id: value.id,
+            email: value.email,
+            display_name: value.display_name,
+        }
+    }
+}
+
+async fn list_users(
+    State(state): State<LifecycleApiState>,
+    principal: Option<Extension<RequestPrincipal>>,
+) -> Result<Response, LifecycleApiError> {
+    let users = state
+        .service
+        .users(admin(&state, principal, "user.list").await?, 200)
+        .await?;
+    Ok(Json(users).into_response())
 }
 
 async fn create_user(
@@ -229,7 +299,7 @@ async fn admin(
     let user_id = state
         .authorizer
         .authorize_instance(
-            principal_identity(&principal),
+            principal_identity(&principal)?,
             Permission::InstanceManage,
             action,
         )

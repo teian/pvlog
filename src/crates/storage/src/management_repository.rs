@@ -201,6 +201,16 @@ pub trait ManagementRepository: Send + Sync {
         account_id: AccountId,
         credential_id: ApiCredentialId,
     ) -> Result<Option<ApiCredentialRecord>, ManagementRepositoryError>;
+    async fn api_credentials_for_account(
+        &self,
+        account_id: AccountId,
+    ) -> Result<Vec<ApiCredentialRecord>, ManagementRepositoryError>;
+    async fn revoke_api_credential(
+        &self,
+        account_id: AccountId,
+        credential_id: ApiCredentialId,
+        now: i64,
+    ) -> Result<bool, ManagementRepositoryError>;
     async fn active_api_credential_by_digest(
         &self,
         digest: &[u8; 32],
@@ -627,6 +637,48 @@ impl ManagementRepository for SqliteManagementRepository {
             None,
         )
         .await
+    }
+
+    async fn api_credentials_for_account(
+        &self,
+        account_id: AccountId,
+    ) -> Result<Vec<ApiCredentialRecord>, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "SELECT id FROM api_credentials WHERE account_id=? ORDER BY created_at DESC,id DESC",
+        )
+        .bind(uuid_blob(account_id.as_uuid()))
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        let mut credentials = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id = ApiCredentialId::from_uuid(blob_uuid(row.get("id"))?)
+                .map_err(|_| ManagementRepositoryError::InvalidRecord("api_credential"))?;
+            if let Some(record) = self.api_credential(account_id, id).await? {
+                credentials.push(record);
+            }
+        }
+        Ok(credentials)
+    }
+
+    async fn revoke_api_credential(
+        &self,
+        account_id: AccountId,
+        credential_id: ApiCredentialId,
+        now: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let result = sqlx::query(
+            "UPDATE api_credentials SET revoked_at=? WHERE account_id=? AND id=? AND revoked_at IS NULL",
+        )
+        .bind(now)
+        .bind(uuid_blob(account_id.as_uuid()))
+        .bind(uuid_blob(credential_id.as_uuid()))
+        .execute(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(result.rows_affected() == 1)
     }
 
     async fn active_api_credential_by_digest(
@@ -1074,6 +1126,44 @@ impl ManagementRepository for PostgresManagementRepository {
     ) -> Result<Option<ApiCredentialRecord>, ManagementRepositoryError> {
         postgres_credential_by(self, Some((account_id, credential_id)), None).await
     }
+    async fn api_credentials_for_account(
+        &self,
+        account_id: AccountId,
+    ) -> Result<Vec<ApiCredentialRecord>, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "SELECT id FROM management.api_credentials WHERE account_id=$1 ORDER BY created_at DESC,id DESC",
+        )
+        .bind(account_id.as_uuid())
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        let mut credentials = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id = ApiCredentialId::from_uuid(row.get("id"))
+                .map_err(|_| ManagementRepositoryError::InvalidRecord("api_credential"))?;
+            if let Some(record) = self.api_credential(account_id, id).await? {
+                credentials.push(record);
+            }
+        }
+        Ok(credentials)
+    }
+    async fn revoke_api_credential(
+        &self,
+        account_id: AccountId,
+        credential_id: ApiCredentialId,
+        now: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let result = sqlx::query("UPDATE management.api_credentials SET revoked_at=$1 WHERE account_id=$2 AND id=$3 AND revoked_at IS NULL")
+            .bind(now)
+            .bind(account_id.as_uuid())
+            .bind(credential_id.as_uuid())
+            .execute(&mut connection)
+            .await?;
+        connection.close().await?;
+        Ok(result.rows_affected() == 1)
+    }
     async fn active_api_credential_by_digest(
         &self,
         digest: &[u8; 32],
@@ -1265,6 +1355,20 @@ impl ManagementRepository for SqliteManagementRepository {
     ) -> Result<Option<ApiCredentialRecord>, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
     }
+    async fn api_credentials_for_account(
+        &self,
+        _: AccountId,
+    ) -> Result<Vec<ApiCredentialRecord>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
+    }
+    async fn revoke_api_credential(
+        &self,
+        _: AccountId,
+        _: ApiCredentialId,
+        _: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
+    }
     async fn active_api_credential_by_digest(
         &self,
         _: &[u8; 32],
@@ -1408,6 +1512,20 @@ impl ManagementRepository for PostgresManagementRepository {
         _: AccountId,
         _: ApiCredentialId,
     ) -> Result<Option<ApiCredentialRecord>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("postgres"))
+    }
+    async fn api_credentials_for_account(
+        &self,
+        _: AccountId,
+    ) -> Result<Vec<ApiCredentialRecord>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("postgres"))
+    }
+    async fn revoke_api_credential(
+        &self,
+        _: AccountId,
+        _: ApiCredentialId,
+        _: i64,
+    ) -> Result<bool, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("postgres"))
     }
     async fn active_api_credential_by_digest(

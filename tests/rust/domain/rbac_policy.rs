@@ -3,8 +3,16 @@ use std::{collections::BTreeSet, error::Error};
 use pvlog_domain::{
     AccessDecision, AccessDenial, AccessRequest, AccountId, BuiltInRole, Permission, PrincipalId,
     RbacEvaluator, Role, RoleAssignment, RoleAssignmentId, RoleId, RoleKind, RoleScope, SystemId,
-    UserId, UtcTimestamp,
+    UserId, UtcTimestamp, built_in_permissions,
 };
+
+#[test]
+fn instance_administrator_always_contains_the_complete_permission_catalog() {
+    assert_eq!(
+        built_in_permissions(BuiltInRole::InstanceAdministrator),
+        Permission::ALL.into_iter().collect(),
+    );
+}
 
 #[test]
 fn authorization_is_deny_by_default_and_honors_permission_matrix() -> Result<(), Box<dyn Error>> {

@@ -15,6 +15,14 @@ pub struct AuthorizedRequest {
 /// Runtime authorization service for account- and system-addressed API requests.
 #[async_trait]
 pub trait ModernRequestAuthorizer: Send + Sync {
+    /// Authorizes any active user of the account that owns `system_id`.
+    async fn authorize_system_account_user(
+        &self,
+        _user_id: UserId,
+        _system_id: SystemId,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError> {
+        Err(RequestAuthorizationError::Forbidden)
+    }
     async fn authorize_instance(
         &self,
         principal: PrincipalId,
@@ -38,20 +46,27 @@ pub trait ModernRequestAuthorizer: Send + Sync {
 }
 
 /// Converts an extracted credential to its auditable RBAC identity.
-#[must_use]
-pub fn principal_identity(principal: &RequestPrincipal) -> PrincipalId {
+///
+/// # Errors
+///
+pub fn principal_identity(
+    principal: &RequestPrincipal,
+) -> Result<PrincipalId, RequestAuthorizationError> {
     match principal {
-        RequestPrincipal::User(id) => PrincipalId::User(*id),
-        RequestPrincipal::ApiCredential { id, .. } => PrincipalId::ApiCredential(*id),
+        RequestPrincipal::User(id) => Ok(PrincipalId::User(*id)),
+        RequestPrincipal::ApiCredential { id, .. } => Ok(PrincipalId::ApiCredential(*id)),
     }
 }
 
 /// Returns the owning user used by existing application use cases after authorization.
-#[must_use]
-pub fn actor_user_id(principal: &RequestPrincipal) -> UserId {
+///
+/// # Errors
+///
+/// Returns [`RequestAuthorizationError::Forbidden`] when the principal has no owning user.
+pub fn actor_user_id(principal: &RequestPrincipal) -> Result<UserId, RequestAuthorizationError> {
     match principal {
-        RequestPrincipal::User(id) => *id,
-        RequestPrincipal::ApiCredential { owner_user_id, .. } => *owner_user_id,
+        RequestPrincipal::User(id) => Ok(*id),
+        RequestPrincipal::ApiCredential { owner_user_id, .. } => Ok(*owner_user_id),
     }
 }
 

@@ -15,18 +15,21 @@ curl --fail-with-body -D response-headers.txt -c pvlog.cookies \
   http://127.0.0.1:8080/api/v1/auth/local/login
 ```
 
-The response sets the `__Host-pvlog_session` HttpOnly cookie and includes an
-`X-CSRF-Token` response header. Read the header value into a process-local
-variable before issuing a state-changing request:
+The response sets the `__Host-pvlog_session` HttpOnly cookie with a seven-day
+lifetime and includes an `X-CSRF-Token` response header. Read the header value
+into a process-local variable before issuing a state-changing request:
 
 ```sh
 csrf_token="$(awk 'BEGIN{IGNORECASE=1} /^x-csrf-token:/{print $2}' response-headers.txt | tr -d '\r')"
 test -n "$csrf_token"
 ```
 
-`GET /api/v1/session` returns the active user, selected account, visible
-system IDs, and configured login choices. It is safe to call without a cookie;
-the anonymous response has `authenticated: false`.
+`GET /api/v1/session` returns the active user, its internal ownership context,
+visible system IDs, and configured login choices. The browser does not select
+or display a separate system account. For a user without delegated access, the
+server provisions the internal context automatically with the user's UUID and
+owner role. It is safe to call without a cookie; the anonymous response has
+`authenticated: false`.
 
 ```sh
 curl --fail-with-body -b pvlog.cookies \
