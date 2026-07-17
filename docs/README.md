@@ -7,6 +7,7 @@ Documentation version: 1.0
 - [Authentication and RBAC](guides/local-authentication-rbac.md)
 - [Operator and recovery guide](guides/operator-recovery.md)
 - [Uploader integration and coverage](guides/uploader-integration.md)
+- [SBFspot push service](guides/sbfspot-push-service.md)
 - [Equipment catalog and custom equipment](guides/equipment-catalog.md)
 - [PV yield forecasting and performance](guides/pv-yield-forecasting.md)
 - [API and domain reference](reference/api-domain-reference.md)

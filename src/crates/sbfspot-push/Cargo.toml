@@ -1,0 +1,38 @@
+[package]
+name = "pvlog-sbfspot-push"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Fast, resumable SBFspot SQLite telemetry uploader for PVLog"
+
+[dependencies]
+clap.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx = { workspace = true, features = ["sqlite"] }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+tempfile.workspace = true
+
+[[test]]
+name = "sbfspot-push"
+path = "../../../tests/rust/sbfspot_push.rs"
+
+[[bin]]
+name = "pvlog-sbfspot-push"
+path = "src/main.rs"
+
+[lib]
+path = "src/lib.rs"
+
+[lints]
+workspace = true
