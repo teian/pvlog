@@ -254,7 +254,12 @@
             },
             "operatingTemperature": {
               "type": "object",
-              "required": ["minimumMilliCelsius", "maximumMilliCelsius"]
+              "additionalProperties": false,
+              "required": ["minimumMilliCelsius", "maximumMilliCelsius"],
+              "properties": {
+                "minimumMilliCelsius": { "type": "integer" },
+                "maximumMilliCelsius": { "type": "integer" }
+              }
             },
             "maximumSeriesFuseMilliamperes": {
               "type": "integer",
@@ -267,7 +272,13 @@
             "maximumRearStaticLoadPascals": { "type": "integer", "minimum": 1 },
             "dimensionsMillimetres": {
               "type": "object",
-              "required": ["length", "width", "height"]
+              "additionalProperties": false,
+              "required": ["length", "width", "height"],
+              "properties": {
+                "length": { "type": "integer", "minimum": 1 },
+                "width": { "type": "integer", "minimum": 1 },
+                "height": { "type": "integer", "minimum": 1 }
+              }
             },
             "weightGrams": { "type": "integer", "minimum": 1 }
           }
