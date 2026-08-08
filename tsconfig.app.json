@@ -16,10 +16,8 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
     "paths": {
-      "@/*": ["src/ui/*"]
+      "@/*": ["./src/ui/*"]
     },
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,

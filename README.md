@@ -11,8 +11,7 @@ for larger deployments.
 
 - Rust 1.95.0; `rust-toolchain.toml` installs the required `rustfmt` and Clippy
   components automatically through rustup
-- Node.js 24 or newer and Corepack
-- pnpm 11.1.1, selected from `package.json`
+- Bun 1.3.14 or newer, selected from `package.json`
 - SQLite development/runtime libraries; PostgreSQL 17 when developing against
   the PostgreSQL profile
 - Chromium installed by Playwright when running browser tests
@@ -20,8 +19,7 @@ for larger deployments.
 Install the JavaScript dependencies from the repository root:
 
 ```sh
-corepack enable
-pnpm install --frozen-lockfile
+bun install --frozen-lockfile
 ```
 
 ### Start the backend with SQLite
@@ -52,8 +50,8 @@ Run the worker in a second terminal with the same environment variables:
 cargo run -p pvlog -- worker --interval-seconds 5
 ```
 
-For a single worker cycle, use `pnpm backend:worker`. The repository aliases
-`pnpm backend:server` and `cargo run-server` also start the API server.
+For a single worker cycle, use `bun run backend:worker`. The repository aliases
+`bun run backend:server` and `cargo run-server` also start the API server.
 
 To use PostgreSQL locally, set the backend and connection URL before applying
 migrations and starting the processes:
@@ -70,7 +68,7 @@ cargo run -p pvlog -- server
 The Vite development server runs on `http://localhost:5173`:
 
 ```sh
-pnpm dev
+bun run dev
 ```
 
 The browser runtime uses the same-origin `/api/v1` base URL. During development,
@@ -79,7 +77,7 @@ Rust backend before opening the UI. Override only the proxy target when the API
 runs elsewhere:
 
 ```sh
-VITE_DEV_API_TARGET=http://127.0.0.1:19000 pnpm dev
+VITE_DEV_API_TARGET=http://127.0.0.1:19000 bun run dev
 ```
 
 Optional browser tracing is disabled by default. Enable it only with a trusted
@@ -88,7 +86,7 @@ OTLP/HTTP collector:
 ```sh
 VITE_OTEL_ENABLED=true \
 VITE_OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://localhost:4318/v1/traces \
-pnpm dev
+bun run dev
 ```
 
 ### Quality checks
@@ -101,21 +99,21 @@ cargo check-all
 cargo clippy-all
 cargo test-all
 
-pnpm lint
-pnpm typecheck
-pnpm test:ui:coverage
-pnpm test:e2e
-pnpm openapi:lint
-pnpm openapi:routes
-pnpm openapi:compare
-pnpm test:docs
-pnpm build
+bun run lint
+bun run typecheck
+bun run test:ui:coverage
+bun run test:e2e
+bun run openapi:lint
+bun run openapi:routes
+bun run openapi:compare
+bun run test:docs
+bun run build
 ```
 
 Install the Playwright browser once before the end-to-end suite:
 
 ```sh
-pnpm exec playwright install chromium
+bunx playwright install chromium
 ```
 
 ## Production setup
@@ -190,7 +188,7 @@ serves the SPA, hashed assets, runtime configuration, bundled API reference, and
 required; the reverse proxy only needs to forward the public origin to PVLog.
 
 Direct local `cargo build --release` uses the tracked development placeholder.
-To create a release binary outside Docker, run `pnpm build`, replace the contents
+To create a release binary outside Docker, run `bun run build`, replace the contents
 of `embedded-ui/` with `dist/ui/`, and then run `cargo build --release -p pvlog`.
 
 ### 5. Verify and operate the deployment

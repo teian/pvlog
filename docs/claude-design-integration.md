@@ -5,7 +5,7 @@
 - Target project: `/home/teian/code/pvlog`
 - Primary design export: `design_handoff_system_management/` (system management); the earlier `/home/teian/Downloads/pvlog-design` handoff remains the source for the surrounding shell and reporting pages
 - Frameworks: proprietary Design Component HTML reference to React 19, React Router, shadcn/ui, Tailwind CSS 4, and Recharts
-- Package managers: no export package manager; target uses pnpm 11
+- Package managers: no export package manager; target uses Bun 1.3
 - Integration objective: apply the PV monitoring dashboard's visual language to the production UI while retaining PVLog's routes, APIs, authorization, state handling, accessibility, tests, and deployment model
 
 ## 2. Architecture summary
@@ -139,10 +139,10 @@ PVLog is a Vite SPA using React Router, Feature-Sliced Design, TanStack Query, n
 ## 11. Verification commands
 
 ```bash
-pnpm lint
-pnpm typecheck
-pnpm test:ui
-pnpm test:e2e
-pnpm build
-pnpm test:bundle-budget
+bun run lint
+bun run typecheck
+bun run test:ui
+bun run test:e2e
+bun run build
+bun run test:bundle-budget
 ```

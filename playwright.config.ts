@@ -20,7 +20,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `pnpm dev --host 127.0.0.1 --port ${String(port)}`,
+    command: `bun run dev --host 127.0.0.1 --port ${String(port)}`,
     url: `http://127.0.0.1:${port}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

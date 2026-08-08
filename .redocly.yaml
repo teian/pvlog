@@ -9,4 +9,3 @@ rules:
   operation-operationId: error
   operation-summary: error
   security-defined: error
-

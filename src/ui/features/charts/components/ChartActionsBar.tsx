@@ -1,4 +1,9 @@
-import { Button, Toggle, ToggleGroup, ToggleGroupItem } from "@/shared/components";
+import {
+  Button,
+  Toggle,
+  ToggleGroup,
+  ToggleGroupItem,
+} from "@/shared/components";
 import { useTranslation } from "react-i18next";
 
 /** Chart view mode: rendered chart or the accessible data table. */
@@ -40,8 +45,12 @@ export function ChartActionsBar({
         value={view}
         variant="outline"
       >
-        <ToggleGroupItem value="chart">{t("charts.view.chart")}</ToggleGroupItem>
-        <ToggleGroupItem value="table">{t("charts.view.table")}</ToggleGroupItem>
+        <ToggleGroupItem value="chart">
+          {t("charts.view.chart")}
+        </ToggleGroupItem>
+        <ToggleGroupItem value="table">
+          {t("charts.view.table")}
+        </ToggleGroupItem>
       </ToggleGroup>
       <Toggle
         onPressedChange={onCompareChange}

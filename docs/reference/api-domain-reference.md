@@ -19,14 +19,14 @@ corrected, and missing data.
 
 ## Permission summary
 
-| Scope                             | Purpose                                  |
-| --------------------------------- | ---------------------------------------- |
-| `systems:read`, `systems:write`   | Aggregate configuration                  |
-| `telemetry:write`                 | Observation ingestion/correction         |
-| `analytics:read`                  | Series, statistics, and quality          |
-| `alerts:read`, `alerts:write`     | Rules and events                         |
-| `webhooks:read`, `webhooks:write` | Subscriptions and delivery               |
-| `roles:manage`, `audit:read`      | Delegation and audit                     |
+| Scope                             | Purpose                          |
+| --------------------------------- | -------------------------------- |
+| `systems:read`, `systems:write`   | Aggregate configuration          |
+| `telemetry:write`                 | Observation ingestion/correction |
+| `analytics:read`                  | Series, statistics, and quality  |
+| `alerts:read`, `alerts:write`     | Rules and events                 |
+| `webhooks:read`, `webhooks:write` | Subscriptions and delivery       |
+| `roles:manage`, `audit:read`      | Delegation and audit             |
 
 Authorization is deny by default and occurs before account-database routing.
 

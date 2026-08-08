@@ -10,7 +10,7 @@ the Open PV Module Database snapshot generated on 2026-07-12 at commit
   terms and factual-data rights remain applicable
 - Principal upstream catalog: CEC/SAM module catalogue from NLR/NREL SAM
 - Import command:
-  `pnpm catalog:import-open-pv-modules /path/to/open-pv-module-database`
+  `bun run catalog:import-open-pv-modules /path/to/open-pv-module-database`
 
 Every imported entry retains its source name, source URL, and verification date.
 PVLog converts units deterministically and rejects records that fail its

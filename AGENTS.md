@@ -1,7 +1,6 @@
 # Agent Notes
 
-
-## Backend 
+## Backend
 
 - After every Rust code change, run `cargo check` and fix **all warnings** before considering the task done. Zero warnings is the required state. Common warnings to watch: unused imports, unused variables, dead code, unreachable patterns.
 - Sandboxed agent Rust build helper: see [docs/agents/agent-rust-builds.md](docs/agents/agent-rust-builds.md).

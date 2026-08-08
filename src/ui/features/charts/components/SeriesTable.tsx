@@ -1,4 +1,8 @@
-import type { SeriesGap, SeriesPoint, SeriesUnit } from "@/features/charts/api/chartsApi";
+import type {
+  SeriesGap,
+  SeriesPoint,
+  SeriesUnit,
+} from "@/features/charts/api/chartsApi";
 import { convertSeriesValue } from "@/features/charts/utils/formatSeriesValue";
 import { formatTimestamp } from "@/features/charts/utils/formatTimestamp";
 import {

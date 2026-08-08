@@ -1,8 +1,11 @@
 # pv-yield-forecasting Specification
 
 ## Purpose
+
 TBD - created by archiving change add-pv-yield-forecasting. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Reproducible PV yield calculation
 
 The system SHALL calculate versioned interval PV power and energy estimates from the effective system location, string orientation and tilt, module composition and confirmed technical values, inverter characteristics, explicit loss/calibration settings, and normalized weather or insolation inputs. Each result SHALL identify its model version, configuration snapshot or digest, input run, assumptions, units, interval, and rounding semantics, and SHALL be unavailable rather than fabricated when required inputs are missing.
@@ -106,4 +109,3 @@ The system SHALL provide authorized bounded `/api/v1` resources for forecast run
 
 - **WHEN** an authorized user exports a forecast or performance view
 - **THEN** the export preserves the displayed values, units, interval semantics, versions, coverage, uncertainty, and provider attribution
-

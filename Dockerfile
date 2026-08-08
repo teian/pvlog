@@ -1,18 +1,16 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:24-bookworm-slim AS ui-build
+FROM oven/bun:1.3.14-slim AS ui-build
 WORKDIR /build
 
-RUN corepack enable
-
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
 COPY tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts ./
 COPY openapi ./openapi
 COPY src/ui ./src/ui
 
-RUN pnpm build
+RUN bun run build
 
 FROM rust:1.95.0-bookworm AS build
 WORKDIR /build

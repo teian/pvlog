@@ -103,8 +103,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         "/api/v1": {
-          target:
-            environment.VITE_DEV_API_TARGET ?? "http://127.0.0.1:18087",
+          target: environment.VITE_DEV_API_TARGET ?? "http://127.0.0.1:18087",
           changeOrigin: true,
         },
       },

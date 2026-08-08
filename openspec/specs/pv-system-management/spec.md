@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change build-self-hosted-pv-platform. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: PV system lifecycle
 
 The system SHALL let authorized users create, read, update, archive, restore, and permanently delete PV systems within exactly one owning account, with name, description, IANA timezone, commissioning date, capacity, geographic location, country, visibility, status interval, and data-calculation settings.
@@ -106,4 +108,3 @@ The PV system SHALL use each inverter string's effective-dated module count, con
 
 - **WHEN** module composition or an inverter string becomes effective or ceases to be effective at a configuration boundary
 - **THEN** capacity aggregation and forecast calculations use the old configuration before the boundary and the new configuration after it
-

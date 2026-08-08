@@ -62,7 +62,7 @@ The bundled module list is generated from a pinned Open PV Module Database
 snapshot in addition to individually curated entries. Regenerate it with:
 
 ```bash
-pnpm catalog:import-open-pv-modules /path/to/open-pv-module-database
+bun run catalog:import-open-pv-modules /path/to/open-pv-module-database
 ```
 
 The importer converts decimal engineering units to PVLog's integer units,

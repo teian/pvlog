@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change build-self-hosted-pv-platform. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Versioned resource API
 
 The system SHALL expose the modern REST API under `/api/v1` using plural resource paths, JSON request and response bodies, stable UUIDv7 resource identifiers, RFC 3339 timestamps with offsets, explicit units, and UTF-8.
@@ -155,4 +157,3 @@ Every bearer-enabled operation SHALL document and enforce its required scope usi
 
 - **WHEN** a credential containing `telemetry:read` queries telemetry for a system owned by its account
 - **THEN** the API permits the query without requiring `systems:write`
-

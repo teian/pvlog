@@ -7,9 +7,8 @@
 *.profdata
 Cargo.lock.bak
 
-# Node, pnpm, and frontend build output
+# Bun and frontend build output
 node_modules/
-.pnpm-store/
 .pnp/
 .pnp.*
 .yarn/cache/
@@ -45,7 +44,6 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
 lerna-debug.log*
 
 # Local configuration, environment, and secrets

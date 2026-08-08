@@ -11,7 +11,12 @@ import {
   seriesUnitSymbol,
   type SeriesSummary,
 } from "@/features/charts/utils/formatSeriesValue";
-import { Alert, AlertDescription, AlertTitle, Skeleton } from "@/shared/components";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+  Skeleton,
+} from "@/shared/components";
 import { useTranslation } from "react-i18next";
 
 /** Category chart body properties. */
@@ -22,7 +27,8 @@ export interface CategoryChartBodyProps {
   data: { timestamp: number; value: number }[];
   /** Raw points, used for coverage and the accessible table. */
   points: SeriesPoint[];
-  /** Canonical unit of the primary series, once loaded. */ unit: SeriesUnit | undefined;
+  /** Canonical unit of the primary series, once loaded. */ unit:
+    SeriesUnit | undefined;
   /** Gaps for the primary series. */ gaps: SeriesQueryResult["series"][number]["gaps"];
   /** Resolution/timezone metadata from the primary query response. */
   actualResolution: string | undefined;
@@ -70,7 +76,9 @@ export function CategoryChartBody({
       </Alert>
     );
   if (points.length === 0 || !unit || !actualResolution || !timezone)
-    return <p className="text-sm text-muted-foreground">{t("charts.noData")}</p>;
+    return (
+      <p className="text-sm text-muted-foreground">{t("charts.noData")}</p>
+    );
 
   const unitSymbol = seriesUnitSymbol(unit);
   const numberOptions = { maximumFractionDigits: 1 };
@@ -119,7 +127,10 @@ export function CategoryChartBody({
           })}
         </p>
       ) : null}
-      {compareEnabled && summary && previousSummary && previousSummary.average !== 0 ? (
+      {compareEnabled &&
+      summary &&
+      previousSummary &&
+      previousSummary.average !== 0 ? (
         <p className="text-xs text-muted-foreground">
           {t("charts.comparisonSummary", {
             average: previousSummary.average.toLocaleString(
@@ -131,7 +142,10 @@ export function CategoryChartBody({
               ((summary.average - previousSummary.average) /
                 Math.abs(previousSummary.average)) *
               100
-            ).toLocaleString(locale, { ...numberOptions, signDisplay: "always" }),
+            ).toLocaleString(locale, {
+              ...numberOptions,
+              signDisplay: "always",
+            }),
           })}
         </p>
       ) : null}

@@ -3,7 +3,9 @@
 ## Purpose
 
 TBD - created by archiving change build-self-hosted-pv-platform. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Interactive authentication
 
 The system SHALL authenticate interactive users using enabled local credentials or any enabled external OIDC/OAuth2 connector and SHALL resolve every successful method to one local user. Browser credentials SHALL be represented by revocable server-side sessions in secure cookies, with CSRF protection on state-changing requests.
@@ -207,4 +209,3 @@ The system SHALL let every cookie-authenticated active user read their own profi
 
 - **WHEN** a bearer API key calls a current-user profile or password endpoint
 - **THEN** the system rejects the request without changing identity data
-

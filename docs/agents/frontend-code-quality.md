@@ -43,7 +43,7 @@ Use these rules for frontend code organization, imports, naming, typing, documen
 
 ## Linting and Code Quality
 
-- **Stylelint**: Run via `pnpm lint` alongside ESLint. Config is in `.stylelintrc.json`. Key rules are documented in [frontend-design-system.md](frontend-design-system.md).
+- **Stylelint**: Run via `bun run lint` alongside ESLint. Config is in `.stylelintrc.json`. Key rules are documented in [frontend-design-system.md](frontend-design-system.md).
 - **ESLint Rules**:
   - Enforce FSD boundaries with `boundaries/dependencies`.
   - `react/no-multi-comp`: Error.

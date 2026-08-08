@@ -11,6 +11,9 @@ const moduleCatalog = JSON.parse(
 test("reviews edited prefills and keeps validation recoverable", async ({
   page,
 }) => {
+  // Rendering the full bundled module catalog makes this spec heavier than
+  // the default budget allows under parallel load.
+  test.slow();
   await page.route("**/api/v1/**", (route) => route.fulfill({ json: [] }));
   await page.route("**/api/v1/session", (route) =>
     route.fulfill({
