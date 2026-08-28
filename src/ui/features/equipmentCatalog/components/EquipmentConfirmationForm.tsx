@@ -1,30 +1,19 @@
+import { EquipmentSaveStatus } from "@/features/equipmentCatalog/components/EquipmentSaveStatus";
 import { InverterCatalogSelector } from "@/features/equipmentCatalog/components/InverterCatalogSelector";
+import { SnapshotEditor } from "@/features/equipmentCatalog/components/SnapshotEditor";
 import { SolarModuleCatalogSelector } from "@/features/equipmentCatalog/components/SolarModuleCatalogSelector";
 import { useSaveEquipmentConfiguration } from "@/features/equipmentCatalog/hooks/useEquipmentCatalog";
 import type {
   InverterCatalogEntry,
   SolarModuleCatalogEntry,
 } from "@/features/equipmentCatalog/types/equipmentCatalog.types";
+import {
+  buildEquipmentSaveRequest,
+  snapshot,
+} from "@/features/equipmentCatalog/utils/equipmentSnapshot";
 import { Button, Input, Label } from "@/shared/components";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-
-function snapshot(
-  entry: InverterCatalogEntry | SolarModuleCatalogEntry,
-): Record<string, unknown> {
-  const common = {
-    manufacturer: entry.manufacturer,
-    model: entry.model,
-    template: {
-      entryId: entry.id,
-      revision: entry.revision,
-      valueProvenance: "catalog_copied",
-    },
-  };
-  return "dc" in entry
-    ? { ...common, dc: entry.dc, ac: entry.ac, operational: entry.operational }
-    : { ...common, specification: entry.specification };
-}
 
 /** Persists manually entered or fully editable catalog-prefilled snapshots. @param props - Active account and system. @returns The confirmation form. */
 export function EquipmentConfirmationForm({
@@ -51,54 +40,16 @@ export function EquipmentConfirmationForm({
   };
   const submit = () => {
     try {
-      const inverterValue = inverterJson
-        ? (JSON.parse(inverterJson) as Record<string, unknown>)
-        : null;
-      const moduleValue = moduleJson
-        ? (JSON.parse(moduleJson) as Record<string, unknown>)
-        : null;
-      const specification = moduleValue?.specification as
-        Record<string, unknown> | undefined;
-      const watts = Number(specification?.peakPowerWatts ?? 1);
-      const now = Date.now();
-      const inverterProvenance = inverter
-        ? inverterJson === JSON.stringify(snapshot(inverter), null, 2)
-          ? "catalog_copied"
-          : "catalog_customized"
-        : "manual";
-      const moduleProvenance = module
-        ? moduleJson === JSON.stringify(snapshot(module), null, 2)
-          ? "catalog_copied"
-          : "catalog_customized"
-        : "manual";
-      const inverterName =
-        typeof inverterValue?.model === "string"
-          ? inverterValue.model
-          : t("features.equipmentCatalog.customInverter");
-      save.mutate({
-        name: inverterName,
-        manufacturer: inverterValue?.manufacturer ?? null,
-        model: inverterValue?.model ?? null,
-        ratedPowerWatts: inverter?.ac.ratedActivePowerWatts ?? count * watts,
-        valueProvenance: inverterProvenance,
-        specificationSnapshot: inverterValue,
-        effectiveFrom: now,
-        strings: [
-          {
-            name: t("features.equipmentCatalog.defaultString"),
-            panelCount: count,
-            panelManufacturer:
-              moduleValue?.manufacturer ??
-              t("features.equipmentCatalog.customManufacturer"),
-            panelModel:
-              moduleValue?.model ?? t("features.equipmentCatalog.customModel"),
-            valueProvenance: moduleProvenance,
-            moduleSpecificationSnapshot: moduleValue,
-            modulePeakPowerWatts: watts,
-            effectiveFrom: now,
-          },
-        ],
-      });
+      save.mutate(
+        buildEquipmentSaveRequest({
+          count,
+          inverter,
+          inverterJson,
+          module,
+          moduleJson,
+          t,
+        }),
+      );
     } catch {
       save.reset();
     }
@@ -124,32 +75,18 @@ export function EquipmentConfirmationForm({
           onSelect={chooseModule}
         />
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="confirmed-inverter-json">
-          {t("features.equipmentCatalog.inverterSnapshot")}
-        </Label>
-        <textarea
-          className="min-h-40 w-full rounded-md border border-input bg-background p-3 font-mono text-xs focus-visible:ring-2 focus-visible:ring-ring"
-          id="confirmed-inverter-json"
-          onChange={(event) => {
-            setInverterJson(event.target.value);
-          }}
-          value={inverterJson}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="confirmed-module-json">
-          {t("features.equipmentCatalog.moduleSnapshot")}
-        </Label>
-        <textarea
-          className="min-h-40 w-full rounded-md border border-input bg-background p-3 font-mono text-xs focus-visible:ring-2 focus-visible:ring-ring"
-          id="confirmed-module-json"
-          onChange={(event) => {
-            setModuleJson(event.target.value);
-          }}
-          value={moduleJson}
-        />
-      </div>
+      <SnapshotEditor
+        id="confirmed-inverter-json"
+        label={t("features.equipmentCatalog.inverterSnapshot")}
+        onChange={setInverterJson}
+        value={inverterJson}
+      />
+      <SnapshotEditor
+        id="confirmed-module-json"
+        label={t("features.equipmentCatalog.moduleSnapshot")}
+        onChange={setModuleJson}
+        value={moduleJson}
+      />
       <div className="space-y-2">
         <Label htmlFor="confirmed-module-count">
           {t("features.equipmentCatalog.moduleCount")}
@@ -173,16 +110,7 @@ export function EquipmentConfirmationForm({
       <Button disabled={save.isPending} onClick={submit} type="button">
         {t("features.equipmentCatalog.save")}
       </Button>
-      {save.isSuccess ? (
-        <p aria-live="polite" className="text-sm">
-          {t("features.equipmentCatalog.saved")}
-        </p>
-      ) : null}
-      {save.isError ? (
-        <p className="text-sm text-destructive" role="alert">
-          {t("features.equipmentCatalog.validationError")}
-        </p>
-      ) : null}
+      <EquipmentSaveStatus error={save.isError} success={save.isSuccess} />
     </section>
   );
 }

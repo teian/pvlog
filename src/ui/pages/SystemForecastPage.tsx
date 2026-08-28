@@ -10,6 +10,7 @@ import {
   useYieldSeries,
   type ForecastRange,
 } from "@/features/forecasting";
+import { optionalProp } from "@/shared/lib";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useParams } from "react-router";
@@ -73,9 +74,7 @@ export function SystemForecastPage() {
       </header>
       <div className="grid gap-4 xl:grid-cols-2">
         <ForecastCompletenessPanel
-          {...(completeness.data === undefined
-            ? {}
-            : { completeness: completeness.data })}
+          {...optionalProp("completeness", completeness.data)}
           error={completeness.isError}
           loading={completeness.isPending}
         />
@@ -84,27 +83,23 @@ export function SystemForecastPage() {
           error={settings.isError}
           loading={settings.isPending}
           systemId={systemId}
-          {...(settings.data === undefined ? {} : { versioned: settings.data })}
+          {...optionalProp("versioned", settings.data)}
         />
       </div>
       <ForecastYieldPanel
         endEpochMillis={forwardRange.endEpochMillis}
         error={forecast.isError}
         loading={forecast.isPending}
-        {...(forecast.data === undefined ? {} : { series: forecast.data })}
+        {...optionalProp("series", forecast.data)}
         startEpochMillis={forwardRange.startEpochMillis}
         systemId={systemId}
       />
       <PerformancePanel
         error={performance.isError || realization.isError}
         loading={performance.isPending || realization.isPending}
-        {...(performance.data === undefined
-          ? {}
-          : { performance: performance.data })}
+        {...optionalProp("performance", performance.data)}
         range={historyRange}
-        {...(realization.data === undefined
-          ? {}
-          : { realization: realization.data })}
+        {...optionalProp("realization", realization.data)}
         systemId={systemId}
       />
     </section>

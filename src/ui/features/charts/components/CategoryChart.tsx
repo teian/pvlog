@@ -6,25 +6,16 @@ import {
   type ChartView,
   ChartActionsBar,
 } from "@/features/charts/components/ChartActionsBar";
+import { AnalysisExportStatus } from "@/features/charts/components/AnalysisExportStatus";
 import { CategoryChartBody } from "@/features/charts/components/CategoryChartBody";
+import { CategoryFieldSelector } from "@/features/charts/components/CategoryFieldSelector";
 import { useAnalysisExport } from "@/features/charts/hooks/useAnalysisExport";
 import { useCategorySeriesData } from "@/features/charts/hooks/useCategorySeriesData";
 import type {
   ChartCategoryDefinition,
   ChartCategoryKey,
 } from "@/features/charts/utils/chartCategories";
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  ToggleGroup,
-  ToggleGroupItem,
-} from "@/shared/components";
+import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components";
 import { useReducedMotion } from "@/shared/hooks";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -101,26 +92,11 @@ export function CategoryChart({
         <CardTitle className="text-sm font-semibold">
           {t(`charts.category.${category.key}`)}
         </CardTitle>
-        {category.fields.length > 1 ? (
-          <CardDescription>
-            <ToggleGroup
-              aria-label={t("charts.fieldLabel")}
-              onValueChange={(value: string) => {
-                if (value) setField(value as SeriesField);
-              }}
-              size="sm"
-              type="single"
-              value={field}
-              variant="outline"
-            >
-              {category.fields.map((option) => (
-                <ToggleGroupItem key={option} value={option}>
-                  {t(`charts.field.${option}`)}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-          </CardDescription>
-        ) : null}
+        <CategoryFieldSelector
+          fields={category.fields}
+          onChange={setField}
+          value={field}
+        />
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         <ChartActionsBar
@@ -149,21 +125,14 @@ export function CategoryChart({
           unit={series?.unit}
           view={view}
         />
-        {exportMutation.isError ? (
-          <Alert variant="destructive">
-            <AlertTitle>{t("charts.export.errorTitle")}</AlertTitle>
-            <AlertDescription>
-              {t("charts.export.errorDescription")}
-            </AlertDescription>
-          </Alert>
-        ) : null}
-        {exportMutation.data?.kind === "queued" ? (
-          <p className="text-xs text-muted-foreground">
-            {t("charts.export.queuedDescription", {
-              jobId: exportMutation.data.jobId,
-            })}
-          </p>
-        ) : null}
+        <AnalysisExportStatus
+          error={exportMutation.isError}
+          queuedJobId={
+            exportMutation.data?.kind === "queued"
+              ? exportMutation.data.jobId
+              : null
+          }
+        />
       </CardContent>
     </Card>
   );

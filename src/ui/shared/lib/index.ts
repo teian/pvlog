@@ -1,3 +1,4 @@
+export { optionalProp } from "./optionalProp";
 export { cn } from "./utils";
 export {
   RANGE_PRESETS,

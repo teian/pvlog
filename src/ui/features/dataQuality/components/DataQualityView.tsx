@@ -1,29 +1,15 @@
-import { useSession } from "@/features/auth";
-import type { DataQualityKind } from "@/features/dataQuality/api/dataQualityApi";
 import { CorrectionForm } from "@/features/dataQuality/components/CorrectionForm";
 import { DataQualityFilters } from "@/features/dataQuality/components/DataQualityFilters";
 import { DataQualityTable } from "@/features/dataQuality/components/DataQualityTable";
-import { useDataQuality } from "@/features/dataQuality/hooks/useDataQuality";
+import { useDataQualityView } from "@/features/dataQuality/hooks/useDataQualityView";
 import {
   Alert,
   AlertDescription,
   AlertTitle,
   Skeleton,
 } from "@/shared/components";
-import { RANGE_PRESETS, type RangePresetKey } from "@/shared/lib";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-
-const ALL_KINDS: DataQualityKind[] = [
-  "missing_interval",
-  "suspect_observation",
-  "source_conflict",
-  "counter_reset",
-  "rejected_ingestion",
-  "aggregate_lag",
-];
-const RECONCILIATION_POLL_MILLIS = 3000;
-const RECONCILIATION_WINDOW_MILLIS = 15_000;
 
 /** Data quality view properties. */
 export interface DataQualityViewProps {
@@ -33,38 +19,21 @@ export interface DataQualityViewProps {
 /** Renders data-quality inspection (filtered issue table) plus a correction/deletion tool with a reconciliation-progress indicator. @param props - Target system. @returns The data-quality view. */
 export function DataQualityView({ systemId }: DataQualityViewProps) {
   const { t, i18n } = useTranslation();
-  const session = useSession();
   const timezone = useMemo(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone,
     [],
   );
-  const [rangeKey, setRangeKey] = useState<RangePresetKey>("week");
-  const [activeKinds, setActiveKinds] = useState<DataQualityKind[]>(ALL_KINDS);
-  const [reconciling, setReconciling] = useState(false);
-  const preset =
-    RANGE_PRESETS.find((candidate) => candidate.key === rangeKey) ??
-    RANGE_PRESETS[0];
-  const query = useDataQuality(
-    systemId,
-    preset.durationMillis,
-    reconciling ? RECONCILIATION_POLL_MILLIS : undefined,
-  );
-
-  useEffect(() => {
-    if (!reconciling) return;
-    const timeout = setTimeout(() => {
-      setReconciling(false);
-    }, RECONCILIATION_WINDOW_MILLIS);
-    return () => {
-      clearTimeout(timeout);
-    };
-  }, [reconciling]);
-
-  const issues = (query.data ?? []).filter((issue) =>
-    activeKinds.includes(issue.kind),
-  );
-  const canCorrect =
-    session.data?.permissions.includes("telemetry_write") ?? false;
+  const {
+    activeKinds,
+    canCorrect,
+    issues,
+    query,
+    rangeKey,
+    reconciling,
+    setActiveKinds,
+    setRangeKey,
+    startReconciling,
+  } = useDataQualityView(systemId);
 
   return (
     <div className="flex flex-col gap-6">
@@ -104,12 +73,7 @@ export function DataQualityView({ systemId }: DataQualityViewProps) {
         />
       ) : null}
       {canCorrect ? (
-        <CorrectionForm
-          onSubmitted={() => {
-            setReconciling(true);
-          }}
-          systemId={systemId}
-        />
+        <CorrectionForm onSubmitted={startReconciling} systemId={systemId} />
       ) : null}
     </div>
   );

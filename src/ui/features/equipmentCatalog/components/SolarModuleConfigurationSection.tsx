@@ -2,6 +2,7 @@ import { EquipmentIdentityFields } from "@/features/equipmentCatalog/components/
 import { SolarModuleCatalogSelector } from "@/features/equipmentCatalog/components/SolarModuleCatalogSelector";
 import { TechnicalDataTable } from "@/features/equipmentCatalog/components/TechnicalDataTable";
 import type { SolarModuleCatalogEntry } from "@/features/equipmentCatalog/types/equipmentCatalog.types";
+import { solarModuleTechnicalRows } from "@/features/equipmentCatalog/utils/technicalDataRows";
 import { Input, Label } from "@/shared/components";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -16,77 +17,10 @@ export function SolarModuleConfigurationSection() {
     setEntry(selected);
     setPeakPowerWatts(selected.specification.peakPowerWatts);
   };
-  const specification = entry?.specification;
-  const rows = specification
-    ? ([
-        [t("features.equipmentCatalog.fields.revision"), entry.revision],
-        [
-          t("features.equipmentCatalog.fields.cellTechnology"),
-          specification.cellDescription ?? specification.cellTechnology,
-        ],
-        [
-          t("features.equipmentCatalog.fields.pmax"),
-          `${String(peakPowerWatts)} W`,
-        ],
-        [
-          t("features.equipmentCatalog.fields.stringTotal"),
-          `${String(moduleCount * peakPowerWatts)} W`,
-        ],
-        [
-          t("features.equipmentCatalog.fields.voc"),
-          `${String(specification.openCircuitVoltageMillivolts / 1000)} V`,
-        ],
-        [
-          t("features.equipmentCatalog.fields.vmp"),
-          `${String(specification.maximumPowerVoltageMillivolts / 1000)} V`,
-        ],
-        [
-          t("features.equipmentCatalog.fields.isc"),
-          `${String(specification.shortCircuitCurrentMilliamperes / 1000)} A`,
-        ],
-        [
-          t("features.equipmentCatalog.fields.imp"),
-          `${String(specification.maximumPowerCurrentMilliamperes / 1000)} A`,
-        ],
-        [
-          t("features.equipmentCatalog.fields.efficiency"),
-          `${String(specification.efficiencyBasisPoints / 100)} %`,
-        ],
-        [
-          t("features.equipmentCatalog.fields.bifaciality"),
-          specification.bifacial
-            ? `${String((specification.bifacialityFactorBasisPoints ?? 0) / 100)} %`
-            : t("features.equipmentCatalog.no"),
-        ],
-        [
-          t("features.equipmentCatalog.fields.temperatureCoefficients"),
-          `${String(specification.shortCircuitCurrentTemperatureCoefficientPpmPerCelsius)} / ${String(specification.openCircuitVoltageTemperatureCoefficientPpmPerCelsius)} / ${String(specification.peakPowerTemperatureCoefficientPpmPerCelsius)} ppm/°C`,
-        ],
-        [
-          t("features.equipmentCatalog.fields.dimensions"),
-          specification.dimensionsMillimetres
-            ? `${String(specification.dimensionsMillimetres.length)} × ${String(specification.dimensionsMillimetres.width)} × ${String(specification.dimensionsMillimetres.height)} mm`
-            : "—",
-        ],
-        [
-          t("features.equipmentCatalog.fields.weight"),
-          specification.weightGrams == null
-            ? "—"
-            : `${String(specification.weightGrams / 1000)} kg`,
-        ],
-        [
-          t("features.equipmentCatalog.fields.loads"),
-          specification.maximumFrontStaticLoadPascals == null ||
-          specification.maximumRearStaticLoadPascals == null
-            ? "—"
-            : `${String(specification.maximumFrontStaticLoadPascals)} / ${String(specification.maximumRearStaticLoadPascals)} Pa`,
-        ],
-        [
-          t("features.equipmentCatalog.fields.source"),
-          entry.provenance.sourceName,
-        ],
-      ] as const)
-    : [];
+  const rows =
+    entry === null
+      ? []
+      : solarModuleTechnicalRows(entry, moduleCount, peakPowerWatts, t);
   return (
     <div className="space-y-4">
       <SolarModuleCatalogSelector

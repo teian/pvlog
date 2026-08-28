@@ -5,6 +5,7 @@ import type {
   SeriesUnit,
 } from "@/features/charts/api/chartsApi";
 import type { ChartView } from "@/features/charts/components/ChartActionsBar";
+import { CategoryChartSummary } from "@/features/charts/components/CategoryChartSummary";
 import { SeriesLineChart } from "@/features/charts/components/SeriesLineChart";
 import { SeriesTable } from "@/features/charts/components/SeriesTable";
 import {
@@ -81,7 +82,6 @@ export function CategoryChartBody({
     );
 
   const unitSymbol = seriesUnitSymbol(unit);
-  const numberOptions = { maximumFractionDigits: 1 };
   return (
     <div className="flex flex-col gap-3">
       {view === "table" ? (
@@ -106,49 +106,15 @@ export function CategoryChartBody({
           unitSymbol={unitSymbol}
         />
       )}
-      {summary ? (
-        <p className="text-xs text-muted-foreground">
-          {t("charts.resolutionSummary", {
-            resolution: t(`charts.actualResolution.${actualResolution}`),
-            coverage:
-              Math.round(
-                (points.reduce((sum, p) => sum + p.coverageBasisPoints, 0) /
-                  points.length /
-                  100) *
-                  10,
-              ) / 10,
-          })}{" "}
-          {t("charts.summary", {
-            count: summary.count,
-            minimum: summary.minimum.toLocaleString(locale, numberOptions),
-            maximum: summary.maximum.toLocaleString(locale, numberOptions),
-            average: summary.average.toLocaleString(locale, numberOptions),
-            unit: unitSymbol,
-          })}
-        </p>
-      ) : null}
-      {compareEnabled &&
-      summary &&
-      previousSummary &&
-      previousSummary.average !== 0 ? (
-        <p className="text-xs text-muted-foreground">
-          {t("charts.comparisonSummary", {
-            average: previousSummary.average.toLocaleString(
-              locale,
-              numberOptions,
-            ),
-            unit: unitSymbol,
-            delta: (
-              ((summary.average - previousSummary.average) /
-                Math.abs(previousSummary.average)) *
-              100
-            ).toLocaleString(locale, {
-              ...numberOptions,
-              signDisplay: "always",
-            }),
-          })}
-        </p>
-      ) : null}
+      <CategoryChartSummary
+        actualResolution={actualResolution}
+        compareEnabled={compareEnabled}
+        locale={locale}
+        points={points}
+        previousSummary={previousSummary}
+        summary={summary}
+        unitSymbol={unitSymbol}
+      />
     </div>
   );
 }

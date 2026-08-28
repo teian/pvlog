@@ -1,6 +1,14 @@
 import type { VersionedForecastSettings } from "@/features/forecasting/api/forecastApi";
+import { ForecastSettingsIdentityFields } from "@/features/forecasting/components/ForecastSettingsIdentityFields";
+import { ForecastSettingsStatus } from "@/features/forecasting/components/ForecastSettingsStatus";
 import { useUpdateForecastSettings } from "@/features/forecasting/hooks/useForecasting";
 import { forecastSettingsInputSchema } from "@/features/forecasting/types/forecast.types";
+import {
+  FORECAST_LOSS_FIELDS,
+  forecastSettingsDefaults,
+  forecastSettingsFormSchema,
+  type ForecastSettingsFormValues,
+} from "@/features/forecasting/utils/forecastSettingsForm";
 import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Alert,
@@ -20,21 +28,6 @@ import {
 import { useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { useTranslation } from "react-i18next";
-import { z } from "zod";
-
-const formSchema = z.object({
-  effectiveFrom: z.coerce.number().int(),
-  effectiveTo: z.union([z.literal(""), z.coerce.number().int()]),
-  modelIdentifier: z.string().min(1).max(64),
-  modelRevision: z.coerce.number().int().min(1).max(65_535),
-  soilingBasisPoints: z.coerce.number().int().min(0).max(10_000),
-  shadingBasisPoints: z.coerce.number().int().min(0).max(10_000),
-  mismatchBasisPoints: z.coerce.number().int().min(0).max(10_000),
-  wiringBasisPoints: z.coerce.number().int().min(0).max(10_000),
-  unavailabilityBasisPoints: z.coerce.number().int().min(0).max(10_000),
-  calibrationBasisPoints: z.coerce.number().int().min(-5000).max(5000),
-});
-type FormValues = z.input<typeof formSchema>;
 
 /** Settings editor properties. */
 export interface ForecastSettingsFormProps {
@@ -55,12 +48,12 @@ export function ForecastSettingsForm({
 }: ForecastSettingsFormProps) {
   const { t } = useTranslation();
   const update = useUpdateForecastSettings(accountId, systemId);
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: defaults(versioned),
+  const form = useForm<ForecastSettingsFormValues>({
+    resolver: zodResolver(forecastSettingsFormSchema),
+    defaultValues: forecastSettingsDefaults(versioned),
   });
   useEffect(() => {
-    form.reset(defaults(versioned));
+    form.reset(forecastSettingsDefaults(versioned));
   }, [form, versioned]);
   if (loading) return <Card className="h-80 animate-pulse bg-muted" />;
   if (error || !versioned)
@@ -73,7 +66,7 @@ export function ForecastSettingsForm({
       </Alert>
     );
   const submit = form.handleSubmit(async (values) => {
-    const parsed = formSchema.parse(values);
+    const parsed = forecastSettingsFormSchema.parse(values);
     const input = forecastSettingsInputSchema.parse({
       effectiveFrom: parsed.effectiveFrom,
       effectiveTo: parsed.effectiveTo === "" ? null : parsed.effectiveTo,
@@ -90,14 +83,6 @@ export function ForecastSettingsForm({
     });
     await update.mutateAsync({ input, etag: versioned.etag });
   });
-  const fields = [
-    "soilingBasisPoints",
-    "shadingBasisPoints",
-    "mismatchBasisPoints",
-    "wiringBasisPoints",
-    "unavailabilityBasisPoints",
-    "calibrationBasisPoints",
-  ] as const;
   return (
     <Card>
       <CardHeader>
@@ -113,43 +98,8 @@ export function ForecastSettingsForm({
             void submit(event);
           }}
         >
-          <Field>
-            <FieldLabel htmlFor="forecast-effective-from">
-              {t("forecasting.settings.effectiveFrom")}
-            </FieldLabel>
-            <Input
-              id="forecast-effective-from"
-              type="number"
-              {...form.register("effectiveFrom")}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="forecast-effective-to">
-              {t("forecasting.settings.effectiveTo")}
-            </FieldLabel>
-            <Input
-              id="forecast-effective-to"
-              type="number"
-              {...form.register("effectiveTo")}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="forecast-model">
-              {t("forecasting.settings.model")}
-            </FieldLabel>
-            <Input id="forecast-model" {...form.register("modelIdentifier")} />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor="forecast-revision">
-              {t("forecasting.settings.revision")}
-            </FieldLabel>
-            <Input
-              id="forecast-revision"
-              type="number"
-              {...form.register("modelRevision")}
-            />
-          </Field>
-          {fields.map((name) => (
+          <ForecastSettingsIdentityFields register={form.register} />
+          {FORECAST_LOSS_FIELDS.map((name) => (
             <Field key={name}>
               <FieldLabel htmlFor={`forecast-${name}`}>
                 {t(`forecasting.settings.${name}`)}
@@ -169,33 +119,13 @@ export function ForecastSettingsForm({
                 ? t("forecasting.settings.saving")
                 : t("forecasting.settings.save")}
             </Button>
-            {update.isSuccess ? (
-              <span className="text-sm">{t("forecasting.settings.saved")}</span>
-            ) : null}
-            {update.isError ? (
-              <span className="text-sm text-destructive" role="alert">
-                {t("forecasting.settings.saveError")}
-              </span>
-            ) : null}
+            <ForecastSettingsStatus
+              error={update.isError}
+              success={update.isSuccess}
+            />
           </div>
         </form>
       </CardContent>
     </Card>
   );
-}
-
-function defaults(versioned?: VersionedForecastSettings): FormValues {
-  const settings = versioned?.settings;
-  return {
-    effectiveFrom: settings?.effectiveFrom ?? Date.now(),
-    effectiveTo: settings?.effectiveTo ?? "",
-    modelIdentifier: settings?.modelIdentifier ?? "pvwatts-compatible",
-    modelRevision: settings?.modelRevision ?? 1,
-    soilingBasisPoints: settings?.losses.soilingBasisPoints ?? 0,
-    shadingBasisPoints: settings?.losses.shadingBasisPoints ?? 0,
-    mismatchBasisPoints: settings?.losses.mismatchBasisPoints ?? 0,
-    wiringBasisPoints: settings?.losses.wiringBasisPoints ?? 0,
-    unavailabilityBasisPoints: settings?.losses.unavailabilityBasisPoints ?? 0,
-    calibrationBasisPoints: settings?.calibrationBasisPoints ?? 0,
-  };
 }

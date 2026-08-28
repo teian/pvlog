@@ -2,6 +2,7 @@
 import { InverterDraftEditor } from "@/features/systemManagement/components/InverterDraftEditor";
 import { LocationAutocomplete } from "@/features/systemManagement/components/LocationAutocomplete";
 import { SystemWizardSectionHeading } from "@/features/systemManagement/components/SystemWizardSectionHeading";
+import { SystemWizardSuccess } from "@/features/systemManagement/components/SystemWizardSuccess";
 import type {
   ManagedSystem,
   SystemWizardDraft,
@@ -28,13 +29,7 @@ import {
   ToggleGroupItem,
 } from "@/shared/components";
 import { SessionRequestError } from "@/shared/api/sessionRequest";
-import {
-  ArrowLeftIcon,
-  CheckIcon,
-  MinusIcon,
-  PlusIcon,
-  Table2Icon,
-} from "lucide-react";
+import { ArrowLeftIcon, MinusIcon, PlusIcon, Table2Icon } from "lucide-react";
 import type { TFunction } from "i18next";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
@@ -87,6 +82,20 @@ function saveErrorDescription(error: unknown, t: TFunction): string {
   return t("systemManagement.errors.saveDescription");
 }
 
+/** Returns the label for the save button across pending and create/update modes. */
+function submitLabel(
+  pending: boolean,
+  updating: boolean,
+  t: TFunction,
+): string {
+  if (pending) return t("systemManagement.actions.saving");
+  return t(
+    updating
+      ? "systemManagement.actions.updateSystem"
+      : "systemManagement.actions.createSystem",
+  );
+}
+
 /** Renders the single-page create/edit system wizard from the design handoff. @param props - Existing system, mutation state and completion/cancel callbacks. @returns Sectioned accessible wizard or success state. */
 export function SystemWizard({
   current,
@@ -109,26 +118,11 @@ export function SystemWizard({
   };
   if (done)
     return (
-      <Card className="mx-auto w-full max-w-3xl py-14 text-center shadow-lg">
-        <CardContent className="flex flex-col items-center gap-4">
-          <span className="flex size-12 items-center justify-center rounded-full bg-success/10 text-success">
-            <CheckIcon />
-          </span>
-          <h1 className="text-xl font-extrabold">
-            {t(
-              current
-                ? "systemManagement.success.updated"
-                : "systemManagement.success.created",
-            )}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {t("systemManagement.success.description", { name: draft.name })}
-          </p>
-          <Button onClick={onCancel}>
-            {t("systemManagement.actions.backToManagement")}
-          </Button>
-        </CardContent>
-      </Card>
+      <SystemWizardSuccess
+        name={draft.name}
+        onBack={onCancel}
+        updated={current !== undefined}
+      />
     );
   const issue = validationIssue(draft, t);
   const valid = issue === null;
@@ -338,13 +332,7 @@ export function SystemWizard({
               }}
               type="button"
             >
-              {pending
-                ? t("systemManagement.actions.saving")
-                : t(
-                    current
-                      ? "systemManagement.actions.updateSystem"
-                      : "systemManagement.actions.createSystem",
-                  )}
+              {submitLabel(pending, current !== undefined, t)}
             </Button>
           </div>
         </CardFooter>

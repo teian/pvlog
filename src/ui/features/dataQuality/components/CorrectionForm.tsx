@@ -1,22 +1,27 @@
+import {
+  type CorrectionDraft,
+  CorrectionFields,
+} from "@/features/dataQuality/components/CorrectionFields";
+import { CorrectionResultAlert } from "@/features/dataQuality/components/CorrectionResultAlert";
 import { useCorrectObservation } from "@/features/dataQuality/hooks/useCorrectObservation";
 import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
   Button,
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-  Field,
-  FieldGroup,
-  FieldLabel,
-  Input,
   Toggle,
 } from "@/shared/components";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+
+const EMPTY_DRAFT: CorrectionDraft = {
+  expectedVersion: "",
+  generationPowerWatts: "",
+  observationId: "",
+  reason: "",
+};
 
 /** Correction form properties. */
 export interface CorrectionFormProps {
@@ -29,23 +34,24 @@ export interface CorrectionFormProps {
 export function CorrectionForm({ systemId, onSubmitted }: CorrectionFormProps) {
   const { t } = useTranslation();
   const mutation = useCorrectObservation();
-  const [observationId, setObservationId] = useState("");
-  const [expectedVersion, setExpectedVersion] = useState("");
-  const [reason, setReason] = useState("");
-  const [generationPowerWatts, setGenerationPowerWatts] = useState("");
+  const [draft, setDraft] = useState<CorrectionDraft>(EMPTY_DRAFT);
   const [deleteMode, setDeleteMode] = useState(false);
+
+  const patch = (next: Partial<CorrectionDraft>) => {
+    setDraft((value) => ({ ...value, ...next }));
+  };
 
   const submitCorrection = () => {
     mutation.mutate(
       {
         systemId,
-        observationId,
-        expectedVersion: Number(expectedVersion),
-        reason,
+        observationId: draft.observationId,
+        expectedVersion: Number(draft.expectedVersion),
+        reason: draft.reason,
         delete: deleteMode,
-        ...(deleteMode || generationPowerWatts === ""
+        ...(deleteMode || draft.generationPowerWatts === ""
           ? {}
-          : { generationPowerWatts: Number(generationPowerWatts) }),
+          : { generationPowerWatts: Number(draft.generationPowerWatts) }),
       },
       { onSuccess: onSubmitted },
     );
@@ -67,64 +73,11 @@ export function CorrectionForm({ systemId, onSubmitted }: CorrectionFormProps) {
             submitCorrection();
           }}
         >
-          <FieldGroup>
-            <Field>
-              <FieldLabel htmlFor="observation-id">
-                {t("dataQuality.correction.observationId")}
-              </FieldLabel>
-              <Input
-                id="observation-id"
-                onChange={(event) => {
-                  setObservationId(event.target.value);
-                }}
-                required
-                value={observationId}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="expected-version">
-                {t("dataQuality.correction.expectedVersion")}
-              </FieldLabel>
-              <Input
-                id="expected-version"
-                min={1}
-                onChange={(event) => {
-                  setExpectedVersion(event.target.value);
-                }}
-                required
-                type="number"
-                value={expectedVersion}
-              />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="correction-reason">
-                {t("dataQuality.correction.reason")}
-              </FieldLabel>
-              <Input
-                id="correction-reason"
-                onChange={(event) => {
-                  setReason(event.target.value);
-                }}
-                required
-                value={reason}
-              />
-            </Field>
-            {deleteMode ? null : (
-              <Field>
-                <FieldLabel htmlFor="generation-power-watts">
-                  {t("dataQuality.correction.generationPowerWatts")}
-                </FieldLabel>
-                <Input
-                  id="generation-power-watts"
-                  onChange={(event) => {
-                    setGenerationPowerWatts(event.target.value);
-                  }}
-                  type="number"
-                  value={generationPowerWatts}
-                />
-              </Field>
-            )}
-          </FieldGroup>
+          <CorrectionFields
+            deleteMode={deleteMode}
+            draft={draft}
+            onChange={patch}
+          />
           <Toggle
             onPressedChange={setDeleteMode}
             pressed={deleteMode}
@@ -135,26 +88,10 @@ export function CorrectionForm({ systemId, onSubmitted }: CorrectionFormProps) {
           <Button disabled={mutation.isPending} type="submit">
             {t("dataQuality.correction.submit")}
           </Button>
-          {mutation.isSuccess ? (
-            <Alert>
-              <AlertTitle>
-                {t("dataQuality.correction.successTitle")}
-              </AlertTitle>
-              <AlertDescription>
-                {t("dataQuality.correction.successDescription")}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {mutation.isError ? (
-            <Alert variant="destructive">
-              <AlertTitle>{t("dataQuality.correction.errorTitle")}</AlertTitle>
-              <AlertDescription>
-                {mutation.error.message === "correction_conflict"
-                  ? t("dataQuality.correction.conflictDescription")
-                  : t("dataQuality.correction.errorDescription")}
-              </AlertDescription>
-            </Alert>
-          ) : null}
+          <CorrectionResultAlert
+            error={mutation.error}
+            success={mutation.isSuccess}
+          />
         </form>
       </CardContent>
     </Card>
