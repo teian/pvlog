@@ -7,6 +7,7 @@ use axum::{Extension, Json, Router, http::StatusCode, response::Response, routin
 use serde::Serialize;
 
 use crate::RequestPrincipal;
+use pvlog_domain::UserId;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -42,7 +43,8 @@ pub struct DashboardIngestionResponse {
 
 #[async_trait]
 pub trait DashboardApiUseCases: Send + Sync {
-    async fn dashboard(&self) -> Result<DashboardResponse, DashboardApiError>;
+    /// Projects the operational dashboard for one authenticated principal.
+    async fn dashboard(&self, actor: UserId) -> Result<DashboardResponse, DashboardApiError>;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -60,11 +62,15 @@ async fn dashboard(
     axum::extract::State(service): axum::extract::State<Arc<dyn DashboardApiUseCases>>,
     principal: Option<Extension<RequestPrincipal>>,
 ) -> Result<Json<DashboardResponse>, DashboardHttpError> {
-    if principal.is_none() {
+    let Some(Extension(principal)) = principal else {
         return Err(DashboardHttpError::Unauthorized);
-    }
+    };
+    let actor = match principal {
+        RequestPrincipal::User(user_id) => user_id,
+        RequestPrincipal::ApiCredential { owner_user_id, .. } => owner_user_id,
+    };
     service
-        .dashboard()
+        .dashboard(actor)
         .await
         .map(Json)
         .map_err(|_| DashboardHttpError::Unavailable)

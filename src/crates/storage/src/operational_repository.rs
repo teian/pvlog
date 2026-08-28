@@ -28,6 +28,11 @@ pub struct RollupRecord {
     pub point_count: i64,
     pub expected_count: i64,
     pub generation_energy_wh: Option<i64>,
+    pub consumption_energy_wh: Option<i64>,
+    pub generation_power_min_watts: Option<i64>,
+    pub generation_power_max_watts: Option<i64>,
+    pub generation_power_first_watts: Option<i64>,
+    pub generation_power_last_watts: Option<i64>,
     pub quality_flags: i32,
     pub coverage_basis_points: i32,
     pub calculated_at: i64,
@@ -261,7 +266,7 @@ impl OperationalRepository for SqliteOperationalRepository {
     async fn save_rollup(&self, r: &RollupRecord) -> Result<(), OperationalRepositoryError> {
         validate_period(r.bucket_start, r.bucket_end)?;
         let mut w = self.account.acquire_writer().await?;
-        sqlx::query("INSERT INTO telemetry_rollups (system_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,quality_flags,coverage_basis_points,calculated_at) VALUES (?,?,?,?,?,?,1,?,?,?,?,?,?) ON CONFLICT(system_id,resolution,bucket_start,generation) DO UPDATE SET bucket_end=excluded.bucket_end,point_count=excluded.point_count,expected_count=excluded.expected_count,generation_energy_sum_wh=excluded.generation_energy_sum_wh,quality_flags=excluded.quality_flags,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(blob(r.system_id.as_uuid())).bind(&r.resolution).bind(r.bucket_start).bind(r.bucket_end).bind(&r.timezone).bind(r.generation).bind(r.point_count).bind(r.expected_count).bind(r.generation_energy_wh).bind(r.quality_flags).bind(r.coverage_basis_points).bind(r.calculated_at).execute(w.connection()).await?;
+        sqlx::query("INSERT INTO telemetry_rollups (system_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at) VALUES (?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(system_id,resolution,bucket_start,generation) DO UPDATE SET bucket_end=excluded.bucket_end,point_count=excluded.point_count,expected_count=excluded.expected_count,generation_energy_sum_wh=excluded.generation_energy_sum_wh,consumption_energy_sum_wh=excluded.consumption_energy_sum_wh,generation_power_min_watts=excluded.generation_power_min_watts,generation_power_max_watts=excluded.generation_power_max_watts,generation_power_first_watts=excluded.generation_power_first_watts,generation_power_last_watts=excluded.generation_power_last_watts,quality_flags=excluded.quality_flags,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(blob(r.system_id.as_uuid())).bind(&r.resolution).bind(r.bucket_start).bind(r.bucket_end).bind(&r.timezone).bind(r.generation).bind(r.point_count).bind(r.expected_count).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.generation_power_min_watts).bind(r.generation_power_max_watts).bind(r.generation_power_first_watts).bind(r.generation_power_last_watts).bind(r.quality_flags).bind(r.coverage_basis_points).bind(r.calculated_at).execute(w.connection()).await?;
         Ok(())
     }
     async fn rollups(
@@ -272,7 +277,7 @@ impl OperationalRepository for SqliteOperationalRepository {
     ) -> Result<Vec<RollupRecord>, OperationalRepositoryError> {
         validate_period(start, end)?;
         let mut c = self.account.acquire().await?;
-        let rows=sqlx::query("SELECT system_id,resolution,bucket_start,bucket_end,timezone,generation,point_count,expected_count,generation_energy_sum_wh,quality_flags,coverage_basis_points,calculated_at FROM telemetry_rollups WHERE system_id=? AND bucket_start>=? AND bucket_start<? ORDER BY bucket_start,resolution,generation").bind(blob(s.as_uuid())).bind(start).bind(end).fetch_all(&mut *c).await?;
+        let rows=sqlx::query("SELECT system_id,resolution,bucket_start,bucket_end,timezone,generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at FROM telemetry_rollups WHERE system_id=? AND bucket_start>=? AND bucket_start<? ORDER BY bucket_start,resolution,generation").bind(blob(s.as_uuid())).bind(start).bind(end).fetch_all(&mut *c).await?;
         rows.iter().map(sqlite_rollup).collect()
     }
     async fn save_daily_summary(
@@ -505,7 +510,7 @@ impl OperationalRepository for PostgresOperationalRepository {
     async fn save_rollup(&self, r: &RollupRecord) -> Result<(), OperationalRepositoryError> {
         validate_period(r.bucket_start, r.bucket_end)?;
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO telemetry.rollups (account_id,system_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,quality_flags,coverage_basis_points,calculated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,1,$8,$9,$10,$11,$12,$13) ON CONFLICT(account_id,system_id,resolution,bucket_start,generation) DO UPDATE SET bucket_end=excluded.bucket_end,point_count=excluded.point_count,expected_count=excluded.expected_count,generation_energy_sum_wh=excluded.generation_energy_sum_wh,quality_flags=excluded.quality_flags,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(self.account_id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.resolution).bind(r.bucket_start).bind(r.bucket_end).bind(&r.timezone).bind(r.generation).bind(r.point_count).bind(r.expected_count).bind(r.generation_energy_wh).bind(r.quality_flags).bind(r.coverage_basis_points).bind(r.calculated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO telemetry.rollups (account_id,system_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,1,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT(account_id,system_id,resolution,bucket_start,generation) DO UPDATE SET bucket_end=excluded.bucket_end,point_count=excluded.point_count,expected_count=excluded.expected_count,generation_energy_sum_wh=excluded.generation_energy_sum_wh,consumption_energy_sum_wh=excluded.consumption_energy_sum_wh,generation_power_min_watts=excluded.generation_power_min_watts,generation_power_max_watts=excluded.generation_power_max_watts,generation_power_first_watts=excluded.generation_power_first_watts,generation_power_last_watts=excluded.generation_power_last_watts,quality_flags=excluded.quality_flags,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(self.account_id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.resolution).bind(r.bucket_start).bind(r.bucket_end).bind(&r.timezone).bind(r.generation).bind(r.point_count).bind(r.expected_count).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.generation_power_min_watts).bind(r.generation_power_max_watts).bind(r.generation_power_first_watts).bind(r.generation_power_last_watts).bind(r.quality_flags).bind(r.coverage_basis_points).bind(r.calculated_at).execute(&mut c).await?;
         c.close().await?;
         Ok(())
     }
@@ -517,7 +522,7 @@ impl OperationalRepository for PostgresOperationalRepository {
     ) -> Result<Vec<RollupRecord>, OperationalRepositoryError> {
         validate_period(start, end)?;
         let mut c = self.connection().await?;
-        let rows=sqlx::query("SELECT system_id,resolution,bucket_start,bucket_end,timezone,generation,point_count,expected_count,generation_energy_sum_wh,quality_flags,coverage_basis_points,calculated_at FROM telemetry.rollups WHERE account_id=$1 AND system_id=$2 AND bucket_start>=$3 AND bucket_start<$4 ORDER BY bucket_start,resolution,generation").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
+        let rows=sqlx::query("SELECT system_id,resolution,bucket_start,bucket_end,timezone,generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at FROM telemetry.rollups WHERE account_id=$1 AND system_id=$2 AND bucket_start>=$3 AND bucket_start<$4 ORDER BY bucket_start,resolution,generation").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
         c.close().await?;
         rows.iter().map(pg_rollup).collect()
     }
@@ -820,6 +825,11 @@ fn pg_rollup(r: &sqlx::postgres::PgRow) -> Result<RollupRecord, OperationalRepos
         point_count: r.get("point_count"),
         expected_count: r.get("expected_count"),
         generation_energy_wh: r.get("generation_energy_sum_wh"),
+        consumption_energy_wh: r.try_get("consumption_energy_sum_wh").ok(),
+        generation_power_min_watts: r.try_get("generation_power_min_watts").ok(),
+        generation_power_max_watts: r.try_get("generation_power_max_watts").ok(),
+        generation_power_first_watts: r.try_get("generation_power_first_watts").ok(),
+        generation_power_last_watts: r.try_get("generation_power_last_watts").ok(),
         quality_flags: r.get("quality_flags"),
         coverage_basis_points: r.get("coverage_basis_points"),
         calculated_at: r.get("calculated_at"),
@@ -950,6 +960,11 @@ fn sqlite_rollup(r: &sqlx::sqlite::SqliteRow) -> Result<RollupRecord, Operationa
         point_count: r.get("point_count"),
         expected_count: r.get("expected_count"),
         generation_energy_wh: r.get("generation_energy_sum_wh"),
+        consumption_energy_wh: r.try_get("consumption_energy_sum_wh").ok(),
+        generation_power_min_watts: r.try_get("generation_power_min_watts").ok(),
+        generation_power_max_watts: r.try_get("generation_power_max_watts").ok(),
+        generation_power_first_watts: r.try_get("generation_power_first_watts").ok(),
+        generation_power_last_watts: r.try_get("generation_power_last_watts").ok(),
         quality_flags: r.get("quality_flags"),
         coverage_basis_points: r.get("coverage_basis_points"),
         calculated_at: r.get("calculated_at"),

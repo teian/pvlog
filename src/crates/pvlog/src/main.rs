@@ -9,6 +9,7 @@ use opentelemetry::trace::TracerProvider as _;
 use opentelemetry_otlp::WithExportConfig as _;
 use pvlog::SystemClock;
 use pvlog::administration::ManagementAdministrationApi;
+use pvlog::analytics::StorageAnalyticsApi;
 use pvlog::api_keys::ManagementAccountApiKeyService;
 use pvlog::authentication::{
     ManagementApiTokenRepository, ManagementAuditApi, ManagementConnectorApi,
@@ -16,11 +17,13 @@ use pvlog::authentication::{
     ManagementRequestAuthorizer, ManagementSessionBootstrap, session_digest_key,
 };
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
+use pvlog::dashboard::StorageDashboardApi;
 use pvlog::inverters::ManagementInverterApi;
 use pvlog::notifications::ManagementNotificationApi;
 use pvlog::operator_bundle::{
     export_account_bundle, export_bundle, export_postgres_bundle, import_bundle, verify_bundle,
 };
+use pvlog::telemetry::StorageTelemetryApi;
 use pvlog_application::{
     ApiTokenService, Argon2CredentialConfig, Argon2CredentialService, BrowserSessionPolicy,
     BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, Clock,
@@ -42,34 +45,6 @@ use secrecy::ExposeSecret as _;
 use serde::Serialize;
 use thiserror::Error;
 use tracing_subscriber::{EnvFilter, layer::SubscriberExt as _, util::SubscriberInitExt as _};
-
-struct EmptyDashboardApi;
-
-#[async_trait::async_trait]
-impl pvlog_api::DashboardApiUseCases for EmptyDashboardApi {
-    async fn dashboard(
-        &self,
-    ) -> Result<pvlog_api::DashboardResponse, pvlog_api::DashboardApiError> {
-        let now = i64::try_from(SystemClock.now().epoch_millis())
-            .map_err(|_| pvlog_api::DashboardApiError::Unavailable)?;
-        Ok(pvlog_api::DashboardResponse {
-            observed_at_epoch_millis: 0,
-            age_seconds: u64::try_from(now / 1_000).unwrap_or(u64::MAX),
-            freshness_threshold_seconds: 60,
-            generation_watts: 0.0,
-            consumption_watts: None,
-            grid_watts: None,
-            battery_basis_points: None,
-            coverage_basis_points: 0,
-            recent_alerts: Vec::new(),
-            ingestion: pvlog_api::DashboardIngestionResponse {
-                accepted_today: 0,
-                rejected_today: 0,
-                lag_seconds: 0,
-            },
-        })
-    }
-}
 
 #[derive(Debug, Parser)]
 #[command(
@@ -197,6 +172,8 @@ async fn main() -> Result<(), StartupError> {
             interval_seconds: _,
         } => {
             pvlog_worker::run_once(&target).await?;
+            let management = compose_management_repository(&target)?;
+            run_aggregation_cycle(&target, management.as_ref()).await;
             Ok(())
         }
         Command::Worker {
@@ -541,6 +518,7 @@ struct ObservabilityProviders {
 async fn run_worker(target: &DatabaseTarget, interval_seconds: u64) -> Result<(), StartupError> {
     let interval = Duration::from_secs(interval_seconds.max(1));
     let mut ticker = tokio::time::interval(interval);
+    let management = compose_management_repository(target)?;
     tracing::info!(interval_seconds = interval.as_secs(), "worker started");
 
     loop {
@@ -553,8 +531,26 @@ async fn run_worker(target: &DatabaseTarget, interval_seconds: u64) -> Result<()
                 if let Err(error) = pvlog_worker::run_once(target).await {
                     tracing::error!(%error, "worker readiness cycle failed");
                 }
+                run_aggregation_cycle(target, management.as_ref()).await;
             }
         }
+    }
+}
+
+/// Rebuilds stale telemetry aggregates, logging rather than aborting the worker.
+async fn run_aggregation_cycle(
+    target: &DatabaseTarget,
+    management: &dyn pvlog_storage::ManagementRepository,
+) {
+    match pvlog::aggregation::run_cycle(target, management).await {
+        Ok(report) if report.systems_rebuilt > 0 => tracing::info!(
+            systems = report.systems_rebuilt,
+            rollups = report.rollups_written,
+            daily_summaries = report.daily_summaries_written,
+            "aggregation cycle completed"
+        ),
+        Ok(_) => tracing::debug!("aggregation cycle found no pending observations"),
+        Err(error) => tracing::error!(%error, "aggregation cycle failed"),
     }
 }
 
@@ -709,6 +705,21 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
     ));
     let notifications = Arc::new(ManagementNotificationApi::new(target.clone()));
     let reporting = Arc::new(pvlog::reporting::StorageReportingApi::new(target.clone()));
+    let analytics = Arc::new(StorageAnalyticsApi::new(
+        target.clone(),
+        compose_management_repository(target)?,
+        Arc::new(SystemClock),
+    ));
+    let dashboard = Arc::new(StorageDashboardApi::new(
+        target.clone(),
+        compose_management_repository(target)?,
+        Arc::new(SystemClock),
+    ));
+    let telemetry = Arc::new(StorageTelemetryApi::new(
+        target.clone(),
+        compose_management_repository(target)?,
+        Arc::new(SystemClock),
+    ));
     let geocoding = Arc::new(
         pvlog::geocoding::PhotonGeocodingApi::new(config.geocoding.endpoint.clone())
             .map_err(|_| StartupError::Geocoding)?,
@@ -767,7 +778,12 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 reporting,
                 request_authorizer.clone(),
             ))
-            .merge(pvlog_api::dashboard_router(Arc::new(EmptyDashboardApi))),
+            .merge(pvlog_api::analytics_router(analytics))
+            .merge(pvlog_api::telemetry_router(
+                telemetry,
+                request_authorizer.clone(),
+            ))
+            .merge(pvlog_api::dashboard_router(dashboard)),
         request_authenticator,
     );
     let router = api_router.merge(pvlog::embedded_ui::router(

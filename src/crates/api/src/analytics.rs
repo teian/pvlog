@@ -1,3 +1,4 @@
+use crate::RequestPrincipal;
 use axum::{
     Extension, Json, Router,
     body::Body,
@@ -75,7 +76,7 @@ struct ExportBody {
 
 async fn time_series(
     State(state): State<AnalyticsState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(system_id): Path<SystemId>,
     Query(parameters): Query<SeriesParameters>,
 ) -> Result<Response, AnalyticsApiError> {
@@ -83,7 +84,7 @@ async fn time_series(
     Ok(Json(
         state
             .service
-            .time_series(actor_id(actor)?, system_id, request)
+            .time_series(actor_id(principal.as_ref())?, system_id, request)
             .await?,
     )
     .into_response())
@@ -91,7 +92,7 @@ async fn time_series(
 
 async fn statistics(
     State(state): State<AnalyticsState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(system_id): Path<SystemId>,
     Query(parameters): Query<StatisticsParameters>,
 ) -> Result<Response, AnalyticsApiError> {
@@ -99,7 +100,7 @@ async fn statistics(
     Ok(Json(
         state
             .service
-            .statistics(actor_id(actor)?, system_id, period)
+            .statistics(actor_id(principal.as_ref())?, system_id, period)
             .await?,
     )
     .into_response())
@@ -107,7 +108,7 @@ async fn statistics(
 
 async fn data_quality(
     State(state): State<AnalyticsState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(system_id): Path<SystemId>,
     Query(parameters): Query<RangeParameters>,
 ) -> Result<Response, AnalyticsApiError> {
@@ -118,7 +119,7 @@ async fn data_quality(
         state
             .service
             .data_quality(
-                actor_id(actor)?,
+                actor_id(principal.as_ref())?,
                 system_id,
                 parameters.start_epoch_millis,
                 parameters.end_epoch_millis,
@@ -130,7 +131,7 @@ async fn data_quality(
 
 async fn export(
     State(state): State<AnalyticsState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(system_id): Path<SystemId>,
     Json(body): Json<ExportBody>,
 ) -> Result<Response, AnalyticsApiError> {
@@ -154,7 +155,7 @@ async fn export(
         .service
         .export(AnalysisExportRequest {
             system_id,
-            actor: actor_id(actor)?,
+            actor: actor_id(principal.as_ref())?,
             query: query_request(parameters)?,
             format,
             asynchronous: body.asynchronous.unwrap_or(false),
@@ -250,10 +251,13 @@ fn parse_period(value: &str) -> Result<StatisticsPeriod, AnalyticsApiError> {
     }
 }
 
-fn actor_id(actor: Option<Extension<UserId>>) -> Result<UserId, AnalyticsApiError> {
-    actor
-        .map(|Extension(actor)| actor)
-        .ok_or(AnalyticsApiError::Forbidden)
+/// Both browser sessions and account API keys act as their owning user.
+fn actor_id(principal: Option<&Extension<RequestPrincipal>>) -> Result<UserId, AnalyticsApiError> {
+    match principal.map(|Extension(principal)| principal) {
+        Some(RequestPrincipal::User(user_id)) => Ok(*user_id),
+        Some(RequestPrincipal::ApiCredential { owner_user_id, .. }) => Ok(*owner_user_id),
+        None => Err(AnalyticsApiError::Forbidden),
+    }
 }
 
 fn download_response(

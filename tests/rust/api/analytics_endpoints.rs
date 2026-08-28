@@ -4,7 +4,7 @@ use axum::{
     body::Body,
     http::{Method, Request, StatusCode, header},
 };
-use pvlog_api::analytics_router;
+use pvlog_api::{RequestPrincipal, analytics_router};
 use pvlog_application::{
     AnalysisExportRequest, AnalysisExportResult, DataQualityIssue, EnergyStatistics,
     ModeledAnalysisExportMetadata, ModernAnalyticsError, ModernAnalyticsUseCases, QueryResolution,
@@ -18,7 +18,7 @@ use tower::ServiceExt as _;
 async fn analytics_routes_cover_queries_and_both_export_modes() -> Result<(), Box<dyn Error>> {
     let system = SystemId::new();
     let actor = UserId::new();
-    let app = analytics_router(Arc::new(Stub)).layer(Extension(actor));
+    let app = analytics_router(Arc::new(Stub)).layer(Extension(RequestPrincipal::User(actor)));
     for uri in [
         format!(
             "/api/v1/systems/{system}/series?startEpochMillis=0&endEpochMillis=3600000&fields=generation_power"

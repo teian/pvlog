@@ -45,7 +45,7 @@ struct Dashboard;
 
 #[async_trait]
 impl DashboardApiUseCases for Dashboard {
-    async fn dashboard(&self) -> Result<DashboardResponse, DashboardApiError> {
+    async fn dashboard(&self, _actor: UserId) -> Result<DashboardResponse, DashboardApiError> {
         Ok(DashboardResponse {
             observed_at_epoch_millis: 0,
             age_seconds: 1,
