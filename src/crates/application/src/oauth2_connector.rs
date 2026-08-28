@@ -9,7 +9,7 @@ use std::{
 use async_trait::async_trait;
 use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
-    aead::{Aead as _, KeyInit as _, OsRng, Payload, rand_core::RngCore as _},
+    aead::{Aead as _, Generate as _, KeyInit as _, Payload},
 };
 use oauth2::{
     AuthType, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge,
@@ -128,21 +128,19 @@ impl TokenCipher for XChaCha20Poly1305TokenCipher {
         kind: ProviderTokenKind,
         plaintext: &SecretString,
     ) -> Result<EncryptedProviderToken, PortError> {
-        let mut nonce_bytes = [0_u8; 24];
-        OsRng.fill_bytes(&mut nonce_bytes);
-        let nonce = XNonce::from_slice(&nonce_bytes);
+        let nonce = XNonce::try_generate().map_err(|_| PortError::Unavailable)?;
         let ciphertext = self
             .cipher
             .encrypt(
-                nonce,
+                &nonce,
                 Payload {
                     msg: plaintext.expose_secret().as_bytes(),
                     aad: token_aad(kind),
                 },
             )
             .map_err(|_| PortError::Unavailable)?;
-        let mut sealed = Vec::with_capacity(nonce_bytes.len() + ciphertext.len());
-        sealed.extend_from_slice(&nonce_bytes);
+        let mut sealed = Vec::with_capacity(nonce.len() + ciphertext.len());
+        sealed.extend_from_slice(&nonce);
         sealed.extend_from_slice(&ciphertext);
         Ok(EncryptedProviderToken {
             key_id: self.key_id.clone(),
