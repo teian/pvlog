@@ -254,6 +254,11 @@
     "generation": "Generation",
     "consumption": "Consumption",
     "coverage": "Coverage",
+    "systemSelector": {
+      "label": "System",
+      "placeholder": "Select a system",
+      "archived": "{{name}} (archived)"
+    },
     "systems": {
       "title": "All Systems",
       "description": "Systems available to your account",
