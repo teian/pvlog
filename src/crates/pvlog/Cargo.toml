@@ -52,6 +52,18 @@ name = "pvlog"
 path = "src/main.rs"
 
 [[test]]
+name = "yield-model"
+path = "../../../tests/rust/pvlog/yield_model.rs"
+
+[[test]]
+name = "tariff-revenue"
+path = "../../../tests/rust/pvlog/tariff_revenue.rs"
+
+[[test]]
+name = "public-sharing"
+path = "../../../tests/rust/pvlog/public_sharing.rs"
+
+[[test]]
 name = "series-scopes"
 path = "../../../tests/rust/pvlog/series_scopes.rs"
 

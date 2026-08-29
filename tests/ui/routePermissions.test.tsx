@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "@/app";
@@ -61,7 +61,13 @@ describe("route permission mapping", () => {
     expect(
       await screen.findByRole("heading", { name: "All Systems" }),
     ).toBeVisible();
-    expect(await screen.findByText("Rooftop South")).toBeVisible();
+    // The name now appears in the sidebar as well as the table, so the
+    // assertion names the table cell it actually cares about.
+    expect(
+      await within(screen.getByRole("main")).findByRole("link", {
+        name: "Rooftop South",
+      }),
+    ).toBeVisible();
     expect(screen.queryByText("Access denied")).not.toBeInTheDocument();
   });
 
