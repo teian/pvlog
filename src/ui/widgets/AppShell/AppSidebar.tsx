@@ -1,3 +1,4 @@
+import { useSystemOverviews } from "@/features/reporting";
 import { Button } from "@/shared/components";
 import { cn } from "@/shared/lib/utils";
 import { ListTreeIcon, PanelLeftCloseIcon, SettingsIcon } from "lucide-react";
@@ -35,6 +36,9 @@ const scopeLinkClass = ({ isActive }: { isActive: boolean }) =>
 export function AppSidebar({ onClose, open, systemIds }: AppSidebarProps) {
   const { t } = useTranslation();
   const firstSystemId = systemIds.at(0);
+  // Names come from the cached system overviews; the identifier stays as the
+  // label until one resolves, so navigation never renders an empty entry.
+  const overviews = useSystemOverviews(systemIds);
 
   return (
     <aside
@@ -74,18 +78,24 @@ export function AppSidebar({ onClose, open, systemIds }: AppSidebarProps) {
             <ListTreeIcon aria-hidden="true" className="size-4" />
             {t("nav.allSystems")}
           </NavLink>
-          {systemIds.map((id) => (
-            <NavLink
-              className={({ isActive }) =>
-                cn(scopeLinkClass({ isActive }), "font-mono text-xs")
-              }
-              key={id}
-              onClick={onClose}
-              to={`/systems/${id}`}
-            >
-              {t("nav.system", { id: id.slice(0, 8) })}
-            </NavLink>
-          ))}
+          {systemIds.map((id, index) => {
+            const name = overviews[index]?.data?.name;
+            return (
+              <NavLink
+                className={({ isActive }) =>
+                  cn(scopeLinkClass({ isActive }), !name && "font-mono text-xs")
+                }
+                key={id}
+                onClick={onClose}
+                title={name}
+                to={`/systems/${id}`}
+              >
+                <span className="truncate">
+                  {name ?? t("nav.system", { id: id.slice(0, 8) })}
+                </span>
+              </NavLink>
+            );
+          })}
         </nav>
         <div className="shrink-0 border-t border-sidebar-border px-2 py-3">
           <NavLink
