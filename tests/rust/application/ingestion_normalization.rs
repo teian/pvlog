@@ -31,6 +31,7 @@ fn explicit_units_provenance_battery_and_registered_channels_normalize_exactly()
         battery_flow_state: BatteryFlowState::Discharging,
         extended: BTreeMap::from([(channel, ExtendedValue::DecimalScaled(42))]),
         registered_channels: BTreeSet::from([channel]),
+        channel_readings: std::collections::BTreeMap::new(),
         source: ObservationSource {
             kind: ObservationSourceKind::ModernApi,
             source_reference: Some("uploader-1".to_owned()),

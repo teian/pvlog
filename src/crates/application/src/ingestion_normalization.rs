@@ -18,6 +18,17 @@ pub enum EnergyUnit {
     WattHours,
     MilliwattHours,
 }
+/// One reading reported under a source-defined channel key.
+///
+/// Keys are resolved to channel identifiers by the storage adapter, which also
+/// registers a key it has never seen, so a new meter is never silently dropped.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ChannelReading {
+    pub power_watts: Option<i64>,
+    pub energy_watt_hours: Option<i64>,
+    pub estimated: bool,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct EnergyInput {
     pub value: i64,
@@ -42,6 +53,8 @@ pub struct NormalizeObservation {
     pub battery_flow_state: BatteryFlowState,
     pub extended: BTreeMap<ChannelId, ExtendedValue>,
     pub registered_channels: BTreeSet<ChannelId>,
+    /// Readings still keyed by their wire name, before channel resolution.
+    pub channel_readings: BTreeMap<String, ChannelReading>,
     pub source: ObservationSource,
     pub idempotency_namespace: String,
     pub idempotency_key: String,

@@ -89,8 +89,8 @@ pub use ingestion_admission::{
     IngestionAdmission, IngestionAdmissionError, IngestionAdmissionMetrics, IngestionPermit,
 };
 pub use ingestion_normalization::{
-    EnergyInput, EnergyUnit, IngestionNormalizationError, NormalizeObservation, PowerUnit,
-    normalize_observation,
+    ChannelReading, EnergyInput, EnergyUnit, IngestionNormalizationError, NormalizeObservation,
+    PowerUnit, normalize_observation,
 };
 pub use ingestion_validation::{
     IngestionValidationError, IngestionValidationPolicy, validate_observation,
