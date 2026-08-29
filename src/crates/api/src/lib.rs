@@ -55,9 +55,9 @@ mod telemetry;
 mod user_lifecycle;
 
 pub use administration::{
-    AdministrationApiError, AdministrationApiUseCases, BackupResult, ConnectionTestResult,
-    EmailEncryption, EmailNotificationSettings, RetentionBackupSettings, WeatherFeedSettings,
-    administration_router,
+    AccountSummary, AdministrationApiError, AdministrationApiUseCases, BackupResult,
+    ConnectionTestResult, EmailEncryption, EmailNotificationSettings, RetentionBackupSettings,
+    WeatherFeedSettings, administration_router,
 };
 pub use analytics::analytics_router;
 pub use api_keys::{
@@ -100,7 +100,7 @@ pub use identities::{
 };
 pub use insights::{
     BestBucket, InsightApiError, InsightApiUseCases, InsightRange, PreviousPeriod, RangeSummary,
-    RevenueSummary, StringContribution, insights_router,
+    RevenueSummary, StringContribution, WeatherClassShare, WeatherMonth, insights_router,
 };
 pub use inverters::{
     InverterApiError, InverterApiUseCases, InverterInput, InverterResponse, PvStringInput,

@@ -10,7 +10,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use pvlog_domain::{Permission, UserId};
+use pvlog_domain::{AccountId, Permission, UserId};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -73,8 +73,24 @@ pub struct BackupResult {
     pub artifact_name: String,
 }
 
+/// One tenant as the instance administration screen lists it.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountSummary {
+    pub id: AccountId,
+    pub slug: String,
+    pub display_name: String,
+    /// `provisioning`, `active`, `suspended`, `quarantined`, `deleting`, or `deleted`.
+    pub status: String,
+    pub member_count: u64,
+    pub system_count: u64,
+    pub created_at_epoch_millis: i64,
+}
+
 #[async_trait]
 pub trait AdministrationApiUseCases: Send + Sync {
+    /// Lists every account on the instance with its membership and system counts.
+    async fn accounts(&self) -> Result<Vec<AccountSummary>, AdministrationApiError>;
     async fn weather_feed(&self) -> Result<WeatherFeedSettings, AdministrationApiError>;
     async fn save_weather_feed(
         &self,
@@ -113,6 +129,7 @@ pub fn administration_router(
     authorizer: Arc<dyn ModernRequestAuthorizer>,
 ) -> Router {
     Router::new()
+        .route("/api/v1/admin/accounts", get(list_accounts))
         .route(
             "/api/v1/admin/weather-feed",
             get(weather_feed).put(save_weather_feed),
@@ -143,6 +160,14 @@ async fn weather_feed(
 ) -> Result<Json<WeatherFeedSettings>, AdministrationApiError> {
     authorize(&state, principal, "administration.weather.read").await?;
     Ok(Json(state.service.weather_feed().await?))
+}
+
+async fn list_accounts(
+    State(state): State<AdministrationState>,
+    principal: Option<Extension<RequestPrincipal>>,
+) -> Result<Json<Vec<AccountSummary>>, AdministrationApiError> {
+    authorize(&state, principal, "administration.accounts.list").await?;
+    Ok(Json(state.service.accounts().await?))
 }
 
 async fn save_weather_feed(

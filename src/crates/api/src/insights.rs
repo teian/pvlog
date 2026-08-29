@@ -106,8 +106,33 @@ pub struct StringContribution {
     pub metered: bool,
 }
 
+/// How a month's production split across sky conditions.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeatherMonth {
+    pub month_start_epoch_millis: i64,
+    pub generation_energy_wh: i64,
+    pub classes: Vec<WeatherClassShare>,
+}
+
+/// One sky condition's share of a month.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WeatherClassShare {
+    /// `clear`, `partly_cloudy`, `mostly_cloudy`, or `overcast`.
+    pub class: String,
+    pub share_basis_points: u16,
+    pub generation_energy_wh: i64,
+}
+
 #[async_trait::async_trait]
 pub trait InsightApiUseCases: Send + Sync {
+    async fn weather_composition(
+        &self,
+        actor: UserId,
+        system_id: SystemId,
+        months: u32,
+    ) -> Result<Vec<WeatherMonth>, InsightApiError>;
     async fn range_summary(
         &self,
         actor: UserId,
@@ -174,6 +199,10 @@ pub fn insights_router(
             get(breakdown),
         )
         .route(
+            "/api/v1/systems/{system_id}/weather-composition",
+            get(weather_composition),
+        )
+        .route(
             "/api/v1/systems/{system_id}/tariffs",
             get(list_tariffs).post(create_tariff),
         )
@@ -230,6 +259,34 @@ async fn breakdown(
         state
             .service
             .string_breakdown(actor, system_id, range)
+            .await?,
+    ))
+}
+
+#[derive(Deserialize)]
+struct CompositionParameters {
+    months: Option<u32>,
+}
+
+async fn weather_composition(
+    State(state): State<InsightState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path(system_id): Path<SystemId>,
+    Query(parameters): Query<CompositionParameters>,
+) -> Result<Json<Vec<WeatherMonth>>, InsightApiError> {
+    let actor = authorize(
+        &state,
+        principal,
+        system_id,
+        false,
+        "system.weather.composition",
+    )
+    .await?;
+    let months = parameters.months.unwrap_or(12).clamp(1, 60);
+    Ok(Json(
+        state
+            .service
+            .weather_composition(actor, system_id, months)
             .await?,
     ))
 }

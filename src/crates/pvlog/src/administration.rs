@@ -4,11 +4,11 @@ use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use async_trait::async_trait;
 use pvlog_api::{
-    AdministrationApiError, AdministrationApiUseCases, BackupResult, ConnectionTestResult,
-    EmailNotificationSettings, RetentionBackupSettings, WeatherFeedSettings,
+    AccountSummary, AdministrationApiError, AdministrationApiUseCases, BackupResult,
+    ConnectionTestResult, EmailNotificationSettings, RetentionBackupSettings, WeatherFeedSettings,
 };
 use pvlog_application::Clock;
-use pvlog_domain::UserId;
+use pvlog_domain::{AccountId, UserId};
 use pvlog_storage::{AdministrationRepository, DatabaseTarget, GlobalConfigurationRecord};
 use serde::{Serialize, de::DeserializeOwned};
 use tokio::{net::TcpStream, time::timeout};
@@ -95,6 +95,56 @@ impl ManagementAdministrationApi {
 
 #[async_trait]
 impl AdministrationApiUseCases for ManagementAdministrationApi {
+    async fn accounts(&self) -> Result<Vec<AccountSummary>, AdministrationApiError> {
+        #[cfg(feature = "sqlite")]
+        {
+            if let DatabaseTarget::Sqlite {
+                management_path, ..
+            } = &self.target
+            {
+                use sqlx::{ConnectOptions as _, Row as _};
+                let mut connection = sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(management_path)
+                    .create_if_missing(false)
+                    .connect()
+                    .await
+                    .map_err(|_| AdministrationApiError::Unavailable)?;
+                let rows = sqlx::query(
+                    "SELECT a.id,a.slug,a.display_name,a.status,a.created_at,\
+                     (SELECT COUNT(*) FROM memberships m WHERE m.account_id=a.id \
+                      AND m.status='active') AS member_count,\
+                     (SELECT COUNT(*) FROM system_registry r WHERE r.account_id=a.id) \
+                      AS system_count \
+                     FROM accounts a WHERE a.status <> 'deleted' ORDER BY a.display_name",
+                )
+                .fetch_all(&mut connection)
+                .await
+                .map_err(|_| AdministrationApiError::Unavailable)?;
+                return rows
+                    .iter()
+                    .map(|row| {
+                        let id = Uuid::from_slice(&row.get::<Vec<u8>, _>("id"))
+                            .ok()
+                            .and_then(|value| AccountId::from_uuid(value).ok())
+                            .ok_or(AdministrationApiError::Unavailable)?;
+                        Ok(AccountSummary {
+                            id,
+                            slug: row.get("slug"),
+                            display_name: row.get("display_name"),
+                            status: row.get("status"),
+                            member_count: u64::try_from(row.get::<i64, _>("member_count"))
+                                .unwrap_or_default(),
+                            system_count: u64::try_from(row.get::<i64, _>("system_count"))
+                                .unwrap_or_default(),
+                            created_at_epoch_millis: row.get("created_at"),
+                        })
+                    })
+                    .collect();
+            }
+        }
+        Err(AdministrationApiError::Unavailable)
+    }
+
     async fn weather_feed(&self) -> Result<WeatherFeedSettings, AdministrationApiError> {
         self.load(WEATHER_KEY, default_weather()).await
     }

@@ -10,7 +10,7 @@ use chrono::{DateTime, Datelike as _, Duration, NaiveDate, TimeZone as _};
 use chrono_tz::Tz;
 use pvlog_api::{
     BestBucket, InsightApiError, InsightApiUseCases, InsightRange, PreviousPeriod, RangeSummary,
-    RevenueSummary, StringContribution,
+    RevenueSummary, StringContribution, WeatherClassShare, WeatherMonth,
 };
 use pvlog_application::Clock;
 use pvlog_domain::{AccountId, SystemId, UserId};
@@ -318,6 +318,59 @@ impl InsightApiUseCases for StorageInsightApi {
         }
     }
 
+    async fn weather_composition(
+        &self,
+        _actor: UserId,
+        system_id: SystemId,
+        months: u32,
+    ) -> Result<Vec<WeatherMonth>, InsightApiError> {
+        #[cfg(feature = "sqlite")]
+        {
+            let account = self.account(system_id).await?;
+            let mut connection = account
+                .acquire()
+                .await
+                .map_err(|_| InsightApiError::Unavailable)?;
+            let (zone, _) = system_settings(&mut connection, system_id).await?;
+            let mut out = Vec::new();
+            for offset in (0..months).rev() {
+                let Some((start, end)) = month_window(zone, self.now(), offset) else {
+                    continue;
+                };
+                let energy: i64 = sqlx::query_scalar(
+                    "SELECT COALESCE(SUM(generation_energy_sum_wh),0) FROM telemetry_rollups \
+                     WHERE system_id=? AND scope_kind='system' AND resolution='day' \
+                     AND bucket_start>=? AND bucket_start<?",
+                )
+                .bind(id_blob(system_id))
+                .bind(start)
+                .bind(end)
+                .fetch_one(&mut *connection)
+                .await
+                .map_err(|_| InsightApiError::Unavailable)?;
+                let shares = weather_shares(&mut connection, system_id, start, end).await?;
+                out.push(WeatherMonth {
+                    month_start_epoch_millis: start,
+                    generation_energy_wh: energy,
+                    classes: shares
+                        .into_iter()
+                        .map(|(class, share)| WeatherClassShare {
+                            class: class.to_owned(),
+                            share_basis_points: share,
+                            generation_energy_wh: energy * i64::from(share) / 10_000,
+                        })
+                        .collect(),
+                });
+            }
+            return Ok(out);
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            let _ = (system_id, months);
+            Err(InsightApiError::Unavailable)
+        }
+    }
+
     async fn tariffs(
         &self,
         _actor: UserId,
@@ -447,6 +500,72 @@ impl InsightApiUseCases for StorageInsightApi {
             Err(InsightApiError::Unavailable)
         }
     }
+}
+
+/// Local month boundary `offset` months back from now.
+fn month_window(zone: Tz, now: i64, offset: u32) -> Option<(i64, i64)> {
+    let local = DateTime::from_timestamp_millis(now)?.with_timezone(&zone);
+    let months_back = i32::try_from(offset).ok()?;
+    let total = local.year() * 12 + i32::try_from(local.month()).ok()? - 1 - months_back;
+    let (year, month) = (total.div_euclid(12), total.rem_euclid(12) + 1);
+    let start = NaiveDate::from_ymd_opt(year, u32::try_from(month).ok()?, 1)?;
+    let next_total = total + 1;
+    let next = NaiveDate::from_ymd_opt(
+        next_total.div_euclid(12),
+        u32::try_from(next_total.rem_euclid(12) + 1).ok()?,
+        1,
+    )?;
+    Some((start_of_day(zone, start)?, start_of_day(zone, next)?))
+}
+
+/// Splits a month's weather intervals into sky-condition classes.
+///
+/// Classes come from recorded cloud cover. Precipitation classes the dashboard
+/// also draws — showers and snow — have no column in `weather_data_points`, so
+/// they are not invented here.
+#[cfg(feature = "sqlite")]
+async fn weather_shares(
+    connection: &mut sqlx::SqliteConnection,
+    system_id: SystemId,
+    start: i64,
+    end: i64,
+) -> Result<Vec<(&'static str, u16)>, InsightApiError> {
+    let rows = sqlx::query(
+        "SELECT p.cloud_cover_basis_points AS cover FROM weather_data_points p \
+         JOIN weather_data_runs r ON r.id=p.run_id \
+         WHERE r.system_id=? AND p.interval_start>=? AND p.interval_start<? \
+         AND p.cloud_cover_basis_points IS NOT NULL",
+    )
+    .bind(id_blob(system_id))
+    .bind(start)
+    .bind(end)
+    .fetch_all(&mut *connection)
+    .await
+    .map_err(|_| InsightApiError::Unavailable)?;
+    let total = rows.len();
+    if total == 0 {
+        return Ok(Vec::new());
+    }
+    let mut counts = [0_usize; 4];
+    for row in &rows {
+        let cover: i64 = row.try_get("cover").unwrap_or_default();
+        let index = match cover {
+            ..=2_000 => 0,
+            2_001..=5_000 => 1,
+            5_001..=8_000 => 2,
+            _ => 3,
+        };
+        counts[index] += 1;
+    }
+    let names = ["clear", "partly_cloudy", "mostly_cloudy", "overcast"];
+    Ok(names
+        .iter()
+        .zip(counts.iter())
+        .map(|(name, count)| {
+            let share = u16::try_from(count * 10_000 / total).unwrap_or(10_000);
+            (*name, share)
+        })
+        .collect())
 }
 
 /// One aggregate bucket reduced to what a summary needs.

@@ -7,9 +7,10 @@ use axum::{
     http::{Method, Request, StatusCode},
 };
 use pvlog_api::{
-    AdministrationApiError, AdministrationApiUseCases, BackupResult, ConnectionTestResult,
-    EmailEncryption, EmailNotificationSettings, ModernRequestAuthorizer, RequestAuthorizationError,
-    RequestPrincipal, RetentionBackupSettings, WeatherFeedSettings, administration_router,
+    AccountSummary, AdministrationApiError, AdministrationApiUseCases, BackupResult,
+    ConnectionTestResult, EmailEncryption, EmailNotificationSettings, ModernRequestAuthorizer,
+    RequestAuthorizationError, RequestPrincipal, RetentionBackupSettings, WeatherFeedSettings,
+    administration_router,
 };
 use pvlog_domain::{AccountId, Permission, PrincipalId, SystemId, UserId};
 use tower::ServiceExt as _;
@@ -60,6 +61,10 @@ struct Settings;
 
 #[async_trait]
 impl AdministrationApiUseCases for Settings {
+    async fn accounts(&self) -> Result<Vec<AccountSummary>, AdministrationApiError> {
+        Ok(Vec::new())
+    }
+
     async fn weather_feed(&self) -> Result<WeatherFeedSettings, AdministrationApiError> {
         Ok(weather())
     }
