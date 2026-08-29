@@ -7,6 +7,11 @@
 //! power series over a rollup is the mean power implied by the bucket's energy
 //! and its width. Fields sourced from the yield-forecasting projections are
 //! returned as empty series until that pipeline is wired.
+//!
+//! Below the system, readings come from the channels bound to the requested
+//! equipment. A system-scoped read is the sum of its strings whenever any string
+//! is metered, and falls back to the plant-wide observation columns otherwise —
+//! matching the rule that an aggregate view is the true sum of its members.
 
 use async_trait::async_trait;
 use pvlog_application::{
@@ -23,10 +28,48 @@ use sqlx::{Connection as _, PgConnection};
 const MILLIS_PER_HOUR: i64 = 3_600_000;
 const FULL_COVERAGE: u16 = 10_000;
 
+/// Equipment level a series describes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SeriesScope {
+    System,
+    Inverter(uuid::Uuid),
+    String(uuid::Uuid),
+}
+
+impl SeriesScope {
+    /// Parses the wire form, defaulting to the system when nothing is requested.
+    #[must_use]
+    pub fn parse(kind: Option<&str>, scope_id: Option<uuid::Uuid>) -> Option<Self> {
+        match (kind.unwrap_or("system"), scope_id) {
+            ("system", _) => Some(Self::System),
+            ("inverter", Some(id)) => Some(Self::Inverter(id)),
+            ("string", Some(id)) => Some(Self::String(id)),
+            _ => None,
+        }
+    }
+
+    const fn name(self) -> &'static str {
+        match self {
+            Self::System => "system",
+            Self::Inverter(_) => "inverter",
+            Self::String(_) => "string",
+        }
+    }
+
+    /// Identifier stored alongside the scope; the system carries its own.
+    fn identifier(self, system_id: SystemId) -> uuid::Uuid {
+        match self {
+            Self::System => system_id.as_uuid(),
+            Self::Inverter(id) | Self::String(id) => id,
+        }
+    }
+}
+
 /// Executes planned reads against the account database that owns a system.
 pub struct AccountSeriesRepository {
     target: DatabaseTarget,
     account_id: AccountId,
+    scope: SeriesScope,
     start_epoch_millis: i64,
     end_epoch_millis: i64,
 }
@@ -36,12 +79,14 @@ impl AccountSeriesRepository {
     pub const fn new(
         target: DatabaseTarget,
         account_id: AccountId,
+        scope: SeriesScope,
         start_epoch_millis: i64,
         end_epoch_millis: i64,
     ) -> Self {
         Self {
             target,
             account_id,
+            scope,
             start_epoch_millis,
             end_epoch_millis,
         }
@@ -134,6 +179,90 @@ impl AccountSeriesRepository {
         }
     }
 
+    /// Sums the channels bound to the requested equipment, one row per instant.
+    ///
+    /// Returns `None` when the scope is the system and no string is metered, so
+    /// the caller can fall back to the plant-wide observation columns.
+    ///
+    /// A system-scoped read sums only string channels; an inverter-level channel
+    /// is deliberately excluded so the same energy is never counted twice.
+    #[cfg(feature = "sqlite")]
+    async fn sqlite_channel_rows(
+        &self,
+        connection: &mut sqlx::SqliteConnection,
+        system_id: SystemId,
+    ) -> Result<Option<Vec<SampleRow>>, SeriesQueryRepositoryError> {
+        let system = id_blob(system_id);
+        let rows = match self.scope {
+            SeriesScope::System => {
+                sqlx::query(
+                    "SELECT h.measured_at AS measured_at,SUM(v.integer_value) AS total,\
+                 MAX(h.quality_flags) AS quality_flags FROM telemetry_hot_extended_values v \
+                 JOIN telemetry_hot h ON h.observation_id=v.observation_id \
+                 JOIN channel_definitions c ON c.id=v.channel_id \
+                 WHERE h.system_id=? AND h.measured_at>=? AND h.measured_at<? \
+                 AND c.lifecycle='active' AND c.target_kind='string' \
+                 GROUP BY h.measured_at ORDER BY h.measured_at",
+                )
+                .bind(system)
+                .bind(self.start_epoch_millis)
+                .bind(self.end_epoch_millis)
+                .fetch_all(&mut *connection)
+                .await
+            }
+            SeriesScope::Inverter(inverter) => {
+                sqlx::query(
+                    "SELECT h.measured_at AS measured_at,SUM(v.integer_value) AS total,\
+                 MAX(h.quality_flags) AS quality_flags FROM telemetry_hot_extended_values v \
+                 JOIN telemetry_hot h ON h.observation_id=v.observation_id \
+                 JOIN channel_definitions c ON c.id=v.channel_id \
+                 WHERE h.system_id=? AND h.measured_at>=? AND h.measured_at<? \
+                 AND c.lifecycle='active' AND c.target_kind='string' \
+                 AND c.target_id IN (SELECT p.id FROM pv_strings p WHERE p.inverter_id=?) \
+                 GROUP BY h.measured_at ORDER BY h.measured_at",
+                )
+                .bind(system)
+                .bind(self.start_epoch_millis)
+                .bind(self.end_epoch_millis)
+                .bind(inverter.as_bytes().to_vec())
+                .fetch_all(&mut *connection)
+                .await
+            }
+            SeriesScope::String(string_id) => {
+                sqlx::query(
+                    "SELECT h.measured_at AS measured_at,SUM(v.integer_value) AS total,\
+                 MAX(h.quality_flags) AS quality_flags FROM telemetry_hot_extended_values v \
+                 JOIN telemetry_hot h ON h.observation_id=v.observation_id \
+                 JOIN channel_definitions c ON c.id=v.channel_id \
+                 WHERE h.system_id=? AND h.measured_at>=? AND h.measured_at<? \
+                 AND c.lifecycle='active' AND c.target_kind='string' AND c.target_id=? \
+                 GROUP BY h.measured_at ORDER BY h.measured_at",
+                )
+                .bind(system)
+                .bind(self.start_epoch_millis)
+                .bind(self.end_epoch_millis)
+                .bind(string_id.as_bytes().to_vec())
+                .fetch_all(&mut *connection)
+                .await
+            }
+        }
+        .map_err(|_| SeriesQueryRepositoryError::Unavailable)?;
+        if rows.is_empty() && self.scope == SeriesScope::System {
+            return Ok(None);
+        }
+        Ok(Some(
+            rows.iter()
+                .map(|row| SampleRow {
+                    timestamp_epoch_millis: row.get("measured_at"),
+                    generation_power_watts: optional(row.try_get("total")),
+                    quality_flags: narrow_flags(row.try_get("quality_flags").ok()),
+                    coverage_basis_points: FULL_COVERAGE,
+                    ..SampleRow::default()
+                })
+                .collect(),
+        ))
+    }
+
     #[cfg(feature = "sqlite")]
     async fn sqlite_raw(
         &self,
@@ -146,6 +275,9 @@ impl AccountSeriesRepository {
             .acquire()
             .await
             .map_err(|_| SeriesQueryRepositoryError::Unavailable)?;
+        if let Some(rows) = self.sqlite_channel_rows(&mut connection, system_id).await? {
+            return Ok(rows);
+        }
         let rows = sqlx::query(
             "SELECT measured_at,generation_power_watts,generation_energy_wh,\
              consumption_power_watts,consumption_energy_wh,net_grid_power_watts,\
@@ -258,7 +390,7 @@ impl AccountSeriesRepository {
             "SELECT bucket_start,bucket_end,generation_energy_sum_wh,consumption_energy_sum_wh,\
              grid_import_energy_sum_wh,grid_export_energy_sum_wh,battery_energy_delta_wh,\
              temperature_max_millidegrees_c,quality_flags,coverage_basis_points \
-             FROM telemetry_rollups r WHERE system_id=? AND scope_kind='system' \
+             FROM telemetry_rollups r WHERE system_id=? AND scope_kind=? AND scope_id=? \
              AND resolution=? AND bucket_start>=? AND bucket_start<? \
              AND generation=(SELECT MAX(latest.generation) FROM telemetry_rollups latest \
              WHERE latest.system_id=r.system_id AND latest.scope_kind=r.scope_kind \
@@ -266,6 +398,8 @@ impl AccountSeriesRepository {
              AND latest.bucket_start=r.bucket_start) ORDER BY bucket_start",
         )
         .bind(id_blob(system_id))
+        .bind(self.scope.name())
+        .bind(self.scope.identifier(system_id).as_bytes().to_vec())
         .bind(resolution_name(resolution))
         .bind(self.start_epoch_millis)
         .bind(self.end_epoch_millis)
@@ -320,8 +454,8 @@ impl AccountSeriesRepository {
              temperature_max_millidegrees_c,quality_flags::BIGINT AS quality_flags,\
              coverage_basis_points::BIGINT AS coverage_basis_points \
              FROM telemetry.rollups r WHERE account_id=$1 AND system_id=$2 \
-             AND scope_kind='system' AND resolution=$3 \
-             AND bucket_start>=$4 AND bucket_start<$5 \
+             AND scope_kind=$3 AND scope_id=$4 AND resolution=$5 \
+             AND bucket_start>=$6 AND bucket_start<$7 \
              AND generation=(SELECT MAX(latest.generation) FROM telemetry.rollups latest \
              WHERE latest.account_id=r.account_id AND latest.system_id=r.system_id \
              AND latest.scope_kind=r.scope_kind AND latest.scope_id=r.scope_id \
@@ -330,6 +464,8 @@ impl AccountSeriesRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
+        .bind(self.scope.name())
+        .bind(self.scope.identifier(system_id))
         .bind(resolution_name(resolution))
         .bind(self.start_epoch_millis)
         .bind(self.end_epoch_millis)

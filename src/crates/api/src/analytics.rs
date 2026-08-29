@@ -45,6 +45,9 @@ struct SeriesParameters {
     maximum_points: Option<u32>,
     expected_interval_millis: Option<u64>,
     hot_data_start_epoch_millis: Option<i64>,
+    /// `system` (default), `inverter`, or `string`.
+    scope: Option<String>,
+    scope_id: Option<uuid::Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -69,6 +72,8 @@ struct ExportBody {
     timezone: Option<String>,
     maximum_points: Option<u32>,
     format: String,
+    scope: Option<String>,
+    scope_id: Option<uuid::Uuid>,
     asynchronous: Option<bool>,
     weather_run_id: Option<WeatherDataRunId>,
     include_partial: Option<bool>,
@@ -150,6 +155,8 @@ async fn export(
         maximum_points: body.maximum_points,
         expected_interval_millis: None,
         hot_data_start_epoch_millis: None,
+        scope: body.scope,
+        scope_id: body.scope_id,
     };
     match state
         .service
@@ -197,6 +204,8 @@ fn query_request(parameters: SeriesParameters) -> Result<QueryPlanRequest, Analy
         maximum_points: parameters.maximum_points.unwrap_or(2_000).min(10_000),
         expected_raw_interval_millis: parameters.expected_interval_millis.unwrap_or(300_000),
         hot_data_start_epoch_millis: parameters.hot_data_start_epoch_millis.unwrap_or(i64::MIN),
+        scope: parameters.scope,
+        scope_id: parameters.scope_id,
         available_rollups: BTreeSet::from([
             QueryResolution::FifteenMinutes,
             QueryResolution::Hourly,

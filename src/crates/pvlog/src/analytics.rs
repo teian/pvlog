@@ -22,7 +22,7 @@ use sqlx::Row;
 #[cfg(feature = "postgres")]
 use sqlx::{Connection as _, PgConnection};
 
-use crate::analytics_series::AccountSeriesRepository;
+use crate::analytics_series::{AccountSeriesRepository, SeriesScope};
 
 const MILLIS_PER_DAY: u64 = 86_400_000;
 const DEFAULT_EXPECTED_INTERVAL_MILLIS: u64 = 300_000;
@@ -80,9 +80,12 @@ impl ModernAnalyticsUseCases for StorageAnalyticsApi {
         request: QueryPlanRequest,
     ) -> Result<pvlog_application::SeriesQueryResult, ModernAnalyticsError> {
         let account_id = self.authorize(actor, system_id).await?;
+        let scope = SeriesScope::parse(request.scope.as_deref(), request.scope_id)
+            .ok_or(ModernAnalyticsError::Invalid)?;
         let repository = Arc::new(AccountSeriesRepository::new(
             self.target.clone(),
             account_id,
+            scope,
             request.start_epoch_millis,
             request.end_epoch_millis,
         ));

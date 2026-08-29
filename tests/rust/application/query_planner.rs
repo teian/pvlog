@@ -16,6 +16,8 @@ fn request(days: i64) -> QueryPlanRequest {
         maximum_points: 2_000,
         expected_raw_interval_millis: 300_000,
         hot_data_start_epoch_millis: 35 * DAY,
+        scope: None,
+        scope_id: None,
         available_rollups: BTreeSet::from([
             QueryResolution::FifteenMinutes,
             QueryResolution::Hourly,

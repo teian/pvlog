@@ -52,6 +52,10 @@ name = "pvlog"
 path = "src/main.rs"
 
 [[test]]
+name = "series-scopes"
+path = "../../../tests/rust/pvlog/series_scopes.rs"
+
+[[test]]
 name = "runtime-smoke"
 path = "../../../tests/rust/smoke/runtime_smoke.rs"
 
