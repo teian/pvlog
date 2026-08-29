@@ -49,6 +49,7 @@ mod rbac;
 mod readiness;
 mod reporting;
 mod sessions;
+mod sharing;
 mod systems;
 mod telemetry;
 mod user_lifecycle;
@@ -125,6 +126,10 @@ pub use reporting::{
 pub use sessions::{
     SessionApiError, SessionBootstrap, SessionBootstrapUseCases, SessionConnector, SessionUser,
     sessions_router,
+};
+pub use sharing::{
+    PublicDirectoryEntry, PublicSystem, SharingApiError, SharingApiUseCases, SharingInput,
+    SharingState, sharing_router,
 };
 pub use systems::systems_router;
 pub use telemetry::telemetry_router;

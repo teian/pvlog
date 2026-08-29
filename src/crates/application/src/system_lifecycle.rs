@@ -16,6 +16,10 @@ pub struct SystemLifecycleRecord {
     pub id: SystemId,
     pub account_id: AccountId,
     pub name: String,
+    /// Free-text placement shown beside the name; empty when unset.
+    pub description: String,
+    /// Local commissioning date as `YYYY-MM-DD`.
+    pub commissioning_date: Option<String>,
     pub timezone: String,
     pub visibility: Visibility,
     pub lifecycle: SystemLifecycle,
@@ -36,6 +40,8 @@ pub struct UpdateSystem {
     pub actor: UserId,
     pub expected_version: u64,
     pub name: String,
+    pub description: String,
+    pub commissioning_date: Option<String>,
     pub timezone: String,
     pub visibility: Visibility,
 }
@@ -126,6 +132,8 @@ impl SystemLifecycleService {
             id: SystemId::new(),
             account_id: request.account_id,
             name: request.name,
+            description: String::new(),
+            commissioning_date: None,
             timezone: request.timezone,
             visibility: Visibility::Private,
             lifecycle: SystemLifecycle::Active,
@@ -190,6 +198,8 @@ impl SystemLifecycleService {
         validate(&request.name, &request.timezone)?;
         let mut record = self.load(request.id).await?;
         record.name = request.name;
+        record.description = request.description;
+        record.commissioning_date = request.commissioning_date;
         record.timezone = request.timezone;
         record.visibility = request.visibility;
         record.updated_at = self.now()?;

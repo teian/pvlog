@@ -25,6 +25,7 @@ use pvlog::notifications::ManagementNotificationApi;
 use pvlog::operator_bundle::{
     export_account_bundle, export_bundle, export_postgres_bundle, import_bundle, verify_bundle,
 };
+use pvlog::sharing::StorageSharingApi;
 use pvlog::telemetry::StorageTelemetryApi;
 use pvlog_application::{
     ApiTokenService, Argon2CredentialConfig, Argon2CredentialService, BrowserSessionPolicy,
@@ -727,6 +728,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
         compose_management_repository(target)?,
         Arc::new(SystemClock),
     ));
+    let sharing = Arc::new(StorageSharingApi::new(
+        target.clone(),
+        Arc::new(SystemClock),
+    ));
     let telemetry = Arc::new(StorageTelemetryApi::new(
         target.clone(),
         compose_management_repository(target)?,
@@ -801,6 +806,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
             ))
             .merge(pvlog_api::insights_router(
                 insights,
+                request_authorizer.clone(),
+            ))
+            .merge(pvlog_api::sharing_router(
+                sharing,
                 request_authorizer.clone(),
             ))
             .merge(pvlog_api::dashboard_router(dashboard)),

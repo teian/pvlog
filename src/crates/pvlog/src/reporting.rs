@@ -44,23 +44,18 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .await
                         .map_err(|_| ReportingApiError::Unavailable)?;
                     let row = sqlx::query(
-                        "SELECT s.name,s.timezone,s.lifecycle,COUNT(DISTINCT i.id) AS inverter_count,\
-                         COUNT(DISTINCT p.id) AS string_count,SUM(p.rated_power_watts) AS capacity_watts \
+                        "SELECT s.name,s.timezone,s.lifecycle,s.description,s.commissioning_date,s.visibility,\
+                         COUNT(DISTINCT i.id) AS inverter_count,\
+                         COUNT(DISTINCT p.id) AS string_count,SUM(p.rated_power_watts) AS capacity_watts,\
+                         (SELECT coverage_basis_points FROM system_lifetime_summaries l \
+                          WHERE l.system_id=s.id) AS availability,\
+                         (SELECT MAX(measured_at) FROM telemetry_hot h WHERE h.system_id=s.id) AS last_seen \
                          FROM systems s LEFT JOIN inverters i ON i.system_id=s.id \
-                         LEFT JOIN pv_strings p ON p.inverter_id=i.id WHERE s.id=? GROUP BY s.id,s.name,s.timezone,s.lifecycle",
+                         LEFT JOIN pv_strings p ON p.inverter_id=i.id WHERE s.id=? \
+                         GROUP BY s.id,s.name,s.timezone,s.lifecycle",
                     ).bind(id_blob(system_id)).fetch_optional(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
-                    row.map(|row| SystemOverviewResponse {
-                        id: system_id,
-                        name: row.get("name"),
-                        timezone: row.get("timezone"),
-                        lifecycle: row.get("lifecycle"),
-                        inverter_count: u64::try_from(row.get::<i64, _>("inverter_count"))
-                            .unwrap_or_default(),
-                        string_count: u64::try_from(row.get::<i64, _>("string_count"))
-                            .unwrap_or_default(),
-                        capacity_watts: row.try_get("capacity_watts").ok(),
-                    })
-                    .ok_or(ReportingApiError::NotFound)
+                    row.map(|row| sqlite_overview(system_id, &row))
+                        .ok_or(ReportingApiError::NotFound)
                 }
                 #[cfg(not(feature = "sqlite"))]
                 {
@@ -75,8 +70,13 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .await
                         .map_err(|_| ReportingApiError::Unavailable)?;
                     let row = sqlx::query(
-                        "SELECT s.name,s.timezone,s.lifecycle,COUNT(DISTINCT i.id)::BIGINT AS inverter_count,\
-                         COUNT(DISTINCT p.id)::BIGINT AS string_count,SUM(p.rated_power_watts)::BIGINT AS capacity_watts \
+                        "SELECT s.name,s.timezone,s.lifecycle,s.description,s.commissioning_date::TEXT AS commissioning_date,\
+                         s.visibility,COUNT(DISTINCT i.id)::BIGINT AS inverter_count,\
+                         COUNT(DISTINCT p.id)::BIGINT AS string_count,SUM(p.rated_power_watts)::BIGINT AS capacity_watts,\
+                         (SELECT coverage_basis_points::BIGINT FROM telemetry.lifetime_summaries l \
+                          WHERE l.account_id=s.account_id AND l.system_id=s.id) AS availability,\
+                         (SELECT MAX(measured_at) FROM telemetry.hot_observations h \
+                          WHERE h.account_id=s.account_id AND h.system_id=s.id) AS last_seen \
                          FROM account_data.systems s LEFT JOIN account_data.inverters i ON i.account_id=s.account_id AND i.system_id=s.id \
                          LEFT JOIN account_data.pv_strings p ON p.account_id=i.account_id AND p.inverter_id=i.id \
                          WHERE s.account_id=$1 AND s.id=$2 GROUP BY s.id,s.name,s.timezone,s.lifecycle",
@@ -85,18 +85,8 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .close()
                         .await
                         .map_err(|_| ReportingApiError::Unavailable)?;
-                    row.map(|row| SystemOverviewResponse {
-                        id: system_id,
-                        name: row.get("name"),
-                        timezone: row.get("timezone"),
-                        lifecycle: row.get("lifecycle"),
-                        inverter_count: u64::try_from(row.get::<i64, _>("inverter_count"))
-                            .unwrap_or_default(),
-                        string_count: u64::try_from(row.get::<i64, _>("string_count"))
-                            .unwrap_or_default(),
-                        capacity_watts: row.try_get("capacity_watts").ok(),
-                    })
-                    .ok_or(ReportingApiError::NotFound)
+                    row.map(|row| postgres_overview(system_id, &row))
+                        .ok_or(ReportingApiError::NotFound)
                 }
                 #[cfg(not(feature = "postgres"))]
                 {
@@ -302,6 +292,52 @@ impl ReportingApiUseCases for StorageReportingApi {
             }
         }
     }
+}
+
+/// Shapes one overview row; the equipment counts come from the join, the
+/// availability and last-seen values from the aggregates the worker maintains.
+#[cfg(feature = "sqlite")]
+fn sqlite_overview(system_id: SystemId, row: &sqlx::sqlite::SqliteRow) -> SystemOverviewResponse {
+    SystemOverviewResponse {
+        id: system_id,
+        name: row.get("name"),
+        timezone: row.get("timezone"),
+        lifecycle: row.get("lifecycle"),
+        inverter_count: u64::try_from(row.get::<i64, _>("inverter_count")).unwrap_or_default(),
+        string_count: u64::try_from(row.get::<i64, _>("string_count")).unwrap_or_default(),
+        capacity_watts: row.try_get("capacity_watts").ok(),
+        description: row.try_get("description").unwrap_or_default(),
+        commissioning_date: row.try_get("commissioning_date").ok().flatten(),
+        availability_basis_points: overview_availability(
+            row.try_get("availability").ok().flatten(),
+        ),
+        last_seen_epoch_millis: row.try_get("last_seen").ok().flatten(),
+        visibility: row.try_get("visibility").unwrap_or_default(),
+    }
+}
+
+#[cfg(feature = "postgres")]
+fn postgres_overview(system_id: SystemId, row: &sqlx::postgres::PgRow) -> SystemOverviewResponse {
+    SystemOverviewResponse {
+        id: system_id,
+        name: row.get("name"),
+        timezone: row.get("timezone"),
+        lifecycle: row.get("lifecycle"),
+        inverter_count: u64::try_from(row.get::<i64, _>("inverter_count")).unwrap_or_default(),
+        string_count: u64::try_from(row.get::<i64, _>("string_count")).unwrap_or_default(),
+        capacity_watts: row.try_get("capacity_watts").ok(),
+        description: row.try_get("description").unwrap_or_default(),
+        commissioning_date: row.try_get("commissioning_date").ok().flatten(),
+        availability_basis_points: overview_availability(
+            row.try_get("availability").ok().flatten(),
+        ),
+        last_seen_epoch_millis: row.try_get("last_seen").ok().flatten(),
+        visibility: row.try_get("visibility").unwrap_or_default(),
+    }
+}
+
+fn overview_availability(stored: Option<i64>) -> Option<u16> {
+    stored.and_then(|value| u16::try_from(value).ok())
 }
 
 #[cfg(feature = "sqlite")]

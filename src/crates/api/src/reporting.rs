@@ -28,6 +28,13 @@ pub struct SystemOverviewResponse {
     pub inverter_count: u64,
     pub string_count: u64,
     pub capacity_watts: Option<i64>,
+    /// Free-text placement, shown beside the name.
+    pub description: String,
+    pub commissioning_date: Option<String>,
+    /// Share of the expected reporting intervals that actually arrived.
+    pub availability_basis_points: Option<u16>,
+    pub last_seen_epoch_millis: Option<i64>,
+    pub visibility: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

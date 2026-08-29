@@ -18,6 +18,7 @@ pub mod inverters;
 pub mod notifications;
 pub mod operator_bundle;
 pub mod reporting;
+pub mod sharing;
 pub mod tariffs;
 pub mod telemetry;
 
