@@ -39,6 +39,7 @@ mod equipment_catalog;
 mod forecasting;
 mod geocoding;
 mod identities;
+mod insights;
 mod inverters;
 mod local_password;
 mod managed_resources;
@@ -95,6 +96,10 @@ pub use forecasting::{
 pub use geocoding::{GeocodingApi, GeocodingError, GeocodingResult, geocoding_router};
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,
+};
+pub use insights::{
+    BestBucket, InsightApiError, InsightApiUseCases, InsightRange, PreviousPeriod, RangeSummary,
+    RevenueSummary, StringContribution, insights_router,
 };
 pub use inverters::{
     InverterApiError, InverterApiUseCases, InverterInput, InverterResponse, PvStringInput,

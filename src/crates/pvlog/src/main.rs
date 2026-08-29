@@ -19,6 +19,7 @@ use pvlog::authentication::{
 use pvlog::channels::StorageChannelApi;
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
 use pvlog::dashboard::StorageDashboardApi;
+use pvlog::insights::StorageInsightApi;
 use pvlog::inverters::ManagementInverterApi;
 use pvlog::notifications::ManagementNotificationApi;
 use pvlog::operator_bundle::{
@@ -721,6 +722,11 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
         compose_management_repository(target)?,
         Arc::new(SystemClock),
     ));
+    let insights = Arc::new(StorageInsightApi::new(
+        target.clone(),
+        compose_management_repository(target)?,
+        Arc::new(SystemClock),
+    ));
     let telemetry = Arc::new(StorageTelemetryApi::new(
         target.clone(),
         compose_management_repository(target)?,
@@ -791,6 +797,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
             ))
             .merge(pvlog_api::channels_router(
                 channels,
+                request_authorizer.clone(),
+            ))
+            .merge(pvlog_api::insights_router(
+                insights,
                 request_authorizer.clone(),
             ))
             .merge(pvlog_api::dashboard_router(dashboard)),

@@ -13,10 +13,12 @@ pub mod config;
 pub mod dashboard;
 pub mod embedded_ui;
 pub mod geocoding;
+pub mod insights;
 pub mod inverters;
 pub mod notifications;
 pub mod operator_bundle;
 pub mod reporting;
+pub mod tariffs;
 pub mod telemetry;
 
 use pvlog_application::Clock;
