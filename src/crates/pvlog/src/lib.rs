@@ -12,6 +12,7 @@ pub mod channels;
 pub mod config;
 pub mod dashboard;
 pub mod embedded_ui;
+pub mod forecasting;
 pub mod geocoding;
 pub mod insights;
 pub mod inverters;
@@ -21,6 +22,9 @@ pub mod reporting;
 pub mod sharing;
 pub mod tariffs;
 pub mod telemetry;
+pub mod weather;
+pub mod yield_cycle;
+pub mod yield_model;
 
 use pvlog_application::Clock;
 use pvlog_domain::UtcTimestamp;

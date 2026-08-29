@@ -166,6 +166,17 @@ impl AggregationReport {
 }
 
 /// Lists every provisioned account database in the management registry.
+///
+/// # Errors
+///
+/// Returns an error when the management database cannot be read.
+#[cfg(feature = "sqlite")]
+pub async fn active_accounts(
+    management_path: &std::path::Path,
+) -> Result<Vec<AccountId>, AggregationError> {
+    account_ids(management_path).await
+}
+
 #[cfg(feature = "sqlite")]
 async fn account_ids(
     management_path: &std::path::Path,

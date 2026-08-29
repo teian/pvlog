@@ -19,6 +19,7 @@ use pvlog::authentication::{
 use pvlog::channels::StorageChannelApi;
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
 use pvlog::dashboard::StorageDashboardApi;
+use pvlog::forecasting::StorageForecastApi;
 use pvlog::insights::StorageInsightApi;
 use pvlog::inverters::ManagementInverterApi;
 use pvlog::notifications::ManagementNotificationApi;
@@ -177,6 +178,7 @@ async fn main() -> Result<(), StartupError> {
             pvlog_worker::run_once(&target).await?;
             let management = compose_management_repository(&target)?;
             run_aggregation_cycle(&target, management.as_ref()).await;
+            run_yield_cycle(&target, management.as_ref()).await;
             Ok(())
         }
         Command::Worker {
@@ -535,8 +537,25 @@ async fn run_worker(target: &DatabaseTarget, interval_seconds: u64) -> Result<()
                     tracing::error!(%error, "worker readiness cycle failed");
                 }
                 run_aggregation_cycle(target, management.as_ref()).await;
+                run_yield_cycle(target, management.as_ref()).await;
             }
         }
+    }
+}
+
+/// Models pending weather runs, logging rather than aborting the worker.
+async fn run_yield_cycle(
+    target: &DatabaseTarget,
+    management: &dyn pvlog_storage::ManagementRepository,
+) {
+    match pvlog::yield_cycle::run_cycle(target, management).await {
+        Ok(report) if report.runs_calculated > 0 => tracing::info!(
+            runs = report.runs_calculated,
+            intervals = report.intervals_written,
+            "yield calculation cycle completed"
+        ),
+        Ok(_) => tracing::debug!("yield calculation cycle found no pending weather runs"),
+        Err(error) => tracing::error!(%error, "yield calculation cycle failed"),
     }
 }
 
@@ -732,6 +751,12 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
         target.clone(),
         Arc::new(SystemClock),
     ));
+    let forecasting = Arc::new(StorageForecastApi::new(
+        target.clone(),
+        compose_management_repository(target)?,
+        Arc::new(SystemClock),
+        i64::from(config.forecasting.maximum_stale_age_seconds).saturating_mul(1_000),
+    ));
     let telemetry = Arc::new(StorageTelemetryApi::new(
         target.clone(),
         compose_management_repository(target)?,
@@ -810,6 +835,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
             ))
             .merge(pvlog_api::sharing_router(
                 sharing,
+                request_authorizer.clone(),
+            ))
+            .merge(pvlog_api::forecasting_router(
+                forecasting,
                 request_authorizer.clone(),
             ))
             .merge(pvlog_api::dashboard_router(dashboard)),
