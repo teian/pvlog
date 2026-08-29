@@ -255,30 +255,9 @@ async fn rebuild_system(
         .ok_or(AggregationError::Timezone)?;
     let end = next_year_start(zone, end)?;
 
-    let rows = sqlx::query(
-        "SELECT measured_at,generation_power_watts,generation_energy_wh,consumption_energy_wh,\
-         quality_flags FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? \
-         ORDER BY measured_at",
-    )
-    .bind(blob.clone())
-    .bind(start)
-    .bind(end)
-    .fetch_all(&mut *connection)
-    .await
-    .map_err(|_| AggregationError::Unavailable)?;
-    if rows.is_empty() {
+    let Some(samples) = plant_samples(&mut connection, &blob, start, end).await? else {
         return Ok(AggregationReport::default());
-    }
-    let samples: Vec<Sample> = rows
-        .iter()
-        .map(|row| Sample {
-            measured_at: row.get("measured_at"),
-            generation_power_watts: row.try_get("generation_power_watts").ok(),
-            generation_energy_wh: row.try_get("generation_energy_wh").ok(),
-            consumption_energy_wh: row.try_get("consumption_energy_wh").ok(),
-            quality_flags: row.try_get("quality_flags").unwrap_or_default(),
-        })
-        .collect();
+    };
 
     let calculated_at = Utc::now().timestamp_millis();
     let mut report = AggregationReport {
@@ -286,28 +265,150 @@ async fn rebuild_system(
         ..AggregationReport::default()
     };
 
-    let written = write_aggregates(
-        &mut connection,
-        &AggregateContext {
-            blob: blob.clone(),
-            timezone: timezone.clone(),
-            zone,
-            interval_millis,
-            calculated_at,
-        },
-        &samples,
-    )
-    .await?;
-    report.merge(written);
+    // The system bucket keeps using the plant-wide columns; per-string buckets
+    // come from the channels bound to each string, and an inverter is the sum of
+    // the strings beneath it.
+    let scopes = metered_scopes(&mut connection, &blob, start, end, interval_millis).await?;
+    for (scope_kind, scope_id, scope_samples) in
+        std::iter::once(("system", blob.clone(), samples)).chain(scopes)
+    {
+        let written = write_aggregates(
+            &mut connection,
+            &AggregateContext {
+                blob: blob.clone(),
+                scope_kind,
+                scope_id,
+                timezone: timezone.clone(),
+                zone,
+                interval_millis,
+                calculated_at,
+            },
+            &scope_samples,
+        )
+        .await?;
+        report.merge(written);
+    }
 
     rebuild_lifetime(&mut connection, &blob, calculated_at).await?;
     Ok(report)
+}
+
+/// Reads the plant-wide observation columns for one range.
+///
+/// Returns `None` when the range holds no observation at all, so the caller can
+/// stop before touching any aggregate.
+#[cfg(feature = "sqlite")]
+async fn plant_samples(
+    connection: &mut sqlx::SqliteConnection,
+    system: &[u8],
+    start: i64,
+    end: i64,
+) -> Result<Option<Vec<Sample>>, AggregationError> {
+    let rows = sqlx::query(
+        "SELECT measured_at,generation_power_watts,generation_energy_wh,consumption_energy_wh,\
+         quality_flags FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? \
+         ORDER BY measured_at",
+    )
+    .bind(system.to_vec())
+    .bind(start)
+    .bind(end)
+    .fetch_all(&mut *connection)
+    .await
+    .map_err(|_| AggregationError::Unavailable)?;
+    if rows.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(
+        rows.iter()
+            .map(|row| Sample {
+                measured_at: row.get("measured_at"),
+                generation_power_watts: row.try_get("generation_power_watts").ok(),
+                generation_energy_wh: row.try_get("generation_energy_wh").ok(),
+                consumption_energy_wh: row.try_get("consumption_energy_wh").ok(),
+                quality_flags: row.try_get("quality_flags").unwrap_or_default(),
+            })
+            .collect(),
+    ))
+}
+
+/// Collects one sample series per metered string and per inverter above them.
+///
+/// Channel values carry power; the energy a bucket needs is that power held for
+/// one reporting interval, which is the same integration the plant-wide columns
+/// already represent.
+#[cfg(feature = "sqlite")]
+async fn metered_scopes(
+    connection: &mut sqlx::SqliteConnection,
+    system: &[u8],
+    start: i64,
+    end: i64,
+    interval_millis: i64,
+) -> Result<Vec<(&'static str, Vec<u8>, Vec<Sample>)>, AggregationError> {
+    let rows = sqlx::query(
+        "SELECT c.target_id AS string_id,p.inverter_id AS inverter_id,h.measured_at AS measured_at,         SUM(v.integer_value) AS power,MAX(h.quality_flags) AS quality_flags          FROM telemetry_hot_extended_values v          JOIN telemetry_hot h ON h.observation_id=v.observation_id          JOIN channel_definitions c ON c.id=v.channel_id          JOIN pv_strings p ON p.id=c.target_id          WHERE h.system_id=? AND h.measured_at>=? AND h.measured_at<?          AND c.lifecycle='active' AND c.target_kind='string'          GROUP BY c.target_id,h.measured_at ORDER BY c.target_id,h.measured_at",
+    )
+    .bind(system.to_vec())
+    .bind(start)
+    .bind(end)
+    .fetch_all(&mut *connection)
+    .await
+    .map_err(|_| AggregationError::Unavailable)?;
+
+    let mut strings: BTreeMap<Vec<u8>, Vec<Sample>> = BTreeMap::new();
+    let mut inverters: BTreeMap<Vec<u8>, BTreeMap<i64, Sample>> = BTreeMap::new();
+    for row in &rows {
+        let string_id: Vec<u8> = row.get("string_id");
+        let inverter_id: Vec<u8> = row.get("inverter_id");
+        let measured_at: i64 = row.get("measured_at");
+        let power: Option<i64> = row.try_get("power").ok().flatten();
+        let sample = Sample {
+            measured_at,
+            generation_power_watts: power,
+            generation_energy_wh: power.map(|watts| interval_energy(watts, interval_millis)),
+            consumption_energy_wh: None,
+            quality_flags: row.try_get("quality_flags").unwrap_or_default(),
+        };
+        strings.entry(string_id).or_default().push(sample);
+        let bucket = inverters.entry(inverter_id).or_default();
+        let merged = bucket.entry(measured_at).or_insert(Sample {
+            measured_at,
+            generation_power_watts: Some(0),
+            generation_energy_wh: Some(0),
+            consumption_energy_wh: None,
+            quality_flags: 0,
+        });
+        merged.generation_power_watts =
+            Some(merged.generation_power_watts.unwrap_or_default() + power.unwrap_or_default());
+        merged.generation_energy_wh = Some(
+            merged.generation_energy_wh.unwrap_or_default()
+                + sample.generation_energy_wh.unwrap_or_default(),
+        );
+        merged.quality_flags |= sample.quality_flags;
+    }
+
+    let mut scopes: Vec<(&'static str, Vec<u8>, Vec<Sample>)> = strings
+        .into_iter()
+        .map(|(id, samples)| ("string", id, samples))
+        .collect();
+    scopes.extend(
+        inverters
+            .into_iter()
+            .map(|(id, samples)| ("inverter", id, samples.into_values().collect())),
+    );
+    Ok(scopes)
+}
+
+/// Energy produced by holding a power reading for one reporting interval.
+const fn interval_energy(watts: i64, interval_millis: i64) -> i64 {
+    watts * interval_millis / 3_600_000
 }
 
 /// Everything the aggregate writers need beyond the samples themselves.
 #[cfg(feature = "sqlite")]
 struct AggregateContext {
     blob: Vec<u8>,
+    scope_kind: &'static str,
+    scope_id: Vec<u8>,
     timezone: String,
     zone: Tz,
     interval_millis: i64,
@@ -333,9 +434,13 @@ async fn write_aggregates(
             }
         }
     }
-    for (local_date, bucket) in &daily {
-        write_daily_summary(&mut *connection, context, local_date, bucket).await?;
-        report.daily_summaries_written += 1;
+    // Daily and lifetime summaries describe the plant, so only the system scope
+    // contributes to them; per-string totals live in the rollups.
+    if context.scope_kind == "system" {
+        for (local_date, bucket) in &daily {
+            write_daily_summary(&mut *connection, context, local_date, bucket).await?;
+            report.daily_summaries_written += 1;
+        }
     }
     Ok(report)
 }
@@ -368,10 +473,8 @@ async fn write_rollup(
          calculated_at=excluded.calculated_at",
     )
     .bind(context.blob.clone())
-    // Aggregates currently describe the system as a whole; per-string buckets
-    // follow once channel-mapped readings exist.
-    .bind("system")
-    .bind(context.blob.clone())
+    .bind(context.scope_kind)
+    .bind(context.scope_id.clone())
     .bind(resolution.name())
     .bind(bucket.start)
     .bind(bucket.end)
