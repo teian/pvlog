@@ -65,6 +65,8 @@ async fn verify_contract(
 
     let rollup = RollupRecord {
         system_id,
+        scope_kind: "system".to_owned(),
+        scope_id: system_id.as_uuid(),
         resolution: "hour".to_owned(),
         bucket_start: base,
         bucket_end: base + 3_600_000,

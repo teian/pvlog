@@ -223,7 +223,9 @@ async fn rebuild_system(
         .saturating_mul(1_000);
 
     let watermark: Option<i64> =
-        sqlx::query_scalar("SELECT MAX(calculated_at) FROM telemetry_rollups WHERE system_id=?")
+        sqlx::query_scalar(
+            "SELECT MAX(calculated_at) FROM telemetry_rollups WHERE system_id=? AND scope_kind='system'",
+        )
             .bind(blob.clone())
             .fetch_one(&mut *connection)
             .await
@@ -346,13 +348,13 @@ async fn write_rollup(
     bucket: &Bucket,
 ) -> Result<(), AggregationError> {
     sqlx::query(
-        "INSERT INTO telemetry_rollups (system_id,resolution,bucket_start,bucket_end,\
-         timezone,generation,source_generation,point_count,expected_count,\
+        "INSERT INTO telemetry_rollups (system_id,scope_kind,scope_id,resolution,\
+         bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,\
          generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,\
          generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,\
          quality_flags,coverage_basis_points,calculated_at) \
-         VALUES (?,?,?,?,?,1,1,?,?,?,?,?,?,?,?,?,?,?) \
-         ON CONFLICT(system_id,resolution,bucket_start,generation) DO UPDATE SET \
+         VALUES (?,?,?,?,?,?,?,1,1,?,?,?,?,?,?,?,?,?,?,?) \
+         ON CONFLICT(system_id,scope_kind,scope_id,resolution,bucket_start,generation) DO UPDATE SET \
          bucket_end=excluded.bucket_end,point_count=excluded.point_count,\
          expected_count=excluded.expected_count,\
          generation_energy_sum_wh=excluded.generation_energy_sum_wh,\
@@ -365,6 +367,10 @@ async fn write_rollup(
          coverage_basis_points=excluded.coverage_basis_points,\
          calculated_at=excluded.calculated_at",
     )
+    .bind(context.blob.clone())
+    // Aggregates currently describe the system as a whole; per-string buckets
+    // follow once channel-mapped readings exist.
+    .bind("system")
     .bind(context.blob.clone())
     .bind(resolution.name())
     .bind(bucket.start)

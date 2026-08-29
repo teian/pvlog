@@ -258,10 +258,11 @@ impl AccountSeriesRepository {
             "SELECT bucket_start,bucket_end,generation_energy_sum_wh,consumption_energy_sum_wh,\
              grid_import_energy_sum_wh,grid_export_energy_sum_wh,battery_energy_delta_wh,\
              temperature_max_millidegrees_c,quality_flags,coverage_basis_points \
-             FROM telemetry_rollups r WHERE system_id=? AND resolution=? \
-             AND bucket_start>=? AND bucket_start<? \
+             FROM telemetry_rollups r WHERE system_id=? AND scope_kind='system' \
+             AND resolution=? AND bucket_start>=? AND bucket_start<? \
              AND generation=(SELECT MAX(latest.generation) FROM telemetry_rollups latest \
-             WHERE latest.system_id=r.system_id AND latest.resolution=r.resolution \
+             WHERE latest.system_id=r.system_id AND latest.scope_kind=r.scope_kind \
+             AND latest.scope_id=r.scope_id AND latest.resolution=r.resolution \
              AND latest.bucket_start=r.bucket_start) ORDER BY bucket_start",
         )
         .bind(id_blob(system_id))
@@ -318,10 +319,12 @@ impl AccountSeriesRepository {
              grid_import_energy_sum_wh,grid_export_energy_sum_wh,battery_energy_delta_wh,\
              temperature_max_millidegrees_c,quality_flags::BIGINT AS quality_flags,\
              coverage_basis_points::BIGINT AS coverage_basis_points \
-             FROM telemetry.rollups r WHERE account_id=$1 AND system_id=$2 AND resolution=$3 \
+             FROM telemetry.rollups r WHERE account_id=$1 AND system_id=$2 \
+             AND scope_kind='system' AND resolution=$3 \
              AND bucket_start>=$4 AND bucket_start<$5 \
              AND generation=(SELECT MAX(latest.generation) FROM telemetry.rollups latest \
              WHERE latest.account_id=r.account_id AND latest.system_id=r.system_id \
+             AND latest.scope_kind=r.scope_kind AND latest.scope_id=r.scope_id \
              AND latest.resolution=r.resolution AND latest.bucket_start=r.bucket_start) \
              ORDER BY bucket_start",
         )

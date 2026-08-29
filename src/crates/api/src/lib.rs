@@ -32,6 +32,7 @@ mod api_keys;
 mod audit;
 mod authentication;
 mod authorization;
+mod channels;
 mod connectors;
 mod dashboard;
 mod equipment_catalog;
@@ -69,6 +70,9 @@ pub use authentication::{
 pub use authorization::{
     AuthorizedRequest, ModernRequestAuthorizer, RequestAuthorizationError, actor_user_id,
     principal_identity,
+};
+pub use channels::{
+    ChannelApiError, ChannelApiUseCases, ChannelBindingInput, ChannelResponse, channels_router,
 };
 pub use connectors::{
     ConnectorAdminError, ConnectorAdminResponse, ConnectorAdminUseCases, connectors_router,

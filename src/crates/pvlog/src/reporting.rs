@@ -126,7 +126,7 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .map_err(|_| ReportingApiError::Unavailable)?;
                     let lifetime = sqlx::query("SELECT generation_energy_wh,consumption_energy_wh,peak_generation_power_watts,first_observation_at,last_observation_at,coverage_basis_points FROM system_lifetime_summaries WHERE system_id=?")
                         .bind(id_blob(system_id)).fetch_optional(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
-                    let rows = sqlx::query("SELECT bucket_start,generation_energy_sum_wh,consumption_energy_sum_wh,coverage_basis_points FROM telemetry_rollups r WHERE system_id=? AND resolution='month' AND generation=(SELECT MAX(latest.generation) FROM telemetry_rollups latest WHERE latest.system_id=r.system_id AND latest.resolution=r.resolution AND latest.bucket_start=r.bucket_start) ORDER BY bucket_start")
+                    let rows = sqlx::query("SELECT bucket_start,generation_energy_sum_wh,consumption_energy_sum_wh,coverage_basis_points FROM telemetry_rollups r WHERE system_id=? AND scope_kind='system' AND resolution='month' AND generation=(SELECT MAX(latest.generation) FROM telemetry_rollups latest WHERE latest.system_id=r.system_id AND latest.scope_kind=r.scope_kind AND latest.scope_id=r.scope_id AND latest.resolution=r.resolution AND latest.bucket_start=r.bucket_start) ORDER BY bucket_start")
                         .bind(id_blob(system_id)).fetch_all(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     Ok(statistics_response(
                         system_id,
@@ -148,7 +148,7 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .map_err(|_| ReportingApiError::Unavailable)?;
                     let lifetime = sqlx::query("SELECT generation_energy_wh,consumption_energy_wh,peak_generation_power_watts,first_observation_at,last_observation_at,coverage_basis_points::BIGINT AS coverage_basis_points FROM telemetry.lifetime_summaries WHERE account_id=$1 AND system_id=$2")
                         .bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_optional(&mut connection).await.map_err(|_| ReportingApiError::Unavailable)?;
-                    let rows = sqlx::query("SELECT bucket_start,generation_energy_sum_wh,consumption_energy_sum_wh,coverage_basis_points::BIGINT AS coverage_basis_points FROM telemetry.rollups r WHERE account_id=$1 AND system_id=$2 AND resolution='month' AND generation=(SELECT MAX(latest.generation) FROM telemetry.rollups latest WHERE latest.account_id=r.account_id AND latest.system_id=r.system_id AND latest.resolution=r.resolution AND latest.bucket_start=r.bucket_start) ORDER BY bucket_start")
+                    let rows = sqlx::query("SELECT bucket_start,generation_energy_sum_wh,consumption_energy_sum_wh,coverage_basis_points::BIGINT AS coverage_basis_points FROM telemetry.rollups r WHERE account_id=$1 AND system_id=$2 AND scope_kind='system' AND resolution='month' AND generation=(SELECT MAX(latest.generation) FROM telemetry.rollups latest WHERE latest.account_id=r.account_id AND latest.system_id=r.system_id AND latest.scope_kind=r.scope_kind AND latest.scope_id=r.scope_id AND latest.resolution=r.resolution AND latest.bucket_start=r.bucket_start) ORDER BY bucket_start")
                         .bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_all(&mut connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     connection
                         .close()

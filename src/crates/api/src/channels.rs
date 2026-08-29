@@ -1,0 +1,232 @@
+//! Measurement-channel binding endpoints.
+//!
+//! Readings arrive under source-defined keys such as `mppt-1` or `wr1.mppt2`.
+//! A key that nobody has bound yet is still retained, reported as `unassigned`,
+//! and shown to operators so they can point it at the equipment it meters.
+
+use axum::{
+    Extension, Json, Router,
+    extract::{Path, State},
+    http::{HeaderValue, StatusCode, header},
+    response::{IntoResponse, Response},
+    routing::get,
+};
+use pvlog_application::PortError;
+use pvlog_domain::{ApiScope, Permission, SystemId, UserId};
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use uuid::Uuid;
+
+use crate::{
+    ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal,
+    authorization::principal_identity, problem::Problem,
+};
+
+/// One measurement channel and the equipment it is bound to.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelResponse {
+    pub id: Uuid,
+    pub channel_key: String,
+    pub display_name: String,
+    pub unit: String,
+    /// `unassigned`, `plant`, `inverter`, or `string`.
+    pub target_kind: String,
+    /// Equipment identifier for the `inverter` and `string` targets.
+    pub target_id: Option<Uuid>,
+    pub tracks_power: bool,
+    pub tracks_energy: bool,
+    pub discovered_at_epoch_millis: Option<i64>,
+    pub last_value_at_epoch_millis: Option<i64>,
+    pub last_value: Option<i64>,
+}
+
+/// Requested binding for one channel key.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelBindingInput {
+    pub target_kind: String,
+    pub target_id: Option<Uuid>,
+    pub tracks_power: bool,
+    pub tracks_energy: bool,
+    pub display_name: Option<String>,
+}
+
+#[async_trait::async_trait]
+pub trait ChannelApiUseCases: Send + Sync {
+    async fn list(&self, system_id: SystemId) -> Result<Vec<ChannelResponse>, ChannelApiError>;
+    async fn bind(
+        &self,
+        actor: UserId,
+        system_id: SystemId,
+        channel_key: &str,
+        input: ChannelBindingInput,
+    ) -> Result<ChannelResponse, ChannelApiError>;
+    async fn remove(&self, system_id: SystemId, channel_key: &str) -> Result<(), ChannelApiError>;
+}
+
+#[derive(Clone)]
+struct ChannelState {
+    service: Arc<dyn ChannelApiUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
+}
+
+/// Creates the channel listing and binding routes for one system.
+pub fn channels_router(
+    service: Arc<dyn ChannelApiUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
+) -> Router {
+    Router::new()
+        .route("/api/v1/systems/{system_id}/channels", get(list))
+        .route(
+            "/api/v1/systems/{system_id}/channels/{channel_key}",
+            axum::routing::put(bind).delete(remove),
+        )
+        .with_state(ChannelState {
+            service,
+            authorizer,
+        })
+}
+
+async fn list(
+    State(state): State<ChannelState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path(system_id): Path<SystemId>,
+) -> Result<Json<Vec<ChannelResponse>>, ChannelApiError> {
+    authorize(&state, principal, system_id, false, "system.channel.list").await?;
+    Ok(Json(state.service.list(system_id).await?))
+}
+
+async fn bind(
+    State(state): State<ChannelState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path((system_id, channel_key)): Path<(SystemId, String)>,
+    Json(input): Json<ChannelBindingInput>,
+) -> Result<Json<ChannelResponse>, ChannelApiError> {
+    let authorized = authorize(&state, principal, system_id, true, "system.channel.bind").await?;
+    validate(&input)?;
+    Ok(Json(
+        state
+            .service
+            .bind(authorized, system_id, &channel_key, input)
+            .await?,
+    ))
+}
+
+async fn remove(
+    State(state): State<ChannelState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path((system_id, channel_key)): Path<(SystemId, String)>,
+) -> Result<StatusCode, ChannelApiError> {
+    authorize(&state, principal, system_id, true, "system.channel.remove").await?;
+    state.service.remove(system_id, &channel_key).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Rejects a binding whose target kind and identifier contradict each other.
+fn validate(input: &ChannelBindingInput) -> Result<(), ChannelApiError> {
+    match input.target_kind.as_str() {
+        "inverter" | "string" if input.target_id.is_none() => {
+            Err(ChannelApiError::InvalidInput("target_id_required"))
+        }
+        "unassigned" | "plant" if input.target_id.is_some() => {
+            Err(ChannelApiError::InvalidInput("target_id_not_allowed"))
+        }
+        "unassigned" | "plant" | "inverter" | "string" => Ok(()),
+        _ => Err(ChannelApiError::InvalidInput("unknown_target_kind")),
+    }
+}
+
+async fn authorize(
+    state: &ChannelState,
+    principal: Option<Extension<RequestPrincipal>>,
+    system_id: SystemId,
+    write: bool,
+    action: &'static str,
+) -> Result<UserId, ChannelApiError> {
+    let Extension(principal) = principal.ok_or(ChannelApiError::Forbidden)?;
+    if let RequestPrincipal::ApiCredential { scopes, .. } = &principal {
+        let scope = if write {
+            ApiScope::SystemsWrite
+        } else {
+            ApiScope::SystemsRead
+        };
+        if !scopes.contains(&scope) {
+            return Err(ChannelApiError::Forbidden);
+        }
+    }
+    let authorized = state
+        .authorizer
+        .authorize_system(
+            principal_identity(&principal)?,
+            system_id,
+            if write {
+                Permission::SystemManage
+            } else {
+                Permission::SystemRead
+            },
+            action,
+        )
+        .await?;
+    Ok(authorized.actor_user_id)
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ChannelApiError {
+    Forbidden,
+    NotFound,
+    InvalidInput(&'static str),
+    Unavailable,
+}
+
+impl From<RequestAuthorizationError> for ChannelApiError {
+    fn from(value: RequestAuthorizationError) -> Self {
+        match value {
+            RequestAuthorizationError::Forbidden | RequestAuthorizationError::NotFound => {
+                Self::Forbidden
+            }
+            RequestAuthorizationError::Unavailable => Self::Unavailable,
+        }
+    }
+}
+
+impl From<PortError> for ChannelApiError {
+    fn from(_: PortError) -> Self {
+        Self::Unavailable
+    }
+}
+
+impl IntoResponse for ChannelApiError {
+    fn into_response(self) -> Response {
+        let (status, title, detail) = match self {
+            Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden", "system_access_denied"),
+            Self::NotFound => (StatusCode::NOT_FOUND, "not_found", "channel_not_found"),
+            Self::InvalidInput(code) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_channel_binding",
+                code,
+            ),
+            Self::Unavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "service_unavailable",
+                "channel_service_unavailable",
+            ),
+        };
+        let mut response = (
+            status,
+            Json(Problem {
+                problem_type: "https://pvlog.example/problems/channel-binding",
+                title,
+                status: status.as_u16(),
+                detail,
+                request_id: None,
+            }),
+        )
+            .into_response();
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/problem+json"),
+        );
+        response
+    }
+}

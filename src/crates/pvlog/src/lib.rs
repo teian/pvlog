@@ -8,6 +8,7 @@ pub mod analytics;
 pub mod analytics_series;
 pub mod api_keys;
 pub mod authentication;
+pub mod channels;
 pub mod config;
 pub mod dashboard;
 pub mod embedded_ui;

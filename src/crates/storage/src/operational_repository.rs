@@ -20,6 +20,10 @@ use crate::RoutedSqliteAccount;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RollupRecord {
     pub system_id: SystemId,
+    /// Equipment level the bucket describes; `scope_id` carries the system
+    /// identifier when the scope is the system itself.
+    pub scope_kind: String,
+    pub scope_id: Uuid,
     pub resolution: String,
     pub bucket_start: i64,
     pub bucket_end: i64,
@@ -266,7 +270,7 @@ impl OperationalRepository for SqliteOperationalRepository {
     async fn save_rollup(&self, r: &RollupRecord) -> Result<(), OperationalRepositoryError> {
         validate_period(r.bucket_start, r.bucket_end)?;
         let mut w = self.account.acquire_writer().await?;
-        sqlx::query("INSERT INTO telemetry_rollups (system_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at) VALUES (?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(system_id,resolution,bucket_start,generation) DO UPDATE SET bucket_end=excluded.bucket_end,point_count=excluded.point_count,expected_count=excluded.expected_count,generation_energy_sum_wh=excluded.generation_energy_sum_wh,consumption_energy_sum_wh=excluded.consumption_energy_sum_wh,generation_power_min_watts=excluded.generation_power_min_watts,generation_power_max_watts=excluded.generation_power_max_watts,generation_power_first_watts=excluded.generation_power_first_watts,generation_power_last_watts=excluded.generation_power_last_watts,quality_flags=excluded.quality_flags,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(blob(r.system_id.as_uuid())).bind(&r.resolution).bind(r.bucket_start).bind(r.bucket_end).bind(&r.timezone).bind(r.generation).bind(r.point_count).bind(r.expected_count).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.generation_power_min_watts).bind(r.generation_power_max_watts).bind(r.generation_power_first_watts).bind(r.generation_power_last_watts).bind(r.quality_flags).bind(r.coverage_basis_points).bind(r.calculated_at).execute(w.connection()).await?;
+        sqlx::query("INSERT INTO telemetry_rollups (system_id,scope_kind,scope_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at) VALUES (?,?,?,?,?,?,?,?,1,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(system_id,scope_kind,scope_id,resolution,bucket_start,generation) DO UPDATE SET bucket_end=excluded.bucket_end,point_count=excluded.point_count,expected_count=excluded.expected_count,generation_energy_sum_wh=excluded.generation_energy_sum_wh,consumption_energy_sum_wh=excluded.consumption_energy_sum_wh,generation_power_min_watts=excluded.generation_power_min_watts,generation_power_max_watts=excluded.generation_power_max_watts,generation_power_first_watts=excluded.generation_power_first_watts,generation_power_last_watts=excluded.generation_power_last_watts,quality_flags=excluded.quality_flags,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(blob(r.system_id.as_uuid())).bind(&r.scope_kind).bind(blob(r.scope_id)).bind(&r.resolution).bind(r.bucket_start).bind(r.bucket_end).bind(&r.timezone).bind(r.generation).bind(r.point_count).bind(r.expected_count).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.generation_power_min_watts).bind(r.generation_power_max_watts).bind(r.generation_power_first_watts).bind(r.generation_power_last_watts).bind(r.quality_flags).bind(r.coverage_basis_points).bind(r.calculated_at).execute(w.connection()).await?;
         Ok(())
     }
     async fn rollups(
@@ -277,7 +281,7 @@ impl OperationalRepository for SqliteOperationalRepository {
     ) -> Result<Vec<RollupRecord>, OperationalRepositoryError> {
         validate_period(start, end)?;
         let mut c = self.account.acquire().await?;
-        let rows=sqlx::query("SELECT system_id,resolution,bucket_start,bucket_end,timezone,generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at FROM telemetry_rollups WHERE system_id=? AND bucket_start>=? AND bucket_start<? ORDER BY bucket_start,resolution,generation").bind(blob(s.as_uuid())).bind(start).bind(end).fetch_all(&mut *c).await?;
+        let rows=sqlx::query("SELECT system_id,scope_kind,scope_id,resolution,bucket_start,bucket_end,timezone,generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at FROM telemetry_rollups WHERE system_id=? AND bucket_start>=? AND bucket_start<? ORDER BY bucket_start,resolution,generation").bind(blob(s.as_uuid())).bind(start).bind(end).fetch_all(&mut *c).await?;
         rows.iter().map(sqlite_rollup).collect()
     }
     async fn save_daily_summary(
@@ -510,7 +514,7 @@ impl OperationalRepository for PostgresOperationalRepository {
     async fn save_rollup(&self, r: &RollupRecord) -> Result<(), OperationalRepositoryError> {
         validate_period(r.bucket_start, r.bucket_end)?;
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO telemetry.rollups (account_id,system_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,1,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) ON CONFLICT(account_id,system_id,resolution,bucket_start,generation) DO UPDATE SET bucket_end=excluded.bucket_end,point_count=excluded.point_count,expected_count=excluded.expected_count,generation_energy_sum_wh=excluded.generation_energy_sum_wh,consumption_energy_sum_wh=excluded.consumption_energy_sum_wh,generation_power_min_watts=excluded.generation_power_min_watts,generation_power_max_watts=excluded.generation_power_max_watts,generation_power_first_watts=excluded.generation_power_first_watts,generation_power_last_watts=excluded.generation_power_last_watts,quality_flags=excluded.quality_flags,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(self.account_id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.resolution).bind(r.bucket_start).bind(r.bucket_end).bind(&r.timezone).bind(r.generation).bind(r.point_count).bind(r.expected_count).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.generation_power_min_watts).bind(r.generation_power_max_watts).bind(r.generation_power_first_watts).bind(r.generation_power_last_watts).bind(r.quality_flags).bind(r.coverage_basis_points).bind(r.calculated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO telemetry.rollups (account_id,system_id,scope_kind,scope_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) ON CONFLICT(account_id,system_id,scope_kind,scope_id,resolution,bucket_start,generation) DO UPDATE SET bucket_end=excluded.bucket_end,point_count=excluded.point_count,expected_count=excluded.expected_count,generation_energy_sum_wh=excluded.generation_energy_sum_wh,consumption_energy_sum_wh=excluded.consumption_energy_sum_wh,generation_power_min_watts=excluded.generation_power_min_watts,generation_power_max_watts=excluded.generation_power_max_watts,generation_power_first_watts=excluded.generation_power_first_watts,generation_power_last_watts=excluded.generation_power_last_watts,quality_flags=excluded.quality_flags,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(self.account_id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.scope_kind).bind(r.scope_id).bind(&r.resolution).bind(r.bucket_start).bind(r.bucket_end).bind(&r.timezone).bind(r.generation).bind(r.point_count).bind(r.expected_count).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.generation_power_min_watts).bind(r.generation_power_max_watts).bind(r.generation_power_first_watts).bind(r.generation_power_last_watts).bind(r.quality_flags).bind(r.coverage_basis_points).bind(r.calculated_at).execute(&mut c).await?;
         c.close().await?;
         Ok(())
     }
@@ -522,7 +526,7 @@ impl OperationalRepository for PostgresOperationalRepository {
     ) -> Result<Vec<RollupRecord>, OperationalRepositoryError> {
         validate_period(start, end)?;
         let mut c = self.connection().await?;
-        let rows=sqlx::query("SELECT system_id,resolution,bucket_start,bucket_end,timezone,generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at FROM telemetry.rollups WHERE account_id=$1 AND system_id=$2 AND bucket_start>=$3 AND bucket_start<$4 ORDER BY bucket_start,resolution,generation").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
+        let rows=sqlx::query("SELECT system_id,scope_kind,scope_id,resolution,bucket_start,bucket_end,timezone,generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at FROM telemetry.rollups WHERE account_id=$1 AND system_id=$2 AND bucket_start>=$3 AND bucket_start<$4 ORDER BY bucket_start,resolution,generation").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
         c.close().await?;
         rows.iter().map(pg_rollup).collect()
     }
@@ -817,6 +821,8 @@ fn pid<T>(
 fn pg_rollup(r: &sqlx::postgres::PgRow) -> Result<RollupRecord, OperationalRepositoryError> {
     Ok(RollupRecord {
         system_id: pid(r.get("system_id"), SystemId::from_uuid)?,
+        scope_kind: r.get("scope_kind"),
+        scope_id: r.get("scope_id"),
         resolution: r.get("resolution"),
         bucket_start: r.get("bucket_start"),
         bucket_end: r.get("bucket_end"),
@@ -948,10 +954,18 @@ fn sid<T>(
     let id = Uuid::from_slice(&v).map_err(|_| OperationalRepositoryError::InvalidStoredValue)?;
     f(id).map_err(|_| OperationalRepositoryError::InvalidStoredValue)
 }
+/// Decodes the scope identifier `SQLite` stores for a rollup bucket.
+#[cfg(feature = "sqlite")]
+fn scope_uuid(value: &[u8]) -> Result<Uuid, OperationalRepositoryError> {
+    Uuid::from_slice(value).map_err(|_| OperationalRepositoryError::InvalidStoredValue)
+}
+
 #[cfg(feature = "sqlite")]
 fn sqlite_rollup(r: &sqlx::sqlite::SqliteRow) -> Result<RollupRecord, OperationalRepositoryError> {
     Ok(RollupRecord {
         system_id: sid(r.get("system_id"), SystemId::from_uuid)?,
+        scope_kind: r.get("scope_kind"),
+        scope_id: scope_uuid(&r.get::<Vec<u8>, _>("scope_id"))?,
         resolution: r.get("resolution"),
         bucket_start: r.get("bucket_start"),
         bucket_end: r.get("bucket_end"),

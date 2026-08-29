@@ -16,6 +16,7 @@ use pvlog::authentication::{
     ManagementIdentityApi, ManagementRbacApi, ManagementReadiness, ManagementRequestAuthenticator,
     ManagementRequestAuthorizer, ManagementSessionBootstrap, session_digest_key,
 };
+use pvlog::channels::StorageChannelApi;
 use pvlog::config::{ConfigError, DatabaseBackend, RuntimeConfig};
 use pvlog::dashboard::StorageDashboardApi;
 use pvlog::inverters::ManagementInverterApi;
@@ -715,6 +716,11 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
         compose_management_repository(target)?,
         Arc::new(SystemClock),
     ));
+    let channels = Arc::new(StorageChannelApi::new(
+        target.clone(),
+        compose_management_repository(target)?,
+        Arc::new(SystemClock),
+    ));
     let telemetry = Arc::new(StorageTelemetryApi::new(
         target.clone(),
         compose_management_repository(target)?,
@@ -781,6 +787,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
             .merge(pvlog_api::analytics_router(analytics))
             .merge(pvlog_api::telemetry_router(
                 telemetry,
+                request_authorizer.clone(),
+            ))
+            .merge(pvlog_api::channels_router(
+                channels,
                 request_authorizer.clone(),
             ))
             .merge(pvlog_api::dashboard_router(dashboard)),
