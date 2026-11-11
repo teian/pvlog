@@ -354,7 +354,7 @@ impl StorageTelemetryApi {
         Ok(())
     }
 
-    /// Opens the routed SQLite account database for a system, failing when the target is not SQLite or routing fails.
+    /// Opens the routed `SQLite` account database for a system, failing when the target is not `SQLite` or routing fails.
     #[cfg(feature = "sqlite")]
     async fn sqlite_account(
         &self,

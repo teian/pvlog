@@ -48,7 +48,7 @@ impl StorageChannelApi {
             .ok_or(ChannelApiError::NotFound)
     }
 
-    /// Routes to the SQLite account database that holds the system, failing as `Unavailable` for other targets.
+    /// Routes to the `SQLite` account database that holds the system, failing as `Unavailable` for other targets.
     #[cfg(feature = "sqlite")]
     async fn account(
         &self,

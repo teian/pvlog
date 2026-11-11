@@ -36,7 +36,7 @@ impl StorageSharingApi {
         Self { target, clock }
     }
 
-    /// Returns the management and accounts paths of a SQLite target; PostgreSQL targets are `Unavailable`.
+    /// Returns the management and accounts paths of a `SQLite` target; `PostgreSQL` targets are `Unavailable`.
     #[cfg(feature = "sqlite")]
     fn paths(&self) -> Result<(&std::path::Path, &std::path::Path), SharingApiError> {
         match &self.target {
@@ -60,7 +60,7 @@ impl StorageSharingApi {
             .map_err(|_| SharingApiError::Unavailable)
     }
 
-    /// Routes to the SQLite account database for the given account.
+    /// Routes to the `SQLite` account database for the given account.
     #[cfg(feature = "sqlite")]
     async fn account(
         &self,

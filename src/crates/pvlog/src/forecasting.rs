@@ -80,7 +80,7 @@ impl StorageForecastApi {
             .ok_or(ForecastApiError::NotFound)
     }
 
-    /// Opens the routed SQLite account database for a system, failing with `Unavailable` when the target is not SQLite or routing fails.
+    /// Opens the routed `SQLite` account database for a system, failing with `Unavailable` when the target is not `SQLite` or routing fails.
     #[cfg(feature = "sqlite")]
     async fn account(
         &self,
