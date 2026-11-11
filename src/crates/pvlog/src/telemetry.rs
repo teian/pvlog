@@ -14,12 +14,12 @@ use pvlog_application::{
     PortError, VersionedObservation, normalize_observation,
 };
 use pvlog_domain::{
-    AccountId, CanonicalObservation, ChannelId, EnergyReading, ExtendedValue, GridFlow,
-    ObservationId, ObservationSourceKind, SystemId,
+    AccountId, ApiCredentialId, CanonicalObservation, ChannelId, DataSourceId, EnergyReading,
+    ExtendedValue, GridFlow, ObservationId, ObservationSourceKind, SystemId,
 };
 use pvlog_storage::{
-    DatabaseTarget, ManagementRepository, ObservationInsertOutcome, StoredObservation,
-    TelemetryRepository, TelemetryRepositoryError,
+    DataSourceRepository, DatabaseTarget, ManagementRepository, ObservationInsertOutcome,
+    StoredObservation, TelemetryRepository, TelemetryRepositoryError,
 };
 
 const MAXIMUM_BATCH_ITEMS: usize = 1_000;
@@ -104,6 +104,56 @@ impl StorageTelemetryApi {
             }
         }
     }
+
+    /// Finds the data source a credential belongs to, so its readings are
+    /// attributed to it. A reading from a signed-in user or from a credential
+    /// that belongs to no data source has none.
+    async fn data_source_for(
+        &self,
+        system_id: SystemId,
+        credential_id: Option<ApiCredentialId>,
+    ) -> Result<Option<DataSourceId>, ModernTelemetryError> {
+        let Some(credential_id) = credential_id else {
+            return Ok(None);
+        };
+        let unavailable = || ModernTelemetryError::Repository(PortError::Unavailable);
+        let repository: Box<dyn DataSourceRepository> = match &self.target {
+            DatabaseTarget::Sqlite { .. } => {
+                #[cfg(feature = "sqlite")]
+                {
+                    Box::new(pvlog_storage::SqliteDataSourceRepository::new(
+                        self.sqlite_account(system_id).await?,
+                    ))
+                }
+                #[cfg(not(feature = "sqlite"))]
+                {
+                    return Err(unavailable());
+                }
+            }
+            DatabaseTarget::Postgres { url } => {
+                #[cfg(feature = "postgres")]
+                {
+                    Box::new(pvlog_storage::PostgresDataSourceRepository::new(
+                        url.clone(),
+                        self.account_for(system_id).await?,
+                    ))
+                }
+                #[cfg(not(feature = "postgres"))]
+                {
+                    let _ = url;
+                    return Err(unavailable());
+                }
+            }
+        };
+        Ok(repository
+            .data_source_by_credential(credential_id)
+            .await
+            .map_err(|_| unavailable())?
+            // A credential is restricted to its system; a source of another
+            // system must never be credited.
+            .filter(|record| record.system_id == system_id)
+            .map(|record| record.id))
+    }
 }
 
 #[async_trait]
@@ -115,13 +165,16 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
     ) -> Result<CanonicalObservation, ModernTelemetryError> {
         let system_id = command.system_id;
         let received_at = self.received_at();
+        let data_source = self
+            .data_source_for(system_id, command.credential_id)
+            .await?;
         let command = self
             .resolve_channels(system_id, command, received_at)
             .await?;
         let observation =
             normalize_observation(command).map_err(|_| ModernTelemetryError::Invalid)?;
         let repository = self.repository(system_id).await?;
-        let stored = stored_observation(&observation, received_at)?;
+        let stored = stored_observation(&observation, received_at, data_source)?;
         match repository.insert_observation(&stored).await {
             Ok(ObservationInsertOutcome::Inserted) => {
                 self.write_channel_values(system_id, &observation, received_at)
@@ -155,10 +208,24 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         }
         let repository = self.repository(system_id).await?;
         let received_at = self.received_at();
+        // One request is made with one credential, so the source is the same
+        // for every item.
+        let data_source = self
+            .data_source_for(
+                system_id,
+                commands.first().and_then(|command| command.credential_id),
+            )
+            .await?;
 
         if mode == BatchIngestionMode::Atomic {
             return self
-                .ingest_atomic(system_id, commands, received_at, repository.as_ref())
+                .ingest_atomic(
+                    system_id,
+                    commands,
+                    received_at,
+                    data_source,
+                    repository.as_ref(),
+                )
                 .await;
         }
 
@@ -169,7 +236,8 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
                 .await?;
             let status = match normalize_observation(command) {
                 Err(_) => BatchItemStatus::Invalid,
-                Ok(observation) => match stored_observation(&observation, received_at) {
+                Ok(observation) => match stored_observation(&observation, received_at, data_source)
+                {
                     Err(_) => BatchItemStatus::Invalid,
                     Ok(stored) => match repository.insert_observation(&stored).await {
                         Ok(ObservationInsertOutcome::Inserted) => {
@@ -216,6 +284,7 @@ impl StorageTelemetryApi {
         system_id: SystemId,
         commands: Vec<NormalizeObservation>,
         received_at: i64,
+        data_source: Option<DataSourceId>,
         repository: &dyn TelemetryRepository,
     ) -> Result<BatchIngestionResult, ModernTelemetryError> {
         let mut observations = Vec::with_capacity(commands.len());
@@ -227,7 +296,7 @@ impl StorageTelemetryApi {
             let observation =
                 normalize_observation(command).map_err(|_| ModernTelemetryError::Invalid)?;
             stored.push(
-                stored_observation(&observation, received_at)
+                stored_observation(&observation, received_at, data_source)
                     .map_err(|_| ModernTelemetryError::Invalid)?,
             );
             observations.push(observation);
@@ -442,6 +511,7 @@ fn channel_id(bytes: &[u8]) -> Result<ChannelId, ModernTelemetryError> {
 fn stored_observation(
     observation: &CanonicalObservation,
     received_at: i64,
+    data_source_id: Option<DataSourceId>,
 ) -> Result<StoredObservation, ModernTelemetryError> {
     let measured_at = i64::try_from(observation.observed_at.epoch_millis())
         .map_err(|_| ModernTelemetryError::Invalid)?;
@@ -474,6 +544,7 @@ fn stored_observation(
         provenance: provenance(observation),
         canonical_hash: observation.idempotency.payload_hash,
         version: 1,
+        data_source_id,
     })
 }
 

@@ -18,6 +18,7 @@ mod account_repository;
 mod administration_repository;
 mod browser_session_repository;
 mod compaction;
+mod data_source_repository;
 mod external_identity_repository;
 mod integrity_planner;
 mod job_dispatch;
@@ -61,6 +62,11 @@ pub use administration_repository::{
 pub use compaction::{
     CompactionError, CompactionKey, CompactionPhase, CompactionRepository, CompactionService,
 };
+#[cfg(feature = "postgres")]
+pub use data_source_repository::PostgresDataSourceRepository;
+#[cfg(feature = "sqlite")]
+pub use data_source_repository::SqliteDataSourceRepository;
+pub use data_source_repository::{DataSourceActivity, DataSourceRecord, DataSourceRepository};
 #[cfg(feature = "postgres")]
 pub use external_identity_repository::PostgresExternalIdentityRepository;
 #[cfg(feature = "sqlite")]

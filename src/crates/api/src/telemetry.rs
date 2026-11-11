@@ -10,8 +10,9 @@ use pvlog_application::{
     ModernTelemetryUseCases, NormalizeObservation, PowerUnit,
 };
 use pvlog_domain::{
-    ApiScope, BatteryFlowState, MeasurementValues, ObservationId, ObservationSource,
-    ObservationSourceKind, Permission, QualityFlags, SystemId, UserId, UtcTimestamp, Watts,
+    ApiCredentialId, ApiScope, BatteryFlowState, MeasurementValues, ObservationId,
+    ObservationSource, ObservationSourceKind, Permission, QualityFlags, SystemId, UserId,
+    UtcTimestamp, Watts,
 };
 use serde::Deserialize;
 use std::{
@@ -102,9 +103,15 @@ async fn single(
     headers: HeaderMap,
     Json(body): Json<ObservationBody>,
 ) -> Result<Response, TelemetryApiError> {
-    let (_, identity) =
+    let writer =
         authorize_telemetry_write(&state, principal, system_id, "telemetry.ingest").await?;
-    let command = command(system_id, identity, idempotency_key(&headers)?, body)?;
+    let command = command(
+        system_id,
+        writer.credential_id,
+        writer.identity,
+        idempotency_key(&headers)?,
+        body,
+    )?;
     let observation = state.service.ingest(command).await?;
     Ok((StatusCode::CREATED, Json(observation)).into_response())
 }
@@ -114,7 +121,7 @@ async fn batch(
     Path(system_id): Path<SystemId>,
     Json(body): Json<BatchBody>,
 ) -> Result<Response, TelemetryApiError> {
-    let (_, identity) =
+    let writer =
         authorize_telemetry_write(&state, principal, system_id, "telemetry.ingest_batch").await?;
     let commands = body
         .items
@@ -122,7 +129,8 @@ async fn batch(
         .map(|item| {
             command(
                 system_id,
-                identity.clone(),
+                writer.credential_id,
+                writer.identity.clone(),
                 item.idempotency_key,
                 item.observation,
             )
@@ -148,8 +156,9 @@ async fn correct(
         generation_power: body.generation_power_watts.map(Watts::new),
         ..MeasurementValues::default()
     });
-    let (actor, _) =
-        authorize_telemetry_write(&state, principal, system_id, "telemetry.correct").await?;
+    let actor = authorize_telemetry_write(&state, principal, system_id, "telemetry.correct")
+        .await?
+        .actor;
     let visible = state
         .service
         .correct(CorrectObservation {
@@ -179,8 +188,9 @@ async fn remove(
         .and_then(|value| value.to_str().ok())
         .map(ToOwned::to_owned)
         .ok_or(TelemetryApiError::Invalid)?;
-    let (actor, _) =
-        authorize_telemetry_write(&state, principal, system_id, "telemetry.delete").await?;
+    let actor = authorize_telemetry_write(&state, principal, system_id, "telemetry.delete")
+        .await?
+        .actor;
     state
         .service
         .delete(CorrectObservation {
@@ -200,7 +210,7 @@ async fn authorize_telemetry_write(
     principal: Option<Extension<crate::RequestPrincipal>>,
     system_id: SystemId,
     action: &'static str,
-) -> Result<(UserId, String), TelemetryApiError> {
+) -> Result<TelemetryWriter, TelemetryApiError> {
     let Extension(principal) = principal.ok_or(TelemetryApiError::Forbidden)?;
     if let crate::RequestPrincipal::ApiCredential {
         system_id: allowed_system,
@@ -213,6 +223,10 @@ async fn authorize_telemetry_write(
         return Err(TelemetryApiError::Forbidden);
     }
     let identity = principal.safe_ingestion_identity();
+    let credential_id = match &principal {
+        crate::RequestPrincipal::ApiCredential { id, .. } => Some(*id),
+        crate::RequestPrincipal::User(_) => None,
+    };
     let authorized = state
         .authorizer
         .authorize_system(
@@ -222,7 +236,20 @@ async fn authorize_telemetry_write(
             action,
         )
         .await?;
-    Ok((authorized.actor_user_id, identity))
+    Ok(TelemetryWriter {
+        actor: authorized.actor_user_id,
+        identity,
+        credential_id,
+    })
+}
+
+/// Who may write telemetry for this request, and under which identity.
+struct TelemetryWriter {
+    actor: UserId,
+    /// Non-secret namespace for idempotency keys.
+    identity: String,
+    /// API credential used, when the request was not made by a signed-in user.
+    credential_id: Option<ApiCredentialId>,
 }
 fn idempotency_key(headers: &HeaderMap) -> Result<String, TelemetryApiError> {
     headers
@@ -234,6 +261,7 @@ fn idempotency_key(headers: &HeaderMap) -> Result<String, TelemetryApiError> {
 }
 fn command(
     system_id: SystemId,
+    credential_id: Option<ApiCredentialId>,
     idempotency_namespace: String,
     idempotency_key: String,
     body: ObservationBody,
@@ -242,6 +270,7 @@ fn command(
         .map_err(|_| TelemetryApiError::Invalid)?;
     Ok(NormalizeObservation {
         system_id,
+        credential_id,
         observed_at,
         received_at: observed_at,
         generation_power: body

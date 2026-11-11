@@ -82,6 +82,10 @@ name = "system-endpoints"
 path = "../../../tests/rust/api/system_endpoints.rs"
 
 [[test]]
+name = "data-source-endpoints"
+path = "../../../tests/rust/api/data_source_endpoints.rs"
+
+[[test]]
 name = "managed-resource-endpoints"
 path = "../../../tests/rust/api/managed_resource_endpoints.rs"
 

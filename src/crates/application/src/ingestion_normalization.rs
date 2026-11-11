@@ -1,9 +1,10 @@
 //! Exact normalization of explicit wire units into canonical integer base units.
 
 use pvlog_domain::{
-    BasisPoints, BatteryFlowState, BatteryReading, CanonicalObservation, ChannelId, EnergyReading,
-    ExtendedValue, IdempotencyIdentity, MeasurementValues, MilliDegreesCelsius, MilliVolts,
-    ObservationId, ObservationSource, QualityFlags, SystemId, UtcTimestamp, WattHours, Watts,
+    ApiCredentialId, BasisPoints, BatteryFlowState, BatteryReading, CanonicalObservation,
+    ChannelId, EnergyReading, ExtendedValue, IdempotencyIdentity, MeasurementValues,
+    MilliDegreesCelsius, MilliVolts, ObservationId, ObservationSource, QualityFlags, SystemId,
+    UtcTimestamp, WattHours, Watts,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
@@ -39,6 +40,8 @@ pub struct EnergyInput {
 #[derive(Clone, Debug)]
 pub struct NormalizeObservation {
     pub system_id: SystemId,
+    /// API credential that delivered the reading; identifies its data source.
+    pub credential_id: Option<ApiCredentialId>,
     pub observed_at: UtcTimestamp,
     pub received_at: UtcTimestamp,
     pub generation_power: Option<(i64, PowerUnit)>,

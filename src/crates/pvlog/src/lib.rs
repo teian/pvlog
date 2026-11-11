@@ -11,6 +11,7 @@ pub mod authentication;
 pub mod channels;
 pub mod config;
 pub mod dashboard;
+pub mod data_sources;
 pub mod embedded_ui;
 pub mod forecasting;
 pub mod geocoding;

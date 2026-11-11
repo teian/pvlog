@@ -5,7 +5,7 @@ use std::fmt;
 
 use async_trait::async_trait;
 use pvlog_domain::{
-    AccountId, AuditEventId, CorrectionId, ObservationId, RequestId, SystemId, UserId,
+    AccountId, AuditEventId, CorrectionId, DataSourceId, ObservationId, RequestId, SystemId, UserId,
 };
 use serde_json::Value;
 use sqlx::Row as _;
@@ -34,6 +34,8 @@ pub struct StoredObservation {
     pub provenance: Value,
     pub canonical_hash: [u8; 32],
     pub version: i64,
+    /// Data source the reading was delivered through, when it is known.
+    pub data_source_id: Option<DataSourceId>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -235,7 +237,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             .ok_or(TelemetryRepositoryError::InvalidRecord("observation"))?;
         let mut writer = self.account.acquire_writer().await?;
         let mut transaction = writer.connection().begin().await?;
-        let result=sqlx::query("INSERT OR IGNORE INTO telemetry_hot (observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(blob(o.id.as_uuid())).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(serde_json::to_string(&o.provenance)?).bind(o.canonical_hash.as_slice()).bind(o.version).execute(&mut *transaction).await?;
+        let result=sqlx::query("INSERT OR IGNORE INTO telemetry_hot (observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version,data_source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(blob(o.id.as_uuid())).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(serde_json::to_string(&o.provenance)?).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| blob(id.as_uuid()))).execute(&mut *transaction).await?;
         if result.rows_affected() == 0 {
             let existing = sqlite_existing_observation(&mut transaction, o).await?;
             transaction.rollback().await?;
@@ -258,7 +260,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
     ) -> Result<Vec<StoredObservation>, TelemetryRepositoryError> {
         validate_range(start, end)?;
         let mut c = self.account.acquire().await?;
-        let rows=sqlx::query("SELECT observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? ORDER BY measured_at,observation_id").bind(blob(s.as_uuid())).bind(start).bind(end).fetch_all(&mut *c).await?;
+        let rows=sqlx::query("SELECT observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version,data_source_id FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? ORDER BY measured_at,observation_id").bind(blob(s.as_uuid())).bind(start).bind(end).fetch_all(&mut *c).await?;
         rows.iter().map(sqlite_observation).collect()
     }
     async fn store_idempotency(
@@ -371,7 +373,7 @@ impl TelemetryRepository for PostgresTelemetryRepository {
             .ok_or(TelemetryRepositoryError::InvalidRecord("observation"))?;
         let mut connection = self.connection().await?;
         let mut transaction = connection.begin().await?;
-        let result=sqlx::query("INSERT INTO telemetry.hot_observations (account_id,observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING").bind(self.account_id.as_uuid()).bind(o.id.as_uuid()).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(&o.provenance).bind(o.canonical_hash.as_slice()).bind(o.version).execute(&mut *transaction).await?;
+        let result=sqlx::query("INSERT INTO telemetry.hot_observations (account_id,observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version,data_source_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) ON CONFLICT DO NOTHING").bind(self.account_id.as_uuid()).bind(o.id.as_uuid()).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(&o.provenance).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| id.as_uuid())).execute(&mut *transaction).await?;
         if result.rows_affected() == 0 {
             let existing = pg_existing_observation(&mut transaction, self.account_id, o).await?;
             transaction.rollback().await?;
@@ -394,7 +396,7 @@ impl TelemetryRepository for PostgresTelemetryRepository {
     ) -> Result<Vec<StoredObservation>, TelemetryRepositoryError> {
         validate_range(start, end)?;
         let mut c = self.connection().await?;
-        let rows=sqlx::query("SELECT observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at>=$3 AND measured_at<$4 ORDER BY measured_at,observation_id").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
+        let rows=sqlx::query("SELECT observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version,data_source_id FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at>=$3 AND measured_at<$4 ORDER BY measured_at,observation_id").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
         c.close().await?;
         rows.iter().map(pg_observation).collect()
     }
@@ -458,7 +460,7 @@ async fn sqlite_insert_hot(
     c: &mut sqlx::SqliteConnection,
     o: &StoredObservation,
 ) -> Result<sqlx::sqlite::SqliteQueryResult, TelemetryRepositoryError> {
-    Ok(sqlx::query("INSERT OR IGNORE INTO telemetry_hot (observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(blob(o.id.as_uuid())).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(serde_json::to_string(&o.provenance)?).bind(o.canonical_hash.as_slice()).bind(o.version).execute(c).await?)
+    Ok(sqlx::query("INSERT OR IGNORE INTO telemetry_hot (observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version,data_source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(blob(o.id.as_uuid())).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(serde_json::to_string(&o.provenance)?).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| blob(id.as_uuid()))).execute(c).await?)
 }
 
 #[cfg(feature = "postgres")]
@@ -467,7 +469,7 @@ async fn pg_insert_hot(
     account_id: AccountId,
     o: &StoredObservation,
 ) -> Result<sqlx::postgres::PgQueryResult, TelemetryRepositoryError> {
-    Ok(sqlx::query("INSERT INTO telemetry.hot_observations (account_id,observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING").bind(account_id.as_uuid()).bind(o.id.as_uuid()).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(&o.provenance).bind(o.canonical_hash.as_slice()).bind(o.version).execute(&mut *c).await?)
+    Ok(sqlx::query("INSERT INTO telemetry.hot_observations (account_id,observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version,data_source_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) ON CONFLICT DO NOTHING").bind(account_id.as_uuid()).bind(o.id.as_uuid()).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(&o.provenance).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| id.as_uuid())).execute(&mut *c).await?)
 }
 
 fn validate_range(start: i64, end: i64) -> Result<(), TelemetryRepositoryError> {
@@ -564,6 +566,10 @@ fn sqlite_observation(
         provenance: serde_json::from_str(&r.get::<String, _>("provenance_json"))?,
         canonical_hash: fixed(r.get("canonical_hash"))?,
         version: r.get("version"),
+        data_source_id: r
+            .get::<Option<Vec<u8>>, _>("data_source_id")
+            .map(|id| sid(id, DataSourceId::from_uuid))
+            .transpose()?,
     })
 }
 #[cfg(feature = "sqlite")]
@@ -658,6 +664,11 @@ fn pg_observation(
         provenance: r.get("provenance"),
         canonical_hash: fixed(r.get("canonical_hash"))?,
         version: r.get("version"),
+        data_source_id: r
+            .get::<Option<Uuid>, _>("data_source_id")
+            .map(DataSourceId::from_uuid)
+            .transpose()
+            .map_err(|_| TelemetryRepositoryError::InvalidStoredValue)?,
     })
 }
 #[cfg(feature = "postgres")]

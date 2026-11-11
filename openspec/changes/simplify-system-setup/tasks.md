@@ -16,9 +16,9 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 ## 2. Data sources and system-restricted credentials
 
 - [x] 2.1 Add migrations for the data-source table and for the data-source reference on stored readings on both databases; verify migration tests pass.
-- [ ] 2.2 Issue, regenerate and revoke telemetry-write credentials restricted to one system and owned by a data source, with audit events that contain no secret; verify with tests that such a credential is accepted for its system and rejected for another system of the same account and for every read.
-- [ ] 2.3 Implement data-source create, list, read, rename and delete with the one-time configuration response, and define the smalog, SBFspot, generic and import profiles with their server-rendered snippets; verify that the secret appears only in the create and regenerate responses and that an unsupported profile is rejected with the list of supported ones.
-- [ ] 2.4 Attribute every accepted reading to its data source and derive the connection state, last reading time and daily count; verify the never-connected, receiving, stale and disconnected states with tests that control the clock.
+- [x] 2.2 Issue, regenerate and revoke telemetry-write credentials restricted to one system and owned by a data source, with audit events that contain no secret; verify with tests that such a credential is accepted for its system and rejected for another system of the same account and for every read.
+- [x] 2.3 Implement data-source create, list, read, rename and delete with the one-time configuration response, and define the smalog, SBFspot, generic and import profiles with their server-rendered snippets; verify that the secret appears only in the create and regenerate responses and that an unsupported profile is rejected with the list of supported ones.
+- [x] 2.4 Attribute every accepted reading to its data source and derive the connection state, last reading time and daily count; verify the never-connected, receiving, stale and disconnected states with tests that control the clock.
 - [ ] 2.5 Add the test-reading operation and the removal of test readings, excluding them from totals, statistics and forecasts; verify that a test reading changes no energy total and that removal deletes only marked readings.
 - [ ] 2.6 Document the data-source, profile and test-reading resources in OpenAPI and add an uploader guide section that shows the generated configuration; verify the OpenAPI contract checks and `test:docs` pass.
 

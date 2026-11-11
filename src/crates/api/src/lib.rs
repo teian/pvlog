@@ -35,6 +35,7 @@ mod authorization;
 mod channels;
 mod connectors;
 mod dashboard;
+mod data_sources;
 mod equipment_catalog;
 mod forecasting;
 mod geocoding;
@@ -82,6 +83,10 @@ pub use connectors::{
 pub use dashboard::{
     DashboardAlertResponse, DashboardApiError, DashboardApiUseCases, DashboardIngestionResponse,
     DashboardResponse, DashboardRestriction, dashboard_router,
+};
+pub use data_sources::{
+    CreateDataSourceInput, DataSourceApiError, DataSourceApiUseCases, DataSourceConfiguration,
+    DataSourceResponse, IssuedDataSource, RenameDataSourceInput, data_sources_router,
 };
 pub use equipment_catalog::{
     CatalogPageResponse, EquipmentCatalogApiError, equipment_catalog_router,

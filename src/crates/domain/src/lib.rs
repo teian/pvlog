@@ -36,10 +36,10 @@ pub use forecasting::{
 };
 pub use identifiers::{
     AccountId, AlertEventId, AlertRuleId, ApiCredentialId, AuditEventId, ChannelId, ConnectorId,
-    CorrectionId, EquipmentId, ExportId, ExternalIdentityId, IdentifierError, ImportId, InverterId,
-    JobId, MembershipId, ObservationId, PasswordRecoveryId, ProviderId, RequestId,
-    RoleAssignmentId, RoleId, SegmentId, SessionId, StringId, SystemId, TariffId, UserId,
-    UserInvitationId, WebhookDeliveryId, WebhookSubscriptionId,
+    CorrectionId, DataSourceId, EquipmentId, ExportId, ExternalIdentityId, IdentifierError,
+    ImportId, InverterId, JobId, MembershipId, ObservationId, PasswordRecoveryId, ProviderId,
+    RequestId, RoleAssignmentId, RoleId, SegmentId, SessionId, StringId, SystemId, TariffId,
+    UserId, UserInvitationId, WebhookDeliveryId, WebhookSubscriptionId,
 };
 pub use identity::{
     Account, AccountStatus, ApiCredential, ApiScope, AuditEvent, AuditOutcome, BuiltInRole,

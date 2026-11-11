@@ -105,6 +105,10 @@ identifier!(
 );
 identifier!(MembershipId, "Stable account membership identifier.");
 identifier!(ApiCredentialId, "Stable API credential identifier.");
+identifier!(
+    DataSourceId,
+    "Stable identifier of one uploader or import that feeds a system."
+);
 identifier!(AuditEventId, "Stable audit event identifier.");
 identifier!(EquipmentId, "Stable system equipment identifier.");
 identifier!(InverterId, "Stable inverter identifier within a PV system.");

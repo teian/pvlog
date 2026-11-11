@@ -10,6 +10,7 @@ mod authorization_boundary;
 mod batch_ingestion;
 mod browser_session;
 mod data_quality;
+mod data_sources;
 mod equipment_catalog;
 mod equipment_configuration;
 mod identity_linking;
@@ -69,6 +70,10 @@ pub use browser_session::{
 pub use data_quality::{
     DataQualityError, DataQualityIssue, DataQualityKind, DataQualityPolicy, QualitySample,
     RejectedIngestion, detect_data_quality,
+};
+pub use data_sources::{
+    ConfigurationSnippet, ConnectionState, SOURCE_PROFILES, STALE_AFTER_INTERVALS, SourceProfile,
+    connection_state, render_configuration, source_profile,
 };
 pub use equipment_catalog::{
     EquipmentCatalog, EquipmentCatalogError, EquipmentCatalogPage, EquipmentCatalogQuery,

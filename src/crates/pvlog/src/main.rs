@@ -829,6 +829,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 telemetry,
                 request_authorizer.clone(),
             ))
+            .merge(pvlog_api::data_sources_router(
+                compose_data_sources(config, target)?,
+                request_authorizer.clone(),
+            ))
             .merge(pvlog_api::channels_router(
                 channels,
                 request_authorizer.clone(),
@@ -1062,6 +1066,27 @@ fn compose_account_api_keys(
     );
     Ok(Arc::new(ManagementAccountApiKeyService::new(
         service, repository, clock,
+    )))
+}
+
+/// Composes data source management with its own upload credential issuer.
+fn compose_data_sources(
+    config: &RuntimeConfig,
+    target: &DatabaseTarget,
+) -> Result<Arc<dyn pvlog_api::DataSourceApiUseCases>, StartupError> {
+    let repository = compose_management_repository(target)?;
+    let clock: Arc<dyn Clock> = Arc::new(SystemClock);
+    let tokens = ApiTokenService::new(
+        Arc::new(ManagementApiTokenRepository::new(repository.clone())),
+        clock.clone(),
+        session_digest_key(&config.security.session_secret),
+    );
+    Ok(Arc::new(pvlog::data_sources::StorageDataSourceApi::new(
+        target.clone(),
+        tokens,
+        repository,
+        clock,
+        config.http.public_base_url.as_str(),
     )))
 }
 

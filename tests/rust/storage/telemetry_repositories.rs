@@ -265,6 +265,7 @@ fn observation(
         provenance: serde_json::json!({"source": "contract"}),
         canonical_hash,
         version: 1,
+        data_source_id: None,
     }
 }
 

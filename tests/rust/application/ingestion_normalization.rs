@@ -17,6 +17,7 @@ fn explicit_units_provenance_battery_and_registered_channels_normalize_exactly()
     let timestamp = UtcTimestamp::new(time::OffsetDateTime::UNIX_EPOCH);
     let input = NormalizeObservation {
         system_id: SystemId::new(),
+        credential_id: None,
         observed_at: timestamp,
         received_at: timestamp,
         generation_power: Some((1_234_000, PowerUnit::Milliwatts)),
