@@ -3,30 +3,59 @@ import { ProtectedRoute } from "@/features/auth";
 import {
   ActivationPage,
   AccountPage,
-  AdministrationPage,
   AuthCallbackPage,
-  DataQualityPage,
   ForbiddenPage,
   HomePage,
-  SystemForecastPage,
   LoginPage,
-  OnboardingPage,
   RecoveryPage,
-  SystemChartsPage,
   SystemLayoutPage,
-  SeasonalPage,
-  StatisticsPage,
-  SystemsPage,
-  WeatherPage,
 } from "@/pages";
 import { Alert, AlertDescription, AlertTitle } from "@/shared/components";
 import { lazy, Suspense } from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, Route, Routes } from "react-router";
 
+// Route-level splitting keeps the chart, form, and API-reference code out of the
+// entry chunk until the matching route is opened.
 const ApiReferencePage = lazy(async () => {
   const page = await import("@/pages/ApiReferencePage");
   return { default: page.ApiReferencePage };
+});
+const AdministrationPage = lazy(async () => {
+  const page = await import("@/pages/AdministrationPage");
+  return { default: page.AdministrationPage };
+});
+const DataQualityPage = lazy(async () => {
+  const page = await import("@/pages/DataQualityPage");
+  return { default: page.DataQualityPage };
+});
+const OnboardingPage = lazy(async () => {
+  const page = await import("@/pages/OnboardingPage");
+  return { default: page.OnboardingPage };
+});
+const SystemChartsPage = lazy(async () => {
+  const page = await import("@/pages/SystemChartsPage");
+  return { default: page.SystemChartsPage };
+});
+const SystemForecastPage = lazy(async () => {
+  const page = await import("@/pages/SystemForecastPage");
+  return { default: page.SystemForecastPage };
+});
+const SeasonalPage = lazy(async () => {
+  const page = await import("@/pages/ReportingPages");
+  return { default: page.SeasonalPage };
+});
+const StatisticsPage = lazy(async () => {
+  const page = await import("@/pages/ReportingPages");
+  return { default: page.StatisticsPage };
+});
+const SystemsPage = lazy(async () => {
+  const page = await import("@/pages/ReportingPages");
+  return { default: page.SystemsPage };
+});
+const WeatherPage = lazy(async () => {
+  const page = await import("@/pages/ReportingPages");
+  return { default: page.WeatherPage };
 });
 
 const accountElement = (
