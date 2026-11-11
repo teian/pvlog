@@ -724,17 +724,11 @@ fn validate_inverter(r: &InverterRecord) -> Result<(), AccountRepositoryError> {
             let derived = i64::from(string.panel_count)
                 .checked_mul(module_power)
                 .ok_or(AccountRepositoryError::InvalidRecord("PV string power"))?;
+            // Module manufacturer and model are optional: capacity, orientation and
+            // tilt describe an array. Forecast readiness reports a missing identity.
             if module_power <= 0
                 || string.total_peak_power_watts != Some(derived)
                 || string.rated_power_watts != derived
-                || string
-                    .panel_manufacturer
-                    .as_deref()
-                    .is_none_or(|value| value.trim().is_empty())
-                || string
-                    .panel_model
-                    .as_deref()
-                    .is_none_or(|value| value.trim().is_empty())
             {
                 return Err(AccountRepositoryError::InvalidRecord("PV string power"));
             }

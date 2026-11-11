@@ -293,8 +293,11 @@ fn build_string(
         inverter_id,
         name: string.name,
         panel_count: string.panel_count,
-        panel_manufacturer: string.panel_manufacturer,
-        panel_model: string.panel_model,
+        // A blank identity is no identity; forecast readiness reports it as missing.
+        panel_manufacturer: string
+            .panel_manufacturer
+            .filter(|value| !value.trim().is_empty()),
+        panel_model: string.panel_model.filter(|value| !value.trim().is_empty()),
         rated_power_watts: total_peak_power_watts,
         module_catalog_entry_id: template.map(|template| template.entry_id.0.clone()),
         module_catalog_revision: template.map(|template| template.revision.0.clone()),

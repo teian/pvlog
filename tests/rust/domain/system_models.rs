@@ -126,6 +126,70 @@ fn system_without_equipment_is_valid_and_reports_missing_equipment() -> Result<(
     Ok(())
 }
 
+/// An array described by capacity, orientation and tilt alone counts towards the
+/// capacity, and the forecast says which module details it still needs.
+#[test]
+fn a_string_without_module_identity_has_capacity_but_no_forecast() -> Result<(), Box<dyn Error>> {
+    let system_id = SystemId::new();
+    let inverter_id = InverterId::new();
+    let period = pvlog_domain::EffectivePeriod::new(date!(2025 - 01 - 01), None)?;
+    let system = PvSystem {
+        id: system_id,
+        account_id: AccountId::new(),
+        name: "Quick entry".to_owned(),
+        description: None,
+        timezone: IanaTimezone::from_str("Europe/Berlin")?,
+        commissioning_date: date!(2025 - 01 - 01),
+        country_code: None,
+        latitude_microdegrees: Some(52_520_000),
+        longitude_microdegrees: Some(13_405_000),
+        status_interval_seconds: 300,
+        lifecycle: SystemLifecycle::Active,
+        privacy: SystemPrivacy::default(),
+        calculation: CalculationSettings {
+            power: PowerCalculationMode::MeasuredOnly,
+            net: NetCalculationMode::Measured,
+            derive_interval_energy: false,
+            currency: None,
+        },
+        inverters: vec![Inverter {
+            id: inverter_id,
+            system_id,
+            name: "Inverter".to_owned(),
+            manufacturer: None,
+            model: None,
+            serial_reference: None,
+            rated_power: None,
+            period,
+            strings: vec![PvString {
+                id: StringId::new(),
+                inverter_id,
+                name: "Roof".to_owned(),
+                panel_count: 20,
+                panel_manufacturer: None,
+                panel_model: None,
+                module_peak_power: Some(Watts::new(400)),
+                rated_power: Watts::new(8_000),
+                module_specification_snapshot: None,
+                orientation_degrees: Some(180),
+                tilt_degrees: Some(35),
+                period,
+                forecast_settings: None,
+            }],
+        }],
+    };
+
+    system.validate_hierarchy()?;
+    let snapshot = system.effective_capacity_snapshot(date!(2025 - 06 - 01))?;
+    assert_eq!(snapshot.total_peak_power, Watts::new(8_000));
+    assert_eq!(snapshot.forecast_ready_peak_power, Watts::new(0));
+    let ForecastCompleteness::Unavailable { reasons } = snapshot.completeness else {
+        return Err("a string without module identity must not be forecast-ready".into());
+    };
+    assert!(reasons.contains(&ForecastCompletenessReason::MissingModuleIdentity));
+    Ok(())
+}
+
 #[test]
 fn extended_channel_scale_is_bounded() -> Result<(), Box<dyn Error>> {
     assert_eq!(ChannelScale::new(-3)?.exponent(), -3);

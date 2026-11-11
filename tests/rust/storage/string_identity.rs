@@ -229,7 +229,12 @@ impl Fixture {
         updated.strings.remove(1);
         updated.strings[0].name = "East renamed".to_owned();
         updated.strings[0].updated_at = 2;
-        let added = string(updated.id, "South");
+        // Capacity, orientation and tilt are enough to describe an array.
+        let added = PvStringRecord {
+            panel_manufacturer: None,
+            panel_model: None,
+            ..string(updated.id, "South")
+        };
         updated.strings.push(added.clone());
         repository.save_inverter_aggregate(&updated).await?;
 
@@ -254,6 +259,12 @@ impl Fixture {
             .ok_or("kept string missing")?;
         assert_eq!(kept.name, "East renamed");
         assert_eq!(kept.created_at, 1, "an update keeps the creation time");
+        assert!(
+            stored
+                .first()
+                .is_some_and(|inverter| inverter.strings.contains(&added)),
+            "a string without module manufacturer and model is stored as given"
+        );
 
         // A string of this inverter cannot be claimed by another one.
         let other_id = InverterId::new();

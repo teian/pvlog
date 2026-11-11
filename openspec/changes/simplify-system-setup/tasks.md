@@ -11,7 +11,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 - [x] 1.5 Report declared versus derived capacity on the system resource; verify both scenarios of the declared-capacity requirement with tests.
 - [x] 1.6 Document the extended system and string schemas in OpenAPI and update the contract fixture and checksum; verify `openapi:lint`, `openapi:routes`, `openapi:compare` and `test:release-artifacts` pass.
 - [x] 1.7 Keep string identifiers stable when an inverter is saved: update strings that are resubmitted with their identifier, create those without one, and remove only those left out, so measurement channels bound to a string stay bound; verify with repository tests on both databases that a string's identifier and its channel binding survive an inverter update and that an omitted string is removed.
-- [ ] 1.8 Allow a string without module manufacturer and model, so capacity, orientation and tilt are enough to describe an array, while forecast readiness keeps reporting the missing module identity; verify with tests that such a string is stored on both databases and that the forecast names module identity as missing.
+- [x] 1.8 Allow a string without module manufacturer and model, so capacity, orientation and tilt are enough to describe an array, while forecast readiness keeps reporting the missing module identity; verify with tests that such a string is stored on both databases and that the forecast names module identity as missing.
 
 ## 2. Data sources and system-restricted credentials
 
