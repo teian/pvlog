@@ -1,5 +1,6 @@
 import { useSystem } from "@/entities/system";
 import { SystemGeneralForm } from "@/features/systemSettings/components/SystemGeneralForm";
+import { SystemLifecycleActions } from "@/features/systemSettings/components/SystemLifecycleActions";
 import {
   Alert,
   AlertDescription,
@@ -8,7 +9,7 @@ import {
 } from "@/shared/components";
 import { useTranslation } from "react-i18next";
 
-/** Loads a system and shows its general settings. @param props - The system and whether it may only be viewed. @returns Loading, error or the general settings form. */
+/** Loads a system and shows its general settings. @param props - The system and whether it may only be viewed. @returns Loading, error or the general settings with the lifecycle actions. */
 export function SystemGeneralSettings({
   systemId,
   readOnly,
@@ -28,5 +29,10 @@ export function SystemGeneralSettings({
         </AlertDescription>
       </Alert>
     );
-  return <SystemGeneralForm readOnly={readOnly} record={system.data} />;
+  return (
+    <div className="flex flex-col gap-8">
+      <SystemGeneralForm readOnly={readOnly} record={system.data} />
+      {readOnly ? null : <SystemLifecycleActions record={system.data} />}
+    </div>
+  );
 }

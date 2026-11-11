@@ -1,30 +1,33 @@
 import {
   managedInverterSchema,
-  managedSystemRecordSchema,
-  type ManagedSystem,
+  type ManagedInverter,
   type SystemInverterDraft,
-  type SystemWizardDraft,
 } from "@/features/systemManagement/types/systemManagement.types";
+import { timeToMinutes } from "@/features/systemManagement/utils/systemManagementDraft";
 import { sessionJsonRequest } from "@/shared/api/sessionRequest";
 import { z } from "zod";
 
-/** Loads mutable system metadata and its effective inverter/string tree. @param systemId - System to load. @returns Complete management card model. */
-export async function fetchManagedSystem(
+const collection = (systemId: string) =>
+  `/api/v1/systems/${systemId}/inverters`;
+
+/** Loads the inverters of a system with their strings. @param systemId - System whose equipment to load. @returns Validated inverters. */
+export async function fetchInverters(
   systemId: string,
-): Promise<ManagedSystem> {
-  const [record, inverters] = await Promise.all([
-    sessionJsonRequest(`/api/v1/systems/${systemId}`),
-    sessionJsonRequest(`/api/v1/systems/${systemId}/inverters`),
-  ]);
-  return {
-    record: managedSystemRecordSchema.parse(record),
-    inverters: z.array(managedInverterSchema).parse(inverters),
-  };
+): Promise<ManagedInverter[]> {
+  return z
+    .array(managedInverterSchema)
+    .parse(await sessionJsonRequest(collection(systemId)));
 }
 
+/**
+ * Converts an inverter draft into the request the API expects.
+ *
+ * A string keeps its identifier, so measurement channels bound to it stay
+ * bound; a string without one is created.
+ */
 function inverterInput(inverter: SystemInverterDraft) {
   return {
-    name: inverter.name,
+    name: inverter.name.trim(),
     manufacturer: inverter.manufacturer || null,
     model: inverter.model || null,
     serialReference: null,
@@ -36,7 +39,8 @@ function inverterInput(inverter: SystemInverterDraft) {
     effectiveFrom: inverter.effectiveFrom,
     effectiveTo: inverter.effectiveTo,
     strings: inverter.strings.map((string) => ({
-      name: string.name,
+      ...(string.id ? { id: string.id } : {}),
+      name: string.name.trim(),
       panelCount: string.panelCount,
       panelManufacturer: string.panelManufacturer || null,
       panelModel: string.panelModel || null,
@@ -47,28 +51,37 @@ function inverterInput(inverter: SystemInverterDraft) {
       modulePeakPowerWatts: string.modulePeakPowerWatts,
       orientationDegrees: string.orientationDegrees,
       tiltDegrees: string.tiltDegrees,
+      temperatureCoefficientPpmPerCelsius: Math.round(
+        string.temperatureCoefficient * 10_000,
+      ),
+      shading: string.shading.map((entry) => ({
+        fromMinuteOfDay: timeToMinutes(entry.from),
+        toMinuteOfDay: timeToMinutes(entry.to),
+        label: entry.label.trim(),
+        lossBasisPoints: Math.round(entry.degree * 100),
+      })),
       effectiveFrom: string.effectiveFrom,
       effectiveTo: string.effectiveTo,
     })),
   };
 }
 
-async function saveInverters(
+/** Saves a system's equipment: updates kept inverters, creates new ones and removes those left out. @param systemId - System whose equipment to save. @param drafts - Complete equipment as edited. @param current - Inverters as last loaded. @returns Completion after every change was stored. */
+export async function saveInverters(
   systemId: string,
-  inverters: SystemInverterDraft[],
-  current: ManagedSystem | undefined,
-) {
+  drafts: SystemInverterDraft[],
+  current: ManagedInverter[],
+): Promise<void> {
   const retained = new Set(
-    inverters.flatMap((inverter) => (inverter.id ? [inverter.id] : [])),
+    drafts.flatMap((inverter) => (inverter.id ? [inverter.id] : [])),
   );
-  const removed =
-    current?.inverters.filter(({ id }) => !retained.has(id)) ?? [];
+  const removed = current.filter(({ id }) => !retained.has(id));
   await Promise.all([
-    ...inverters.map((inverter) =>
+    ...drafts.map((inverter) =>
       sessionJsonRequest(
         inverter.id
-          ? `/api/v1/systems/${systemId}/inverters/${inverter.id}`
-          : `/api/v1/systems/${systemId}/inverters`,
+          ? `${collection(systemId)}/${inverter.id}`
+          : collection(systemId),
         {
           method: inverter.id ? "PUT" : "POST",
           body: JSON.stringify(inverterInput(inverter)),
@@ -76,63 +89,9 @@ async function saveInverters(
       ),
     ),
     ...removed.map((inverter) =>
-      sessionJsonRequest(
-        `/api/v1/systems/${systemId}/inverters/${inverter.id}`,
-        {
-          method: "DELETE",
-        },
-      ),
+      sessionJsonRequest(`${collection(systemId)}/${inverter.id}`, {
+        method: "DELETE",
+      }),
     ),
   ]);
-}
-
-/** Creates or updates a system and persists its complete editable inverter aggregates. @param draft - Validated wizard values. @param current - Existing system in edit mode. @returns Saved system record. */
-export async function saveManagedSystem(
-  draft: SystemWizardDraft,
-  current?: ManagedSystem,
-) {
-  const body = current
-    ? {
-        name: draft.name,
-        timezone: draft.timezone,
-        visibility: current.record.visibility,
-      }
-    : { name: draft.name, timezone: draft.timezone };
-  const value = await sessionJsonRequest(
-    current ? `/api/v1/systems/${current.record.id}` : "/api/v1/systems",
-    {
-      method: current ? "PUT" : "POST",
-      ...(current
-        ? { headers: { "if-match": `"${String(current.record.version)}"` } }
-        : {}),
-      body: JSON.stringify(body),
-    },
-  );
-  let record = managedSystemRecordSchema.parse(value);
-  if (draft.active !== (record.lifecycle === "active")) {
-    record = managedSystemRecordSchema.parse(
-      await sessionJsonRequest(
-        `/api/v1/systems/${record.id}/${draft.active ? "restore" : "archive"}`,
-        {
-          method: "POST",
-          headers: { "if-match": `"${String(record.version)}"` },
-        },
-      ),
-    );
-  }
-  await saveInverters(record.id, draft.inverters, current);
-  return record;
-}
-
-/** Permanently deletes a confirmed system using optimistic concurrency. @param system - System to delete. @returns Completion after deletion. */
-export async function deleteManagedSystem(
-  system: ManagedSystem,
-): Promise<void> {
-  await sessionJsonRequest(`/api/v1/systems/${system.record.id}`, {
-    method: "DELETE",
-    headers: {
-      "if-match": `"${String(system.record.version)}"`,
-      "x-confirm-delete": "true",
-    },
-  });
 }

@@ -1,16 +1,20 @@
 export { LocationAutocomplete } from "./LocationAutocomplete";
 export {
   createSystem,
+  deleteSystem,
   fetchFirstData,
   fetchSetupStatus,
   fetchSystem,
   searchAddresses,
+  setSystemArchived,
   updateSystem,
 } from "./systemApi";
 export {
   systemKeys,
   useCreateSystem,
+  useDeleteSystem,
   useFirstData,
+  useSetSystemArchived,
   useSetupStatus,
   useSystem,
   useUpdateSystem,

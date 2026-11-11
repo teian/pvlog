@@ -1,8 +1,10 @@
 import {
   createSystem,
+  deleteSystem,
   fetchFirstData,
   fetchSetupStatus,
   fetchSystem,
+  setSystemArchived,
   updateSystem,
 } from "@/entities/system/systemApi";
 import type {
@@ -81,6 +83,34 @@ export function useUpdateSystem(systemId: string) {
         }),
         queryClient.invalidateQueries({ queryKey: ["system-management"] }),
       ]);
+    },
+  });
+}
+
+/** Archives or restores a system. @param systemId - System to change. @returns Lifecycle mutation state. */
+export function useSetSystemArchived(systemId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      version,
+      action,
+    }: {
+      version: number;
+      action: "archive" | "restore";
+    }) => setSystemArchived(systemId, version, action),
+    onSuccess: (record) => {
+      queryClient.setQueryData(systemKeys.record(systemId), record);
+    },
+  });
+}
+
+/** Permanently deletes a system and refreshes the session's system list. @param systemId - System to delete. @returns Deletion mutation state. */
+export function useDeleteSystem(systemId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (version: number) => deleteSystem(systemId, version),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["session"] });
     },
   });
 }

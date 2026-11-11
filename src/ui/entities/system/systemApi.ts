@@ -84,3 +84,31 @@ export async function fetchFirstData(systemId: string): Promise<FirstData> {
     await sessionJsonRequest(`/api/v1/systems/${systemId}/first-data`),
   );
 }
+
+/** Archives or restores a system when the given version is current. @param systemId - System to change. @param version - Version the action is based on. @param action - Whether to archive or restore. @returns The updated system record. */
+export async function setSystemArchived(
+  systemId: string,
+  version: number,
+  action: "archive" | "restore",
+): Promise<SystemRecord> {
+  return systemRecordSchema.parse(
+    await sessionJsonRequest(`/api/v1/systems/${systemId}/${action}`, {
+      method: "POST",
+      headers: { "if-match": `"${String(version)}"` },
+    }),
+  );
+}
+
+/** Permanently deletes a system with all its data. @param systemId - System to delete. @param version - Version the deletion is based on. @returns Completion after deletion. */
+export async function deleteSystem(
+  systemId: string,
+  version: number,
+): Promise<void> {
+  await sessionJsonRequest(`/api/v1/systems/${systemId}`, {
+    method: "DELETE",
+    headers: {
+      "if-match": `"${String(version)}"`,
+      "x-confirm-delete": "true",
+    },
+  });
+}

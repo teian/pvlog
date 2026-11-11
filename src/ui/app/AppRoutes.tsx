@@ -29,10 +29,6 @@ const DataQualityPage = lazy(async () => {
   const page = await import("@/pages/DataQualityPage");
   return { default: page.DataQualityPage };
 });
-const OnboardingPage = lazy(async () => {
-  const page = await import("@/pages/OnboardingPage");
-  return { default: page.OnboardingPage };
-});
 const SetupPage = lazy(async () => {
   const page = await import("@/pages/SetupPage");
   return { default: page.SetupPage };
@@ -127,11 +123,7 @@ export function AppRoutes() {
             path="/onboarding"
           />
           <Route
-            element={
-              <ProtectedRoute permission="system_manage">
-                <OnboardingPage />
-              </ProtectedRoute>
-            }
+            element={<Navigate replace to="/systems" />}
             path="/systems/manage"
           />
           <Route

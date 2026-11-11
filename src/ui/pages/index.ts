@@ -8,7 +8,6 @@ export { DashboardPage } from "./DashboardPage";
 export { DataQualityPage } from "./DataQualityPage";
 export { ForbiddenPage } from "./ForbiddenPage";
 export { LoginPage } from "./LoginPage";
-export { OnboardingPage } from "./OnboardingPage";
 export { RecoveryPage } from "./RecoveryPage";
 export { SystemChartsPage } from "./SystemChartsPage";
 export { SystemLayoutPage } from "./SystemLayoutPage";

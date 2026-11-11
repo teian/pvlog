@@ -1,5 +1,6 @@
 import { useSession } from "@/features/auth";
 import { DataSourceManager } from "@/features/dataSources";
+import { SystemEquipmentEditor } from "@/features/systemManagement";
 import { SystemGeneralSettings } from "@/features/systemSettings";
 import { cn } from "@/shared/lib/utils";
 import type { ComponentType } from "react";
@@ -22,6 +23,7 @@ interface SectionProps {
 const SECTIONS: { key: string; component: ComponentType<SectionProps> }[] = [
   { key: "general", component: SystemGeneralSettings },
   { key: "data-sources", component: DataSourceManager },
+  { key: "equipment", component: SystemEquipmentEditor },
 ];
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>

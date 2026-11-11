@@ -1,8 +1,6 @@
 import { InverterDraftEditor } from "@/features/systemManagement/components/InverterDraftEditor";
-import { SystemWizard } from "@/features/systemManagement/components/SystemWizard";
 import type { SystemInverterDraft } from "@/features/systemManagement/types/systemManagement.types";
 import { emptyInverter } from "@/features/systemManagement/utils/systemManagementDraft";
-import { SessionRequestError } from "@/shared/api/sessionRequest";
 import i18n from "@/shared/lib/i18n";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
@@ -46,57 +44,6 @@ describe("manual inverter editor", () => {
           ),
       ),
     );
-  });
-
-  it("explains why saving is disabled and omits the redundant back action", async () => {
-    const user = userEvent.setup();
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <SystemWizard
-          error={null}
-          onCancel={vi.fn()}
-          onSubmit={vi.fn(async () => undefined)}
-          pending={false}
-        />
-      </QueryClientProvider>,
-    );
-
-    const createSystem = screen.getByRole("button", {
-      name: "Anlage anlegen",
-    });
-    expect(createSystem).toBeDisabled();
-    expect(
-      screen.getByText("Speichern nicht möglich: Der Anlagenname fehlt."),
-    ).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "Zurück" }),
-    ).not.toBeInTheDocument();
-
-    await user.type(screen.getByLabelText("Anlagenname"), "Hausdach");
-
-    expect(createSystem).toBeEnabled();
-    expect(
-      screen.getByText("Alle Änderungen werden gemeinsam gespeichert."),
-    ).toBeInTheDocument();
-  });
-
-  it("explains a server-side validation rejection", () => {
-    render(
-      <QueryClientProvider client={new QueryClient()}>
-        <SystemWizard
-          error={new SessionRequestError(422, null, null)}
-          onCancel={vi.fn()}
-          onSubmit={vi.fn(async () => undefined)}
-          pending={false}
-        />
-      </QueryClientProvider>,
-    );
-
-    expect(
-      screen.getByText(
-        "Der Server hat die Anlagendaten abgelehnt. Prüfe Anlagenname und Zeitzone und versuche es erneut.",
-      ),
-    ).toBeVisible();
   });
 
   it("does not expose unused MPPT and phase inputs", () => {

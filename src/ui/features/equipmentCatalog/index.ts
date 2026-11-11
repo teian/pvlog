@@ -5,7 +5,6 @@ export {
 export {
   useInverterCatalog,
   useSolarModuleCatalog,
-  useSaveEquipmentConfiguration,
 } from "./hooks/useEquipmentCatalog";
 export {
   inverterCatalogEntrySchema,
@@ -17,6 +16,3 @@ export type {
   InverterCatalogEntry,
   SolarModuleCatalogEntry,
 } from "./types/equipmentCatalog.types";
-export { EquipmentCatalogPanel } from "./components/EquipmentCatalogPanel";
-export { InverterCatalogSelector } from "./components/InverterCatalogSelector";
-export { SolarModuleCatalogSelector } from "./components/SolarModuleCatalogSelector";

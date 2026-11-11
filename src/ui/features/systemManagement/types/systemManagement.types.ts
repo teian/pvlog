@@ -16,6 +16,21 @@ export const managedStringSchema = z.object({
   totalPeakPowerWatts: z.number().int().nullable(),
   orientationDegrees: z.number().int().nullable(),
   tiltDegrees: z.number().int().nullable(),
+  temperatureCoefficientPpmPerCelsius: z
+    .number()
+    .int()
+    .nullable()
+    .default(null),
+  shading: z
+    .array(
+      z.object({
+        fromMinuteOfDay: z.number().int(),
+        toMinuteOfDay: z.number().int(),
+        label: z.string().default(""),
+        lossBasisPoints: z.number().int(),
+      }),
+    )
+    .default([]),
   effectiveFrom: z.number().int(),
   effectiveTo: z.number().int().nullable(),
 });
@@ -35,26 +50,7 @@ export const managedInverterSchema = z.object({
   strings: z.array(managedStringSchema),
 });
 
-/** Mutable system lifecycle representation used by management actions. */
-export const managedSystemRecordSchema = z.object({
-  id,
-  accountId: id,
-  name: z.string(),
-  timezone: z.string(),
-  visibility: z.enum(["private", "account", "unlisted", "public"]),
-  lifecycle: z.enum(["active", "archived", "pending_deletion"]),
-  version: z.number().int().positive(),
-  createdAt: z.number().int(),
-  updatedAt: z.number().int(),
-});
-
-/** Complete system-management card model. */
-export interface ManagedSystem {
-  record: z.infer<typeof managedSystemRecordSchema>;
-  inverters: z.infer<typeof managedInverterSchema>[];
-}
-
-/** Editable string values held locally until the wizard is submitted. */
+/** Editable string values held locally until the equipment is saved. */
 export interface SystemStringDraft {
   id?: string;
   effectiveFrom: number;
@@ -77,7 +73,7 @@ export interface SystemStringDraft {
   moduleSpecificationSnapshot: unknown;
 }
 
-/** Editable inverter aggregate held locally until submission. */
+/** Editable inverter with its strings, held locally until the equipment is saved. */
 export interface SystemInverterDraft {
   id?: string;
   effectiveFrom: number;
@@ -90,15 +86,5 @@ export interface SystemInverterDraft {
   strings: SystemStringDraft[];
 }
 
-/** Complete single-page wizard draft. */
-export interface SystemWizardDraft {
-  name: string;
-  location: string;
-  timezone: string;
-  active: boolean;
-  inverters: SystemInverterDraft[];
-}
-
-export type ManagedSystemRecord = z.infer<typeof managedSystemRecordSchema>;
 export type ManagedInverter = z.infer<typeof managedInverterSchema>;
 export type ManagedString = z.infer<typeof managedStringSchema>;

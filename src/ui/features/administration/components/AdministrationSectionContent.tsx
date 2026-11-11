@@ -1,4 +1,3 @@
-import { EquipmentCatalogPanel } from "@/features/equipmentCatalog";
 import { AlertRulesPanel } from "./AlertRulesPanel";
 import { AuditPanel } from "./AuditPanel";
 import { ConnectorPanel } from "./ConnectorPanel";
@@ -6,7 +5,7 @@ import { EmailNotificationPanel } from "./EmailNotificationPanel";
 import { NotificationChannelsPanel } from "./NotificationChannelsPanel";
 import { OperationsPanel } from "./OperationsPanel";
 import { RetentionBackupPanel } from "./RetentionBackupPanel";
-import { SystemResourcesPanel } from "./SystemResourcesPanel";
+import { SystemSettingsMovedNotice } from "./SystemSettingsMovedNotice";
 import { UsersRolesPanel } from "./UsersRolesPanel";
 import { WeatherFeedPanel } from "./WeatherFeedPanel";
 
@@ -35,8 +34,7 @@ export function AdministrationSectionContent({
       <>
         <WeatherFeedPanel />
         <ConnectorPanel />
-        <SystemResourcesPanel accountId={accountId} systemId={systemId} />
-        <EquipmentCatalogPanel accountId={accountId} systemId={systemId} />
+        <SystemSettingsMovedNotice systemId={systemId} />
       </>
     );
   if (section === "alert-rules")

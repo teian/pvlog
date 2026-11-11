@@ -52,7 +52,6 @@ test("boots the browser application from runtime configuration", async ({
     "Statistics",
     "Seasonal",
     "Weather",
-    "Manage",
     "Administration",
   ]) {
     await expect(page.getByText(label, { exact: true }).first()).toBeVisible();

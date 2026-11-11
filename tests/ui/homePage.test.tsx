@@ -71,9 +71,11 @@ describe("HomePage", () => {
     for (const label of ["Anlagen", "Statistik", "Jahreszeiten", "Wetter"]) {
       expect(within(navigation).getAllByText(label)[0]).toBeVisible();
     }
+    // Systems are added from the systems list and edited in their settings;
+    // there is no separate "manage" destination any more.
     expect(
-      within(navigation).getByRole("link", { name: "Verwalten" }),
-    ).toBeVisible();
+      within(navigation).queryByRole("link", { name: "Verwalten" }),
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Verwaltung" })).toBeVisible();
     expect(screen.queryByText("Administration")).not.toBeInTheDocument();
   });

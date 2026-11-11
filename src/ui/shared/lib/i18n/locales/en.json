@@ -334,7 +334,8 @@
       "capacity": "Installed capacity",
       "equipment": "Equipment",
       "equipmentValue": "{{inverters}} inverter · {{strings}} strings",
-      "status": "Status"
+      "status": "Status",
+      "add": "Add system"
     },
     "statistics": {
       "title": "Statistics",
@@ -629,6 +630,11 @@
       "credential_manage": "Manage credentials",
       "integration_manage": "Manage integrations",
       "audit_read": "Read audit trail"
+    },
+    "moved": {
+      "title": "System equipment has moved",
+      "description": "Inverters, strings and the equipment catalogue are now edited in each system's settings, under Equipment.",
+      "link": "Open equipment settings"
     }
   },
   "onboarding": {
@@ -1196,6 +1202,10 @@
       "data-sources": {
         "title": "Data sources",
         "description": "The loggers and imports that deliver this system's readings."
+      },
+      "equipment": {
+        "title": "Equipment",
+        "description": "Inverters and strings. Optional: a system works without them, and they unlock per-string analysis and the yield forecast."
       }
     },
     "general": {
@@ -1210,6 +1220,48 @@
         "invalid": "The changes could not be saved. Check the values you entered.",
         "unavailable": "The changes could not be saved right now. Try again in a moment."
       }
+    },
+    "lifecycle": {
+      "title": "Archive or delete",
+      "activeDescription": "An archived system keeps its data but is hidden from the daily views. Deleting removes the system and all its data for good.",
+      "archivedDescription": "This system is archived. Restore it to show it in the daily views again.",
+      "archive": "Archive system",
+      "restore": "Restore system",
+      "delete": "Delete system",
+      "deleteTitle": "Delete this system?",
+      "deleteDescription": "“{{name}}” and all its readings, equipment and data sources are removed permanently. This cannot be undone.",
+      "deleteConfirm": "Delete system permanently"
+    }
+  },
+  "equipment": {
+    "save": "Save equipment",
+    "saving": "Saving…",
+    "saved": "Equipment saved.",
+    "quick": {
+      "title": "Describe the array",
+      "description": "Capacity, orientation and tilt are enough to start. Module details can be added later for the yield forecast.",
+      "save": "Save array",
+      "detailed": "Enter inverters and strings in detail",
+      "invalid": "Enter a positive capacity and a tilt between 0 and 90 degrees.",
+      "inverterName": "Inverter 1",
+      "stringName": "Array 1"
+    },
+    "empty": {
+      "title": "No equipment entered",
+      "description": "This system has no inverters or strings yet."
+    },
+    "issues": {
+      "inverterName": "The name for inverter {{inverter}} is missing.",
+      "strings": "Inverter {{inverter}} requires at least one PV string.",
+      "stringName": "The name for string {{string}} of inverter {{inverter}} is missing.",
+      "moduleCount": "String {{string}} of inverter {{inverter}} needs at least one module.",
+      "modulePower": "String {{string}} of inverter {{inverter}} needs a module power above zero.",
+      "shading": "Check the shading of string {{string}} of inverter {{inverter}}: times as HH:MM, the end after the start, and a share between 0 and 100 %."
+    },
+    "errors": {
+      "save": "The equipment could not be saved completely. Check the entries and try again.",
+      "loadTitle": "Equipment could not be loaded",
+      "loadDescription": "Reload the page, or try again in a moment."
     }
   }
 }

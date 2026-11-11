@@ -1,9 +1,5 @@
-export { SystemManagementView } from "./components/SystemManagementView";
-export { SystemWizard } from "./components/SystemWizard";
+export { SystemEquipmentEditor } from "./components/SystemEquipmentEditor";
 export type {
-  ManagedSystem,
-  ManagedSystemRecord,
   ManagedInverter,
   ManagedString,
-  SystemWizardDraft,
 } from "./types/systemManagement.types";

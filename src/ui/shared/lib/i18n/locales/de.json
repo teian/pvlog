@@ -334,7 +334,8 @@
       "capacity": "Installierte Leistung",
       "equipment": "Geräte",
       "equipmentValue": "{{inverters}} Wechselrichter · {{strings}} Strings",
-      "status": "Status"
+      "status": "Status",
+      "add": "Anlage hinzufügen"
     },
     "statistics": {
       "title": "Statistik",
@@ -629,6 +630,11 @@
       "credential_manage": "Zugänge verwalten",
       "integration_manage": "Integrationen verwalten",
       "audit_read": "Audit-Protokoll lesen"
+    },
+    "moved": {
+      "title": "Die Geräte der Anlagen sind umgezogen",
+      "description": "Wechselrichter, Strings und der Gerätekatalog werden jetzt in den Einstellungen der jeweiligen Anlage unter „Geräte“ bearbeitet.",
+      "link": "Geräte-Einstellungen öffnen"
     }
   },
   "onboarding": {
@@ -1196,6 +1202,10 @@
       "data-sources": {
         "title": "Datenquellen",
         "description": "Die Logger und Importe, die die Messwerte dieser Anlage liefern."
+      },
+      "equipment": {
+        "title": "Geräte",
+        "description": "Wechselrichter und Strings. Optional: Eine Anlage funktioniert auch ohne sie; sie ermöglichen die Auswertung je String und die Ertragsprognose."
       }
     },
     "general": {
@@ -1210,6 +1220,48 @@
         "invalid": "Die Änderungen konnten nicht gespeichert werden. Prüfe deine Eingaben.",
         "unavailable": "Die Änderungen konnten gerade nicht gespeichert werden. Versuche es gleich noch einmal."
       }
+    },
+    "lifecycle": {
+      "title": "Archivieren oder löschen",
+      "activeDescription": "Eine archivierte Anlage behält ihre Daten, erscheint aber nicht mehr in den täglichen Ansichten. Löschen entfernt die Anlage mit allen Daten endgültig.",
+      "archivedDescription": "Diese Anlage ist archiviert. Stelle sie wieder her, damit sie in den täglichen Ansichten erscheint.",
+      "archive": "Anlage archivieren",
+      "restore": "Anlage wiederherstellen",
+      "delete": "Anlage löschen",
+      "deleteTitle": "Diese Anlage löschen?",
+      "deleteDescription": "„{{name}}“ wird mit allen Messwerten, Geräten und Datenquellen endgültig entfernt. Das lässt sich nicht rückgängig machen.",
+      "deleteConfirm": "Anlage endgültig löschen"
+    }
+  },
+  "equipment": {
+    "save": "Geräte speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "Geräte gespeichert.",
+    "quick": {
+      "title": "Modulfeld beschreiben",
+      "description": "Leistung, Ausrichtung und Neigung reichen für den Anfang. Moduldetails für die Ertragsprognose lassen sich später ergänzen.",
+      "save": "Modulfeld speichern",
+      "detailed": "Wechselrichter und Strings im Detail erfassen",
+      "invalid": "Gib eine positive Leistung und eine Neigung zwischen 0 und 90 Grad ein.",
+      "inverterName": "Wechselrichter 1",
+      "stringName": "Modulfeld 1"
+    },
+    "empty": {
+      "title": "Keine Geräte erfasst",
+      "description": "Diese Anlage hat noch keine Wechselrichter oder Strings."
+    },
+    "issues": {
+      "inverterName": "Der Name für Wechselrichter {{inverter}} fehlt.",
+      "strings": "Wechselrichter {{inverter}} braucht mindestens einen PV-String.",
+      "stringName": "Der Name für String {{string}} von Wechselrichter {{inverter}} fehlt.",
+      "moduleCount": "String {{string}} von Wechselrichter {{inverter}} braucht mindestens ein Modul.",
+      "modulePower": "String {{string}} von Wechselrichter {{inverter}} braucht eine Modulleistung über null.",
+      "shading": "Prüfe die Verschattung von String {{string}} von Wechselrichter {{inverter}}: Zeiten als HH:MM, das Ende nach dem Anfang und ein Anteil zwischen 0 und 100 %."
+    },
+    "errors": {
+      "save": "Die Geräte konnten nicht vollständig gespeichert werden. Prüfe die Eingaben und versuche es erneut.",
+      "loadTitle": "Geräte konnten nicht geladen werden",
+      "loadDescription": "Lade die Seite neu oder versuche es gleich noch einmal."
     }
   }
 }

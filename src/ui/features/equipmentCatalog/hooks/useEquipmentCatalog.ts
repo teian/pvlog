@@ -1,10 +1,9 @@
 import {
   fetchInverterCatalog,
   fetchSolarModuleCatalog,
-  saveEquipmentConfiguration,
 } from "@/features/equipmentCatalog/api/equipmentCatalogApi";
 import type { EquipmentCatalogQuery } from "@/features/equipmentCatalog/types/equipmentCatalog.types";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 const CATALOG_STALE_TIME_MS = 60 * 60 * 1000;
 
@@ -36,20 +35,5 @@ export function useSolarModuleCatalog(query: EquipmentCatalogQuery) {
     queryFn: () => fetchSolarModuleCatalog(normalized),
     staleTime: CATALOG_STALE_TIME_MS,
     retry: false,
-  });
-}
-
-/** Saves confirmed equipment and refreshes configured inverters. @param accountId - Owning account. @param systemId - Owning system. @returns The mutation state. */
-export function useSaveEquipmentConfiguration(
-  accountId: string,
-  systemId: string,
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (input: unknown) => saveEquipmentConfiguration(systemId, input),
-    onSuccess: async () =>
-      queryClient.invalidateQueries({
-        queryKey: ["administration", "inverters", accountId, systemId],
-      }),
   });
 }

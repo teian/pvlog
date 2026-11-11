@@ -13,6 +13,7 @@ import {
   Alert,
   AlertDescription,
   AlertTitle,
+  Button,
   Card,
   CardContent,
   CardDescription,
@@ -26,6 +27,7 @@ import {
   TableRow,
 } from "@/shared/components";
 import { AppShell } from "@/widgets";
+import { PlusIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router";
 
@@ -35,6 +37,7 @@ function usePageContext() {
   const { systemId, selectSystem } = useSelectedSystem(systemIds);
   return {
     accountId: session.data?.accountId,
+    canManage: session.data?.permissions.includes("system_manage") ?? false,
     systemId,
     systemIds,
     selectSystem,
@@ -86,10 +89,20 @@ export function SystemsPage() {
   const rows = systems.flatMap((query) => (query.data ? [query.data] : []));
   return (
     <AppShell systemIds={context.systemIds}>
-      <Header
-        description={t("reporting.systems.description")}
-        title={t("reporting.systems.title")}
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <Header
+          description={t("reporting.systems.description")}
+          title={t("reporting.systems.title")}
+        />
+        {context.canManage ? (
+          <Button asChild size="sm">
+            <Link to="/setup">
+              <PlusIcon data-icon="inline-start" />
+              {t("reporting.systems.add")}
+            </Link>
+          </Button>
+        ) : null}
+      </div>
       <EmptyOrError
         empty={!loading && context.systemIds.length === 0}
         error={failed}

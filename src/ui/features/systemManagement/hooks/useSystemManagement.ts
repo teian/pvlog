@@ -1,55 +1,39 @@
 import {
-  deleteManagedSystem,
-  fetchManagedSystem,
-  saveManagedSystem,
+  fetchInverters,
+  saveInverters,
 } from "@/features/systemManagement/api/systemManagementApi";
 import type {
-  ManagedSystem,
-  SystemWizardDraft,
+  ManagedInverter,
+  SystemInverterDraft,
 } from "@/features/systemManagement/types/systemManagement.types";
-import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-/** Loads all systems visible to the current management session. @param systemIds - Authorized systems. @returns Parallel system queries. */
-export function useManagedSystems(systemIds: string[]) {
-  return useQueries({
-    queries: systemIds.map((systemId) => ({
-      queryKey: ["system-management", systemId],
-      queryFn: () => fetchManagedSystem(systemId),
-      staleTime: 0,
-    })),
+const inverterKey = (systemId: string) =>
+  ["system", systemId, "inverters"] as const;
+
+/** Loads a system's inverters with their strings. @param systemId - System whose equipment to load. @returns Query state of the equipment. */
+export function useInverters(systemId: string) {
+  return useQuery({
+    queryKey: inverterKey(systemId),
+    queryFn: () => fetchInverters(systemId),
+    staleTime: 0,
   });
 }
 
-/** Persists one create/edit wizard and refreshes session/system state. @returns Mutation state. */
-export function useSaveManagedSystem() {
+/** Saves a system's equipment and refreshes everything derived from it. @param systemId - System whose equipment to save. @returns Save mutation state. */
+export function useSaveInverters(systemId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({
-      draft,
+      drafts,
       current,
     }: {
-      draft: SystemWizardDraft;
-      current?: ManagedSystem;
-    }) => saveManagedSystem(draft, current),
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["session"] }),
-        queryClient.invalidateQueries({ queryKey: ["system-management"] }),
-      ]);
-    },
-  });
-}
-
-/** Deletes one system and refreshes session/system state. @returns Mutation state. */
-export function useDeleteManagedSystem() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: deleteManagedSystem,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["session"] }),
-        queryClient.invalidateQueries({ queryKey: ["system-management"] }),
-      ]);
+      drafts: SystemInverterDraft[];
+      current: ManagedInverter[];
+    }) => saveInverters(systemId, drafts, current),
+    onSettled: async () => {
+      // Also after a failure: some inverters may already have been stored.
+      await queryClient.invalidateQueries({ queryKey: ["system", systemId] });
     },
   });
 }

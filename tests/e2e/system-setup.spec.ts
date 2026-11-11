@@ -208,3 +208,11 @@ test("the former setup address leads to the guided setup", async ({ page }) => {
   await page.goto("/onboarding");
   await expect(page).toHaveURL(/\/setup$/);
 });
+
+test("the former management address leads to the systems list", async ({
+  page,
+}) => {
+  await stubBackend(page);
+  await page.goto("/systems/manage");
+  await expect(page).toHaveURL(/\/systems$/);
+});

@@ -7,7 +7,6 @@ export {
   useInviteUser,
   useLinkedIdentities,
   useRoles,
-  useSystemResources,
   useOperationalSummary,
   useAlertRules,
   useUpdateAlertRule,
@@ -39,7 +38,6 @@ export { InvitationPanel } from "./components/InvitationPanel";
 export { RoleAssignmentForm } from "./components/RoleAssignmentForm";
 export { IdentityPanel } from "./components/IdentityPanel";
 export { RolesPanel } from "./components/RolesPanel";
-export { SystemResourcesPanel } from "./components/SystemResourcesPanel";
 export { OperationsPanel } from "./components/OperationsPanel";
 export type {
   AuditEvent,

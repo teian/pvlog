@@ -1,6 +1,7 @@
 /* eslint-disable max-lines-per-function -- the string card keeps basic and disclosure-controlled advanced fields in one accessible form unit */
 import type { SystemStringDraft } from "@/features/systemManagement/types/systemManagement.types";
 import { ModuleCatalogField } from "@/features/systemManagement/components/ModuleCatalogField";
+import { ORIENTATIONS } from "@/features/systemManagement/utils/orientations";
 import {
   Button,
   Field,
@@ -12,17 +13,6 @@ import {
 import { ChevronDownIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-
-const ORIENTATIONS = [
-  [0, "north"],
-  [45, "northEast"],
-  [90, "east"],
-  [135, "southEast"],
-  [180, "south"],
-  [225, "southWest"],
-  [270, "west"],
-  [315, "northWest"],
-] as const;
 
 /** Edits one PV string and computes its live peak capacity. @param props - String identity, draft, removal state and change callbacks. @returns Sectioned string editor card. */
 export function StringDraftEditor({

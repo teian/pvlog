@@ -6,7 +6,6 @@ import {
   type InverterCatalogEntry,
   type SolarModuleCatalogEntry,
 } from "@/features/equipmentCatalog/types/equipmentCatalog.types";
-import { sessionJsonRequest } from "@/shared/api/sessionRequest";
 import { z } from "zod";
 
 const MAX_SEARCH_LENGTH = 80;
@@ -64,15 +63,4 @@ export async function fetchSolarModuleCatalog(
         `/api/v1/equipment-catalog/solar-modules?${queryString(query)}`,
       ),
     );
-}
-
-/** Persists confirmed editable equipment through the real aggregate API. @param systemId - Owning system. @param input - Confirmed aggregate. @returns The stored server response. */
-export async function saveEquipmentConfiguration(
-  systemId: string,
-  input: unknown,
-): Promise<unknown> {
-  return sessionJsonRequest(`/api/v1/systems/${systemId}/inverters`, {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
 }
