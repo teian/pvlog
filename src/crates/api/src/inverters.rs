@@ -25,6 +25,9 @@ use crate::{
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PvStringInput {
+    /// Identifier of an existing string to keep; omitted for a new string.
+    #[serde(default)]
+    pub id: Option<StringId>,
     pub name: String,
     pub panel_count: u32,
     pub panel_manufacturer: Option<String>,

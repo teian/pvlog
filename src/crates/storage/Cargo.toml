@@ -81,6 +81,10 @@ name = "system-lifecycle-repositories"
 path = "../../../tests/rust/storage/system_lifecycle_repositories.rs"
 
 [[test]]
+name = "string-identity"
+path = "../../../tests/rust/storage/string_identity.rs"
+
+[[test]]
 name = "external-identity-repositories"
 path = "../../../tests/rust/storage/external_identity_repositories.rs"
 

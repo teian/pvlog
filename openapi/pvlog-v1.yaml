@@ -3651,6 +3651,9 @@ components:
       additionalProperties: false
       required: [name, panelCount, modulePeakPowerWatts, effectiveFrom]
       properties:
+        id:
+          anyOf: [{ $ref: "#/components/schemas/UuidV7" }, { type: "null" }]
+          description: Identifier of an existing string of this inverter to keep. Omit it for a new string. A string that is left out of an update is removed; one that is resubmitted keeps its identifier and the measurement channels bound to it.
         name: { type: string, minLength: 1 }
         panelCount: { type: integer, minimum: 1 }
         panelManufacturer: { type: [string, "null"] }

@@ -165,6 +165,12 @@ pub trait AccountConfigurationRepository: Send + Sync {
         system_id: SystemId,
         inverter_id: InverterId,
     ) -> Result<bool, AccountRepositoryError>;
+    /// Lists every string of an inverter regardless of its effective period, so
+    /// a save can tell a known string from an invented identifier.
+    async fn inverter_string_ids(
+        &self,
+        inverter_id: InverterId,
+    ) -> Result<Vec<StringId>, AccountRepositoryError>;
     async fn effective_inverters(
         &self,
         system_id: SystemId,
@@ -281,12 +287,44 @@ impl AccountConfigurationRepository for SqliteAccountConfigurationRepository {
             .bind(record.specification_snapshot.as_ref().map(serde_json::to_string).transpose()?)
             .bind(record.effective_from).bind(record.effective_to)
             .bind(record.created_at).bind(record.updated_at).execute(&mut *transaction).await?;
-        sqlx::query("DELETE FROM pv_strings WHERE inverter_id=?")
-            .bind(blob(record.id.as_uuid()))
+        // Strings keep their identifier across saves: channels and forecast
+        // settings refer to it. Only strings left out of the save are removed.
+        let stored: Vec<Vec<u8>> =
+            sqlx::query_scalar("SELECT id FROM pv_strings WHERE inverter_id=?")
+                .bind(blob(record.id.as_uuid()))
+                .fetch_all(&mut *transaction)
+                .await?;
+        for string in &record.strings {
+            let foreign: Option<i64> =
+                sqlx::query_scalar("SELECT 1 FROM pv_strings WHERE id=? AND inverter_id<>?")
+                    .bind(blob(string.id.as_uuid()))
+                    .bind(blob(record.id.as_uuid()))
+                    .fetch_optional(&mut *transaction)
+                    .await?;
+            if foreign.is_some() {
+                return Err(AccountRepositoryError::InvalidRecord("PV string"));
+            }
+        }
+        for removed in stored.iter().filter(|id| {
+            !record
+                .strings
+                .iter()
+                .any(|string| string.id.as_uuid().as_bytes().as_slice() == id.as_slice())
+        }) {
+            sqlx::query(
+                "UPDATE channel_definitions SET target_kind='unassigned',target_id=NULL \
+                 WHERE target_kind='string' AND target_id=?",
+            )
+            .bind(removed)
             .execute(&mut *transaction)
             .await?;
+            sqlx::query("DELETE FROM pv_strings WHERE id=?")
+                .bind(removed)
+                .execute(&mut *transaction)
+                .await?;
+        }
         for string in &record.strings {
-            sqlx::query("INSERT INTO pv_strings (id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot_json,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,temperature_coefficient_ppm_per_celsius,shading_json,effective_from,effective_to,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            sqlx::query("INSERT INTO pv_strings (id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot_json,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,temperature_coefficient_ppm_per_celsius,shading_json,effective_from,effective_to,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name,panel_count=excluded.panel_count,panel_manufacturer=excluded.panel_manufacturer,panel_model=excluded.panel_model,rated_power_watts=excluded.rated_power_watts,module_catalog_entry_id=excluded.module_catalog_entry_id,module_catalog_revision=excluded.module_catalog_revision,value_provenance=excluded.value_provenance,module_specification_snapshot_json=excluded.module_specification_snapshot_json,module_peak_power_watts=excluded.module_peak_power_watts,total_peak_power_watts=excluded.total_peak_power_watts,orientation_degrees=excluded.orientation_degrees,tilt_degrees=excluded.tilt_degrees,temperature_coefficient_ppm_per_celsius=excluded.temperature_coefficient_ppm_per_celsius,shading_json=excluded.shading_json,effective_from=excluded.effective_from,effective_to=excluded.effective_to,updated_at=excluded.updated_at,version=pv_strings.version+1")
                 .bind(blob(string.id.as_uuid())).bind(blob(string.inverter_id.as_uuid()))
                 .bind(&string.name).bind(i64::from(string.panel_count)).bind(&string.panel_manufacturer)
                 .bind(&string.panel_model).bind(string.rated_power_watts).bind(&string.module_catalog_entry_id)
@@ -335,6 +373,19 @@ impl AccountConfigurationRepository for SqliteAccountConfigurationRepository {
             .execute(writer.connection())
             .await?;
         Ok(result.rows_affected() == 1)
+    }
+    async fn inverter_string_ids(
+        &self,
+        inverter_id: InverterId,
+    ) -> Result<Vec<StringId>, AccountRepositoryError> {
+        let mut connection = self.account.acquire().await?;
+        sqlx::query_scalar::<_, Vec<u8>>("SELECT id FROM pv_strings WHERE inverter_id=?")
+            .bind(blob(inverter_id.as_uuid()))
+            .fetch_all(&mut *connection)
+            .await?
+            .into_iter()
+            .map(|id| sqlite_id(id, StringId::from_uuid))
+            .collect()
     }
     async fn save_equipment(&self, r: &EquipmentRecord) -> Result<(), AccountRepositoryError> {
         validate_range(r.effective_from, r.effective_to)?;
@@ -439,13 +490,52 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
             .bind(record.specification_snapshot.as_ref().map(sqlx::types::Json))
             .bind(record.effective_from).bind(record.effective_to)
             .bind(record.created_at).bind(record.updated_at).execute(&mut *transaction).await?;
-        sqlx::query("DELETE FROM account_data.pv_strings WHERE account_id=$1 AND inverter_id=$2")
+        // Strings keep their identifier across saves: channels and forecast
+        // settings refer to it. Only strings left out of the save are removed.
+        let stored: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM account_data.pv_strings WHERE account_id=$1 AND inverter_id=$2",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(record.id.as_uuid())
+        .fetch_all(&mut *transaction)
+        .await?;
+        for string in &record.strings {
+            let foreign: Option<i32> = sqlx::query_scalar(
+                "SELECT 1 FROM account_data.pv_strings \
+                 WHERE account_id=$1 AND id=$2 AND inverter_id<>$3",
+            )
             .bind(self.account_id.as_uuid())
+            .bind(string.id.as_uuid())
             .bind(record.id.as_uuid())
+            .fetch_optional(&mut *transaction)
+            .await?;
+            if foreign.is_some() {
+                return Err(AccountRepositoryError::InvalidRecord("PV string"));
+            }
+        }
+        for removed in stored.iter().filter(|id| {
+            !record
+                .strings
+                .iter()
+                .any(|string| string.id.as_uuid() == **id)
+        }) {
+            sqlx::query(
+                "UPDATE account_data.channel_definitions \
+                 SET target_kind='unassigned',target_id=NULL \
+                 WHERE account_id=$1 AND target_kind='string' AND target_id=$2",
+            )
+            .bind(self.account_id.as_uuid())
+            .bind(removed)
             .execute(&mut *transaction)
             .await?;
+            sqlx::query("DELETE FROM account_data.pv_strings WHERE account_id=$1 AND id=$2")
+                .bind(self.account_id.as_uuid())
+                .bind(removed)
+                .execute(&mut *transaction)
+                .await?;
+        }
         for string in &record.strings {
-            sqlx::query("INSERT INTO account_data.pv_strings (account_id,id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,temperature_coefficient_ppm_per_celsius,shading,effective_from,effective_to,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)")
+            sqlx::query("INSERT INTO account_data.pv_strings (account_id,id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,temperature_coefficient_ppm_per_celsius,shading,effective_from,effective_to,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,panel_count=excluded.panel_count,panel_manufacturer=excluded.panel_manufacturer,panel_model=excluded.panel_model,rated_power_watts=excluded.rated_power_watts,module_catalog_entry_id=excluded.module_catalog_entry_id,module_catalog_revision=excluded.module_catalog_revision,value_provenance=excluded.value_provenance,module_specification_snapshot=excluded.module_specification_snapshot,module_peak_power_watts=excluded.module_peak_power_watts,total_peak_power_watts=excluded.total_peak_power_watts,orientation_degrees=excluded.orientation_degrees,tilt_degrees=excluded.tilt_degrees,temperature_coefficient_ppm_per_celsius=excluded.temperature_coefficient_ppm_per_celsius,shading=excluded.shading,effective_from=excluded.effective_from,effective_to=excluded.effective_to,updated_at=excluded.updated_at,version=account_data.pv_strings.version+1")
                 .bind(self.account_id.as_uuid()).bind(string.id.as_uuid()).bind(string.inverter_id.as_uuid())
                 .bind(&string.name).bind(i32::try_from(string.panel_count).map_err(|_| AccountRepositoryError::InvalidRecord("PV string"))?)
                 .bind(&string.panel_manufacturer).bind(&string.panel_model).bind(string.rated_power_watts)
@@ -497,6 +587,23 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
         .await?;
         connection.close().await?;
         Ok(result.rows_affected() == 1)
+    }
+    async fn inverter_string_ids(
+        &self,
+        inverter_id: InverterId,
+    ) -> Result<Vec<StringId>, AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        let ids = sqlx::query_scalar::<_, Uuid>(
+            "SELECT id FROM account_data.pv_strings WHERE account_id=$1 AND inverter_id=$2",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(inverter_id.as_uuid())
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        ids.into_iter()
+            .map(|id| pg_id(id, StringId::from_uuid))
+            .collect()
     }
     async fn save_equipment(&self, r: &EquipmentRecord) -> Result<(), AccountRepositoryError> {
         validate_range(r.effective_from, r.effective_to)?;

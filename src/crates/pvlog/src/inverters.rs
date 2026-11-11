@@ -147,6 +147,29 @@ impl ManagementInverterApi {
         {
             return Err(InverterApiError::Forbidden);
         }
+        // A string identifier must name a string this inverter already has;
+        // anything else would adopt or invent a string under a chosen identifier.
+        let submitted: Vec<StringId> = input
+            .strings
+            .iter()
+            .filter_map(|string| string.id)
+            .collect();
+        if !submitted.is_empty() {
+            let known = match inverter_id {
+                Some(_) => repository
+                    .inverter_string_ids(id)
+                    .await
+                    .map_err(|_| InverterApiError::Unavailable)?,
+                None => Vec::new(),
+            };
+            let mut seen = std::collections::BTreeSet::new();
+            if submitted
+                .iter()
+                .any(|string| !known.contains(string) || !seen.insert(*string))
+            {
+                return Err(InverterApiError::InvalidInput("strings.id"));
+            }
+        }
         let record = self.prepare(system_id, id, input, now)?;
         repository
             .save_inverter_aggregate(&record)
@@ -266,7 +289,7 @@ fn build_string(
         .as_ref()
         .and_then(|snapshot| snapshot.template.as_ref());
     Ok(PvStringRecord {
-        id: StringId::new(),
+        id: string.id.unwrap_or_default(),
         inverter_id,
         name: string.name,
         panel_count: string.panel_count,
