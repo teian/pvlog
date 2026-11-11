@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pvlog_application::{PortError, WeatherJsonTransport};
-use pvlog_domain::{NormalizedWeatherRun, SystemId};
+use pvlog_domain::{NormalizedWeatherRun, SpatialCoverage, SystemId};
 use pvlog_storage::DatabaseTarget;
 use secrecy::ExposeSecret as _;
 use url::Url;
@@ -75,11 +75,22 @@ pub async fn store_run(
     run: &NormalizedWeatherRun,
 ) -> Result<(), PortError> {
     let run_id = run.id.as_uuid().as_bytes().to_vec();
+    let (spatial_kind, latitude, longitude, region) = match &run.spatial_coverage {
+        SpatialCoverage::Point(point) => (
+            "point",
+            Some(i64::from(point.latitude_microdegrees)),
+            Some(i64::from(point.longitude_microdegrees)),
+            None,
+        ),
+        SpatialCoverage::ProviderRegion(name) => {
+            ("provider_region", None, None, Some(name.clone()))
+        }
+    };
     sqlx::query(
         "INSERT INTO weather_data_runs (id,system_id,provider_configuration_id,source_run_key,\
          data_kind,issued_at,fetched_at,valid_from,valid_to,resolution_seconds,spatial_kind,\
-         adapter,source_url,license_identifier,attribution) \
-         VALUES (?,?,?,?,?,?,?,?,?,?,'point',?,?,?,?) ON CONFLICT(id) DO NOTHING",
+         latitude_e6,longitude_e6,provider_region,adapter,source_url,license_identifier,attribution) \
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING",
     )
     .bind(run_id.clone())
     .bind(system_id.as_uuid().as_bytes().to_vec())
@@ -91,6 +102,10 @@ pub async fn store_run(
     .bind(epoch(run.valid_range.start))
     .bind(epoch(run.valid_range.end))
     .bind(i64::from(run.resolution_seconds))
+    .bind(spatial_kind)
+    .bind(latitude)
+    .bind(longitude)
+    .bind(region)
     .bind(&run.provenance.adapter)
     .bind(run.provenance.source_url.to_string())
     .bind(&run.provenance.license_identifier)

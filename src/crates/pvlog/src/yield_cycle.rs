@@ -108,12 +108,7 @@ async fn calculate_system(
     if strings.is_empty() {
         return Ok(YieldCycleReport::default());
     }
-    let Some(digest) = strings
-        .first()
-        .map(|entry| entry.configuration_digest.clone())
-    else {
-        return Ok(YieldCycleReport::default());
-    };
+    let digest = system_digest(&strings);
 
     // Only forecast runs without a completed calculation under this digest.
     let runs = sqlx::query(
@@ -130,16 +125,27 @@ async fn calculate_system(
     .map_err(|_| YieldCycleError::Unavailable)?;
 
     let mut report = YieldCycleReport::default();
-    for run in &runs {
+    // Newest runs were selected first; apply them oldest first so the newest
+    // forecast wins the last-write-wins projection.
+    for run in runs.iter().rev() {
         let weather_run_id: Vec<u8> = run.get("id");
+        // One transaction per run: a failed write must not leave a run recorded
+        // as completed with partial results.
+        let mut transaction = sqlx::Connection::begin(&mut *connection)
+            .await
+            .map_err(|_| YieldCycleError::Unavailable)?;
         let written = calculate_run(
-            &mut connection,
+            &mut transaction,
             &system,
             system_id,
             &strings,
             &weather_run_id,
         )
         .await?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| YieldCycleError::Unavailable)?;
         report.runs_calculated += 1;
         report.intervals_written += written;
     }
@@ -170,6 +176,7 @@ async fn calculate_run(
     let Some(first) = strings.first() else {
         return Ok(0);
     };
+    let digest = system_digest(strings);
     let now = Utc::now().timestamp_millis();
     let calculation_run_id = Uuid::now_v7().as_bytes().to_vec();
     sqlx::query(
@@ -184,10 +191,10 @@ async fn calculate_run(
     .bind(weather_run_id.to_vec())
     .bind(&first.model_identifier)
     .bind(first.model_revision)
-    .bind(first.configuration_digest.clone())
+    .bind(digest.clone())
     .bind(now)
     .bind(now)
-    .bind(idempotency_key(weather_run_id, &first.configuration_digest))
+    .bind(idempotency_key(weather_run_id, &digest))
     .execute(&mut *connection)
     .await
     .map_err(|_| YieldCycleError::Unavailable)?;
@@ -203,12 +210,36 @@ async fn calculate_run(
             strings,
             point,
             total_capacity,
-            &first.configuration_digest,
+            &digest,
             now,
         )
         .await?;
     }
     Ok(written)
+}
+
+/// Digest over every configured string, so a change to any string's settings
+/// or rating invalidates earlier calculations.
+#[cfg(feature = "sqlite")]
+fn system_digest(strings: &[ConfiguredString]) -> Vec<u8> {
+    let mut entries: Vec<_> = strings
+        .iter()
+        .map(|entry| {
+            (
+                &entry.string_id,
+                &entry.configuration_digest,
+                entry.rated_power_watts,
+            )
+        })
+        .collect();
+    entries.sort_unstable();
+    let mut hasher = blake3::Hasher::new();
+    for (string_id, digest, rated) in entries {
+        hasher.update(string_id);
+        hasher.update(digest);
+        hasher.update(&rated.to_be_bytes());
+    }
+    hasher.finalize().as_bytes().to_vec()
 }
 
 /// Stable key for one weather run modeled under one configuration.
