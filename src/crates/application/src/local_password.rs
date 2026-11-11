@@ -4,7 +4,9 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use argon2::{
     Algorithm, Argon2, Params, Version,
-    password_hash::{PasswordHasher as _, PasswordVerifier as _, phc::PasswordHash as PhcPasswordHash},
+    password_hash::{
+        PasswordHasher as _, PasswordVerifier as _, phc::PasswordHash as PhcPasswordHash,
+    },
 };
 use async_trait::async_trait;
 use pvlog_domain::{CredentialDigest, PasswordHash, PasswordRecoveryId, UserId, UserStatus};
