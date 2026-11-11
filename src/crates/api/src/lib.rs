@@ -50,6 +50,7 @@ mod rbac;
 mod readiness;
 mod reporting;
 mod sessions;
+mod setup;
 mod sharing;
 mod systems;
 mod telemetry;
@@ -132,6 +133,10 @@ pub use reporting::{
 pub use sessions::{
     SessionApiError, SessionBootstrap, SessionBootstrapUseCases, SessionConnector, SessionUser,
     sessions_router,
+};
+pub use setup::{
+    DataState, FirstDataResponse, SetupApiError, SetupApiUseCases, SetupStatusResponse,
+    VerifiedReading, setup_router,
 };
 pub use sharing::{
     PublicDirectoryEntry, PublicSystem, SharingApiError, SharingApiUseCases, SharingInput,

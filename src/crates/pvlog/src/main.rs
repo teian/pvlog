@@ -845,6 +845,14 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 sharing,
                 request_authorizer.clone(),
             ))
+            .merge(pvlog_api::setup_router(
+                Arc::new(pvlog::setup::StorageSetupApi::new(
+                    target.clone(),
+                    forecasting.clone(),
+                    Arc::new(SystemClock),
+                )),
+                request_authorizer.clone(),
+            ))
             .merge(pvlog_api::forecasting_router(
                 forecasting,
                 request_authorizer.clone(),

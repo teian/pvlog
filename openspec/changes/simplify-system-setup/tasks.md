@@ -24,10 +24,10 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 
 ## 3. Setup status and verification
 
-- [ ] 3.1 Implement the setup-status resource with the eight items and their done, recommended, optional and blocked states; verify each scenario of the setup-status requirement with tests.
-- [ ] 3.2 Implement first-data verification returning the latest normalized reading and its data source, distinguishing test readings; verify with tests for no reading, test reading only, and a real reading.
-- [ ] 3.3 Make the dashboard and system-list responses distinguish "no reading" from a reading time and derive current, stale and absent status from telemetry; verify with API tests that a system without readings reports no observation instead of age zero.
-- [ ] 3.4 Document the setup-status and verification resources in OpenAPI; verify the OpenAPI contract checks pass.
+- [x] 3.1 Implement the setup-status resource with the eight items and their done, recommended, optional and blocked states; verify each scenario of the setup-status requirement with tests.
+- [x] 3.2 Implement first-data verification returning the latest normalized reading and its data source, distinguishing test readings; verify with tests for no reading, test reading only, and a real reading.
+- [x] 3.3 Make the dashboard and system-list responses distinguish "no reading" from a reading time and derive current, stale and absent status from telemetry; verify with API tests that a system without readings reports no observation instead of age zero.
+- [x] 3.4 Document the setup-status and verification resources in OpenAPI; verify the OpenAPI contract checks pass.
 
 ## 4. Guided setup and per-system settings in the UI
 

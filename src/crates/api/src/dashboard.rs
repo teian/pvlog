@@ -6,12 +6,18 @@ use async_trait::async_trait;
 use axum::{Extension, Json, Router, http::StatusCode, response::Response, routing::get};
 use serde::Serialize;
 
-use crate::RequestPrincipal;
+use crate::{DataState, RequestPrincipal};
 use pvlog_domain::{AccountId, ApiScope, SystemId, UserId};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DashboardResponse {
+    /// Whether the visible systems have data at all, and whether it is current.
+    /// A client must not show live values unless this is `current`.
+    pub data_state: DataState,
+    /// Systems the principal may see.
+    pub system_count: u64,
+    /// Measurement time of the newest reading; zero when `data_state` is `none`.
     pub observed_at_epoch_millis: i64,
     pub age_seconds: u64,
     pub freshness_threshold_seconds: u64,

@@ -32,6 +32,7 @@ mod provisioning;
 mod rbac_repository;
 mod rollup_builder;
 mod segment_codec;
+mod setup_repository;
 #[cfg(feature = "sqlite")]
 mod sqlite_projection;
 #[cfg(feature = "sqlite")]
@@ -117,6 +118,11 @@ pub use rollup_builder::{
 pub use segment_codec::{
     ArchivedSegmentBytes, SegmentCodecError, SegmentPoint, decode_segment_v1, encode_segment_v1,
 };
+#[cfg(feature = "postgres")]
+pub use setup_repository::PostgresSetupRepository;
+#[cfg(feature = "sqlite")]
+pub use setup_repository::SqliteSetupRepository;
+pub use setup_repository::{LatestReadingRecord, SetupFactsRecord, SetupRepository};
 #[cfg(feature = "sqlite")]
 pub use sqlite_projection::{
     ProjectionActivityState, ProjectionError, ProjectionInvalidationReason,

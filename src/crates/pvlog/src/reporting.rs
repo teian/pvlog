@@ -2,9 +2,9 @@
 
 use async_trait::async_trait;
 use pvlog_api::{
-    MonthlyProductionResponse, ReportingApiError, ReportingApiUseCases, SeasonProductionResponse,
-    SeasonalResponse, StatisticsResponse, SystemOverviewResponse, WeatherForecastPointResponse,
-    WeatherForecastResponse,
+    DataState, MonthlyProductionResponse, ReportingApiError, ReportingApiUseCases,
+    SeasonProductionResponse, SeasonalResponse, StatisticsResponse, SystemOverviewResponse,
+    WeatherForecastPointResponse, WeatherForecastResponse,
 };
 use pvlog_domain::{AccountId, SystemId};
 use pvlog_storage::{DatabaseTarget, SqliteAccountPoolConfig, SqliteAccountPoolRouter};
@@ -45,6 +45,7 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .map_err(|_| ReportingApiError::Unavailable)?;
                     let row = sqlx::query(
                         "SELECT s.name,s.timezone,s.lifecycle,s.description,s.commissioning_date,s.visibility,\
+                         s.status_interval_seconds,\
                          COUNT(DISTINCT i.id) AS inverter_count,\
                          COUNT(DISTINCT p.id) AS string_count,\
                          COALESCE(SUM(p.rated_power_watts),MAX(s.declared_capacity_watts)) AS capacity_watts,\
@@ -53,7 +54,7 @@ impl ReportingApiUseCases for StorageReportingApi {
                          (SELECT MAX(measured_at) FROM telemetry_hot h WHERE h.system_id=s.id) AS last_seen \
                          FROM systems s LEFT JOIN inverters i ON i.system_id=s.id \
                          LEFT JOIN pv_strings p ON p.inverter_id=i.id WHERE s.id=? \
-                         GROUP BY s.id,s.name,s.timezone,s.lifecycle",
+                         GROUP BY s.id,s.name,s.timezone,s.lifecycle,s.status_interval_seconds",
                     ).bind(id_blob(system_id)).fetch_optional(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     row.map(|row| sqlite_overview(system_id, &row))
                         .ok_or(ReportingApiError::NotFound)
@@ -72,7 +73,8 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .map_err(|_| ReportingApiError::Unavailable)?;
                     let row = sqlx::query(
                         "SELECT s.name,s.timezone,s.lifecycle,s.description,s.commissioning_date::TEXT AS commissioning_date,\
-                         s.visibility,COUNT(DISTINCT i.id)::BIGINT AS inverter_count,\
+                         s.visibility,s.status_interval_seconds::BIGINT AS status_interval_seconds,\
+                         COUNT(DISTINCT i.id)::BIGINT AS inverter_count,\
                          COUNT(DISTINCT p.id)::BIGINT AS string_count,\
                          COALESCE(SUM(p.rated_power_watts),MAX(s.declared_capacity_watts))::BIGINT AS capacity_watts,\
                          (SELECT coverage_basis_points::BIGINT FROM telemetry.lifetime_summaries l \
@@ -81,7 +83,7 @@ impl ReportingApiUseCases for StorageReportingApi {
                           WHERE h.account_id=s.account_id AND h.system_id=s.id) AS last_seen \
                          FROM account_data.systems s LEFT JOIN account_data.inverters i ON i.account_id=s.account_id AND i.system_id=s.id \
                          LEFT JOIN account_data.pv_strings p ON p.account_id=i.account_id AND p.inverter_id=i.id \
-                         WHERE s.account_id=$1 AND s.id=$2 GROUP BY s.id,s.name,s.timezone,s.lifecycle",
+                         WHERE s.account_id=$1 AND s.id=$2 GROUP BY s.id,s.name,s.timezone,s.lifecycle,s.status_interval_seconds",
                     ).bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_optional(&mut connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     connection
                         .close()
@@ -300,6 +302,8 @@ impl ReportingApiUseCases for StorageReportingApi {
 /// availability and last-seen values from the aggregates the worker maintains.
 #[cfg(feature = "sqlite")]
 fn sqlite_overview(system_id: SystemId, row: &sqlx::sqlite::SqliteRow) -> SystemOverviewResponse {
+    let last_seen: Option<i64> = row.try_get("last_seen").ok().flatten();
+    let status_interval_seconds = status_interval(row.try_get("status_interval_seconds").ok());
     SystemOverviewResponse {
         id: system_id,
         name: row.get("name"),
@@ -313,7 +317,9 @@ fn sqlite_overview(system_id: SystemId, row: &sqlx::sqlite::SqliteRow) -> System
         availability_basis_points: overview_availability(
             row.try_get("availability").ok().flatten(),
         ),
-        last_seen_epoch_millis: row.try_get("last_seen").ok().flatten(),
+        last_seen_epoch_millis: last_seen,
+        status_interval_seconds,
+        data_state: DataState::at(last_seen, status_interval_seconds, now_millis()),
         visibility: row.try_get("visibility").unwrap_or_default(),
     }
 }
@@ -321,6 +327,8 @@ fn sqlite_overview(system_id: SystemId, row: &sqlx::sqlite::SqliteRow) -> System
 /// Shapes one `PostgreSQL` overview row into a system overview response.
 #[cfg(feature = "postgres")]
 fn postgres_overview(system_id: SystemId, row: &sqlx::postgres::PgRow) -> SystemOverviewResponse {
+    let last_seen: Option<i64> = row.try_get("last_seen").ok().flatten();
+    let status_interval_seconds = status_interval(row.try_get("status_interval_seconds").ok());
     SystemOverviewResponse {
         id: system_id,
         name: row.get("name"),
@@ -334,12 +342,27 @@ fn postgres_overview(system_id: SystemId, row: &sqlx::postgres::PgRow) -> System
         availability_basis_points: overview_availability(
             row.try_get("availability").ok().flatten(),
         ),
-        last_seen_epoch_millis: row.try_get("last_seen").ok().flatten(),
+        last_seen_epoch_millis: last_seen,
+        status_interval_seconds,
+        data_state: DataState::at(last_seen, status_interval_seconds, now_millis()),
         visibility: row.try_get("visibility").unwrap_or_default(),
     }
 }
 
 /// Narrows stored availability to basis points, dropping out-of-range values.
+/// Narrows a stored status interval, falling back to the default when it is unreadable.
+fn status_interval(stored: Option<i64>) -> u32 {
+    stored
+        .and_then(|value| u32::try_from(value).ok())
+        .unwrap_or(pvlog_application::DEFAULT_STATUS_INTERVAL_SECONDS)
+}
+
+/// Current time in epoch milliseconds.
+fn now_millis() -> i64 {
+    let now = time::OffsetDateTime::now_utc();
+    now.unix_timestamp() * 1_000 + i64::from(now.nanosecond() / 1_000_000)
+}
+
 fn overview_availability(stored: Option<i64>) -> Option<u16> {
     stored.and_then(|value| u16::try_from(value).ok())
 }

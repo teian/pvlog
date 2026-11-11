@@ -51,6 +51,8 @@ impl DashboardApiUseCases for Dashboard {
         _restriction: DashboardRestriction,
     ) -> Result<DashboardResponse, DashboardApiError> {
         Ok(DashboardResponse {
+            data_state: pvlog_api::DataState::None,
+            system_count: 1,
             observed_at_epoch_millis: 0,
             age_seconds: 1,
             freshness_threshold_seconds: 60,

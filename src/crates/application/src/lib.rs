@@ -31,6 +31,7 @@ mod query_planner;
 mod rate_limit;
 mod rbac_management;
 mod series_query;
+mod setup_status;
 mod statistics;
 mod system_configuration;
 mod system_lifecycle;
@@ -156,6 +157,7 @@ pub use series_query::{
     GapKind, PlannedSeries, SeriesGap, SeriesPoint, SeriesQueryError, SeriesQueryRepository,
     SeriesQueryRepositoryError, SeriesQueryResult, SeriesQueryService, SeriesUnit,
 };
+pub use setup_status::{SetupFacts, SetupItem, SetupItemKey, SetupItemState, setup_status};
 pub use statistics::{
     EnergyStatistics, StatisticsBucket, StatisticsError, StatisticsPeriod, calculate_statistics,
 };

@@ -72,6 +72,10 @@ name = "data-sources"
 path = "../../../tests/rust/pvlog/data_sources.rs"
 
 [[test]]
+name = "setup"
+path = "../../../tests/rust/pvlog/setup.rs"
+
+[[test]]
 name = "inverter-validation"
 path = "../../../tests/rust/pvlog/inverter_validation.rs"
 

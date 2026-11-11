@@ -9,7 +9,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use pvlog_api::{
     DashboardAlertResponse, DashboardApiError, DashboardApiUseCases, DashboardIngestionResponse,
-    DashboardResponse, DashboardRestriction,
+    DashboardResponse, DashboardRestriction, DataState,
 };
 use pvlog_application::Clock;
 use pvlog_domain::{AccountId, SystemId, UserId};
@@ -105,6 +105,7 @@ impl DashboardApiUseCases for StorageDashboardApi {
         let now = i64::try_from(self.clock.now().epoch_millis())
             .map_err(|_| DashboardApiError::Unavailable)?;
         let visible = self.visible_systems(actor, restriction).await?;
+        let system_count = u64::try_from(visible.len()).unwrap_or(u64::MAX);
 
         let mut newest = SystemSnapshot::default();
         let mut accepted_today = 0_u64;
@@ -126,6 +127,14 @@ impl DashboardApiUseCases for StorageDashboardApi {
 
         let age_millis = now.saturating_sub(newest.observed_at_epoch_millis).max(0);
         Ok(DashboardResponse {
+            // No reading is not a reading of age zero: without one, nothing
+            // here may be presented as live.
+            data_state: DataState::at(
+                (newest.observed_at_epoch_millis != 0).then_some(newest.observed_at_epoch_millis),
+                u32::try_from(FRESHNESS_THRESHOLD_SECONDS / 3).unwrap_or(u32::MAX),
+                now,
+            ),
+            system_count,
             observed_at_epoch_millis: newest.observed_at_epoch_millis,
             age_seconds: if newest.observed_at_epoch_millis == 0 {
                 0
@@ -250,7 +259,75 @@ impl StorageDashboardApi {
                     Ok(SystemSnapshot::default())
                 }
             }
-            DatabaseTarget::Postgres { .. } => Ok(SystemSnapshot::default()),
+            DatabaseTarget::Postgres { url } => {
+                #[cfg(feature = "postgres")]
+                {
+                    use sqlx::Connection as _;
+                    let mut connection = sqlx::PgConnection::connect(url)
+                        .await
+                        .map_err(|_| DashboardApiError::Unavailable)?;
+                    let latest = sqlx::query(
+                        "SELECT measured_at,generation_power_watts,consumption_power_watts,\
+                         net_grid_power_watts,battery_state_basis_points::BIGINT \
+                         AS battery_state_basis_points FROM telemetry.hot_observations \
+                         WHERE account_id=$1 AND system_id=$2 ORDER BY measured_at DESC LIMIT 1",
+                    )
+                    .bind(account_id.as_uuid())
+                    .bind(system_id.as_uuid())
+                    .fetch_optional(&mut connection)
+                    .await
+                    .map_err(|_| DashboardApiError::Unavailable)?;
+                    let accepted: i64 = sqlx::query_scalar(
+                        "SELECT COUNT(*) FROM telemetry.hot_observations \
+                         WHERE account_id=$1 AND system_id=$2 AND received_at>=$3",
+                    )
+                    .bind(account_id.as_uuid())
+                    .bind(system_id.as_uuid())
+                    .bind(now - MILLIS_PER_DAY)
+                    .fetch_one(&mut connection)
+                    .await
+                    .map_err(|_| DashboardApiError::Unavailable)?;
+                    let coverage: Option<i64> = sqlx::query_scalar(
+                        "SELECT coverage_basis_points::BIGINT FROM telemetry.lifetime_summaries \
+                         WHERE account_id=$1 AND system_id=$2",
+                    )
+                    .bind(account_id.as_uuid())
+                    .bind(system_id.as_uuid())
+                    .fetch_optional(&mut connection)
+                    .await
+                    .map_err(|_| DashboardApiError::Unavailable)?
+                    .flatten();
+                    connection
+                        .close()
+                        .await
+                        .map_err(|_| DashboardApiError::Unavailable)?;
+                    Ok(
+                        latest.map_or_else(SystemSnapshot::default, |row| SystemSnapshot {
+                            observed_at_epoch_millis: row.get("measured_at"),
+                            generation_watts: row.try_get("generation_power_watts").ok().flatten(),
+                            consumption_watts: row
+                                .try_get("consumption_power_watts")
+                                .ok()
+                                .flatten(),
+                            grid_watts: row.try_get("net_grid_power_watts").ok().flatten(),
+                            battery_basis_points: row
+                                .try_get("battery_state_basis_points")
+                                .ok()
+                                .flatten(),
+                            coverage_basis_points: coverage
+                                .and_then(|value| u16::try_from(value).ok())
+                                .unwrap_or_default()
+                                .min(10_000),
+                            accepted_today: u64::try_from(accepted).unwrap_or_default(),
+                        }),
+                    )
+                }
+                #[cfg(not(feature = "postgres"))]
+                {
+                    let _ = (url, account_id, system_id, now);
+                    Ok(SystemSnapshot::default())
+                }
+            }
         }
     }
 

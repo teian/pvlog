@@ -919,6 +919,38 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/SourceProfile" }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/systems/{system_id}/setup-status:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: getSystemSetupStatus
+      summary: Read the setup status
+      description: Returns, in a fixed order, what the system has and what it still needs. The status is derived from stored configuration and telemetry at request time. Only connecting a data source and receiving the first reading are ever recommended; a system that receives data has no recommended item.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      responses:
+        "200":
+          description: Setup status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupStatus" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+  /api/v1/systems/{system_id}/first-data:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: getSystemFirstData
+      summary: Verify that the system receives data
+      description: Reports whether a reading that is not a test reading is stored, and returns the newest reading in normalized form with the data source it arrived through. While no real reading exists, the newest test reading is returned and marked as such.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      responses:
+        "200":
+          description: First-data verification
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FirstData" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
   /api/v1/systems/{system_id}/data-sources:
     parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     get:
@@ -3600,6 +3632,76 @@ components:
           writeOnly: true
           description: One-time cleartext bearer key. Copy it before dismissing the response.
         credential: { $ref: "#/components/schemas/AccountApiKey" }
+    DataState:
+      type: string
+      enum: [none, current, stale]
+      description: none while no real reading is stored; current when the latest reading arrived within three status intervals; stale otherwise. Clients must not present values as live unless the state is current.
+    SetupStatus:
+      type: object
+      required: [systemId, items, dataState]
+      properties:
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        dataState: { $ref: "#/components/schemas/DataState" }
+        lastReceivedAtEpochMillis: { type: [integer, "null"], format: int64 }
+        items:
+          type: array
+          description: Items in the order location, capacity, data_source, first_data, channels, equipment, tariff, forecast.
+          items:
+            type: object
+            required: [key, state]
+            properties:
+              key:
+                type: string
+                enum:
+                  [
+                    location,
+                    capacity,
+                    data_source,
+                    first_data,
+                    channels,
+                    equipment,
+                    tariff,
+                    forecast,
+                  ]
+              state:
+                type: string
+                enum: [done, recommended, optional, blocked]
+              reason:
+                type: string
+                description: Machine-readable reason the item is not done, for example data_source_missing, waiting_for_first_reading or unassigned_channels.
+              count:
+                type: integer
+                minimum: 0
+                description: Number of things the reason refers to, such as unassigned channels.
+    FirstData:
+      type: object
+      required: [systemId, received]
+      properties:
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        received:
+          type: boolean
+          description: True once a reading that is not a test reading is stored.
+        reading:
+          anyOf:
+            - type: object
+              required: [id, measuredAtEpochMillis, receivedAtEpochMillis, test]
+              properties:
+                id: { $ref: "#/components/schemas/UuidV7" }
+                measuredAtEpochMillis: { type: integer, format: int64 }
+                receivedAtEpochMillis: { type: integer, format: int64 }
+                generationPowerWatts: { type: [integer, "null"], format: int64 }
+                generationEnergyWh: { type: [integer, "null"], format: int64 }
+                consumptionPowerWatts:
+                  { type: [integer, "null"], format: int64 }
+                consumptionEnergyWh: { type: [integer, "null"], format: int64 }
+                dataSourceId:
+                  anyOf:
+                    [{ $ref: "#/components/schemas/UuidV7" }, { type: "null" }]
+                dataSourceName: { type: [string, "null"] }
+                test:
+                  type: boolean
+                  description: True for a reading that only proves the connection.
+            - type: "null"
     SourceProfile:
       type: object
       required: [id, displayName, issuesCredential, snippetKinds]
@@ -5266,7 +5368,21 @@ components:
         lifecycle: { enum: [active, archived, deleting, deleted] }
         inverterCount: { type: integer, minimum: 0 }
         stringCount: { type: integer, minimum: 0 }
-        capacityWatts: { type: [integer, "null"], format: int64, minimum: 0 }
+        capacityWatts:
+          type: [integer, "null"]
+          format: int64
+          minimum: 0
+          description: Sum of the strings' rated power, or the declared capacity while the system has no strings.
+        description: { type: string }
+        commissioningDate: { type: [string, "null"], format: date }
+        availabilityBasisPoints:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 10000
+        lastSeenEpochMillis: { type: [integer, "null"], format: int64 }
+        statusIntervalSeconds: { type: integer, minimum: 30, maximum: 86400 }
+        dataState: { $ref: "#/components/schemas/DataState" }
+        visibility: { type: string }
     ReportingStatistics:
       type: object
       additionalProperties: false
@@ -5367,6 +5483,8 @@ components:
       additionalProperties: false
       required:
         [
+          dataState,
+          systemCount,
           observedAtEpochMillis,
           ageSeconds,
           freshnessThresholdSeconds,
@@ -5379,7 +5497,15 @@ components:
           ingestion,
         ]
       properties:
-        observedAtEpochMillis: { type: integer, format: int64 }
+        dataState: { $ref: "#/components/schemas/DataState" }
+        systemCount:
+          type: integer
+          minimum: 0
+          description: Systems the principal may see.
+        observedAtEpochMillis:
+          type: integer
+          format: int64
+          description: Measurement time of the newest reading; zero when dataState is none.
         ageSeconds: { type: integer, minimum: 0 }
         freshnessThresholdSeconds: { type: integer, minimum: 1 }
         generationWatts: { type: number }
