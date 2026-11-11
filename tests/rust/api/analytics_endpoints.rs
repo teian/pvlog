@@ -4,13 +4,19 @@ use axum::{
     body::Body,
     http::{Method, Request, StatusCode, header},
 };
-use pvlog_api::analytics_router;
+use pvlog_api::{
+    AuthorizedRequest, ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal,
+    analytics_router,
+};
 use pvlog_application::{
     AnalysisExportRequest, AnalysisExportResult, DataQualityIssue, EnergyStatistics,
     ModeledAnalysisExportMetadata, ModernAnalyticsError, ModernAnalyticsUseCases, QueryResolution,
     SeriesField, SeriesQueryResult, StatisticsPeriod,
 };
-use pvlog_domain::{JobId, SystemId, UserId, WeatherDataRunId, YieldCalculationRunId};
+use pvlog_domain::{
+    AccountId, ApiCredentialId, ApiScope, JobId, Permission, PrincipalId, SystemId, UserId,
+    WeatherDataRunId, YieldCalculationRunId,
+};
 use std::{error::Error, sync::Arc};
 use tower::ServiceExt as _;
 
@@ -18,7 +24,8 @@ use tower::ServiceExt as _;
 async fn analytics_routes_cover_queries_and_both_export_modes() -> Result<(), Box<dyn Error>> {
     let system = SystemId::new();
     let actor = UserId::new();
-    let app = analytics_router(Arc::new(Stub)).layer(Extension(actor));
+    let app = analytics_router(Arc::new(Stub), Arc::new(Allow))
+        .layer(Extension(RequestPrincipal::User(actor)));
     for uri in [
         format!(
             "/api/v1/systems/{system}/series?startEpochMillis=0&endEpochMillis=3600000&fields=generation_power"
@@ -64,7 +71,7 @@ async fn analytics_routes_cover_queries_and_both_export_modes() -> Result<(), Bo
 #[tokio::test]
 async fn analytics_routes_require_identity_and_validate_bounds() -> Result<(), Box<dyn Error>> {
     let system = SystemId::new();
-    let app = analytics_router(Arc::new(Stub));
+    let app = analytics_router(Arc::new(Stub), Arc::new(Allow));
     let forbidden = app
         .clone()
         .oneshot(
@@ -205,4 +212,69 @@ impl ModernAnalyticsUseCases for Stub {
             })
         }
     }
+}
+
+struct Allow;
+
+#[async_trait]
+impl ModernRequestAuthorizer for Allow {
+    async fn authorize_instance(
+        &self,
+        _principal: PrincipalId,
+        _permission: Permission,
+        _action: &'static str,
+    ) -> Result<UserId, RequestAuthorizationError> {
+        Err(RequestAuthorizationError::Forbidden)
+    }
+
+    async fn authorize_account(
+        &self,
+        _principal: PrincipalId,
+        _account_id: AccountId,
+        _permission: Permission,
+        _action: &'static str,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError> {
+        Err(RequestAuthorizationError::Forbidden)
+    }
+
+    async fn authorize_system(
+        &self,
+        _principal: PrincipalId,
+        _system_id: SystemId,
+        permission: Permission,
+        _action: &'static str,
+    ) -> Result<AuthorizedRequest, RequestAuthorizationError> {
+        if permission != Permission::TelemetryRead {
+            return Err(RequestAuthorizationError::Forbidden);
+        }
+        Ok(AuthorizedRequest {
+            actor_user_id: UserId::new(),
+            account_id: AccountId::new(),
+        })
+    }
+}
+
+#[tokio::test]
+async fn api_credentials_need_the_telemetry_read_scope() -> Result<(), Box<dyn Error>> {
+    let system = SystemId::new();
+    let credential = |scope| RequestPrincipal::ApiCredential {
+        id: ApiCredentialId::new(),
+        owner_user_id: UserId::new(),
+        account_id: AccountId::new(),
+        system_id: None,
+        scopes: [scope].into_iter().collect(),
+    };
+    let uri = format!("/api/v1/systems/{system}/statistics?period=day");
+    for (scope, expected) in [
+        (ApiScope::SystemsRead, StatusCode::FORBIDDEN),
+        (ApiScope::TelemetryRead, StatusCode::OK),
+    ] {
+        let app =
+            analytics_router(Arc::new(Stub), Arc::new(Allow)).layer(Extension(credential(scope)));
+        let response = app
+            .oneshot(Request::builder().uri(&uri).body(Body::empty())?)
+            .await?;
+        assert_eq!(response.status(), expected);
+    }
+    Ok(())
 }

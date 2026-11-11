@@ -111,6 +111,42 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: path.resolve(REPOSITORY_ROOT, "dist/ui"),
       emptyOutDir: true,
+      rolldownOptions: {
+        output: {
+          // Stable vendor chunks change far less often than application code, so
+          // browsers keep them cached across releases. Charting stays separate so
+          // only chart routes download it.
+          codeSplitting: {
+            groups: [
+              {
+                name: "vendor-react",
+                test: /node_modules[\\/](?:react|react-dom|scheduler|react-router)[\\/]/u,
+                priority: 40,
+              },
+              {
+                name: "vendor-charts",
+                test: /node_modules[\\/](?:recharts|d3-[^\\/]+|victory-vendor|internmap|decimal\.js-light)[\\/]/u,
+                priority: 30,
+              },
+              {
+                name: "vendor-telemetry",
+                test: /node_modules[\\/]@opentelemetry[\\/]/u,
+                priority: 20,
+              },
+              {
+                name: "vendor-i18n",
+                test: /node_modules[\\/](?:i18next|react-i18next|i18next-browser-languagedetector)[\\/]/u,
+                priority: 20,
+              },
+              {
+                name: "vendor-forms",
+                test: /node_modules[\\/](?:react-hook-form|@hookform|zod)[\\/]/u,
+                priority: 20,
+              },
+            ],
+          },
+        },
+      },
     },
   };
 });

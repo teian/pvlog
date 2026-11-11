@@ -9,8 +9,7 @@ version = 2
 yanked = "deny"
 ignore = [
     { id = "RUSTSEC-2023-0071", reason = "openidconnect uses rsa for public-key token verification; the advisory concerns private-key timing and has no fixed release" },
-    { id = "RUSTSEC-2024-0436", reason = "paste is an unmaintained transitive dependency of the current utoipa-axum release" },
-    { crate = "spin@0.9.8", reason = "spin 0.9.8 is transitively required by sqlx, axum, and openidconnect dependencies without a compatible non-yanked 0.9 release" },
+    { id = "RUSTSEC-2026-0459", reason = "sqlx-sqlite 0.9.0 requires libsqlite3-sys <0.38 and no release allows the fixed 0.39; only exposed when opening untrusted database/WAL file pairs locally; remove once sqlx supports libsqlite3-sys >=0.39" },
 ]
 
 [licenses]

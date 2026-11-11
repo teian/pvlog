@@ -123,6 +123,8 @@ fn record(
     version: u64,
 ) -> SystemLifecycleRecord {
     SystemLifecycleRecord {
+        description: String::new(),
+        commissioning_date: None,
         id,
         account_id,
         name,

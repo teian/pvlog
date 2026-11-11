@@ -62,7 +62,7 @@ impl IngestionAdmission {
         let admitted =
             self.state
                 .active
-                .fetch_update(Ordering::AcqRel, Ordering::Acquire, |active| {
+                .try_update(Ordering::AcqRel, Ordering::Acquire, |active| {
                     (active < self.maximum_concurrent).then_some(active + 1)
                 });
         if admitted.is_err() {

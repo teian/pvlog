@@ -65,6 +65,8 @@ async fn verify_contract(
 
     let rollup = RollupRecord {
         system_id,
+        scope_kind: "system".to_owned(),
+        scope_id: system_id.as_uuid(),
         resolution: "hour".to_owned(),
         bucket_start: base,
         bucket_end: base + 3_600_000,
@@ -73,6 +75,11 @@ async fn verify_contract(
         point_count: 12,
         expected_count: 12,
         generation_energy_wh: Some(2_400),
+        consumption_energy_wh: Some(900),
+        generation_power_min_watts: Some(0),
+        generation_power_max_watts: Some(4_100),
+        generation_power_first_watts: Some(0),
+        generation_power_last_watts: Some(120),
         quality_flags: 0,
         coverage_basis_points: 10_000,
         calculated_at: base + 1,

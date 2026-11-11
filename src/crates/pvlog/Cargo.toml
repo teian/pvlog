@@ -15,6 +15,8 @@ sqlite = ["pvlog-storage/sqlite", "pvlog-worker/sqlite"]
 async-trait.workspace = true
 axum.workspace = true
 blake3.workspace = true
+chrono.workspace = true
+chrono-tz.workspace = true
 clap.workspace = true
 dotenvy.workspace = true
 figment.workspace = true
@@ -48,6 +50,22 @@ tower.workspace = true
 [[bin]]
 name = "pvlog"
 path = "src/main.rs"
+
+[[test]]
+name = "yield-model"
+path = "../../../tests/rust/pvlog/yield_model.rs"
+
+[[test]]
+name = "tariff-revenue"
+path = "../../../tests/rust/pvlog/tariff_revenue.rs"
+
+[[test]]
+name = "public-sharing"
+path = "../../../tests/rust/pvlog/public_sharing.rs"
+
+[[test]]
+name = "series-scopes"
+path = "../../../tests/rust/pvlog/series_scopes.rs"
 
 [[test]]
 name = "runtime-smoke"

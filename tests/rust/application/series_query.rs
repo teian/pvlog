@@ -32,6 +32,8 @@ fn request() -> QueryPlanRequest {
         maximum_points: 20,
         expected_raw_interval_millis: 300_000,
         hot_data_start_epoch_millis: 0,
+        scope: None,
+        scope_id: None,
         available_rollups: BTreeSet::new(),
     }
 }

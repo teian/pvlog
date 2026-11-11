@@ -54,10 +54,17 @@ struct CreateBody {
     timezone: String,
 }
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct UpdateBody {
     name: String,
     timezone: String,
     visibility: Visibility,
+    /// Free-text placement shown beside the name.
+    #[serde(default)]
+    description: String,
+    /// Local commissioning date as `YYYY-MM-DD`.
+    #[serde(default)]
+    commissioning_date: Option<String>,
 }
 
 async fn create(
@@ -98,6 +105,8 @@ async fn update(
             .await?,
             expected_version: expected_version(&headers)?,
             name: body.name,
+            description: body.description,
+            commissioning_date: body.commissioning_date,
             timezone: body.timezone,
             visibility: body.visibility,
         })

@@ -15,6 +15,29 @@ export const useSystemOverviews = (systemIds: string[]) =>
     })),
   });
 
+/**
+ * Orders systems so that active ones come first.
+ *
+ * The session lists systems by identifier, which puts an archived system in
+ * front of everything created after it. Reports default to the first entry, so
+ * without this an archived system would shadow the account's live data.
+ *
+ * @param systemIds - Systems visible to the current session, in session order.
+ * @returns The same identifiers, archived ones moved to the end.
+ */
+export const useOrderedSystemIds = (systemIds: string[]) => {
+  const overviews = useSystemOverviews(systemIds);
+  const archived = new Set(
+    overviews.flatMap((query) =>
+      query.data?.lifecycle === "archived" ? [query.data.id] : [],
+    ),
+  );
+  return [
+    ...systemIds.filter((systemId) => !archived.has(systemId)),
+    ...systemIds.filter((systemId) => archived.has(systemId)),
+  ];
+};
+
 export const useStatisticsReport = (systemId: string) =>
   useQuery({
     queryKey: ["statistics-report", systemId],

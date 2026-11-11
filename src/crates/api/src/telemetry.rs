@@ -6,7 +6,7 @@ use axum::{
     routing::{patch, post},
 };
 use pvlog_application::{
-    BatchIngestionMode, CorrectObservation, EnergyInput, ModernTelemetryError,
+    BatchIngestionMode, ChannelReading, CorrectObservation, EnergyInput, ModernTelemetryError,
     ModernTelemetryUseCases, NormalizeObservation, PowerUnit,
 };
 use pvlog_domain::{
@@ -55,6 +55,18 @@ struct ObservationBody {
     voltage_millivolts: Option<u32>,
     temperature_millidegrees_celsius: Option<i32>,
     source_reference: Option<String>,
+    /// Per-meter readings keyed by the source's own channel names.
+    #[serde(default)]
+    channels: BTreeMap<String, ChannelReadingBody>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChannelReadingBody {
+    power_watts: Option<i64>,
+    energy_watt_hours: Option<i64>,
+    /// Free-form marker; only "estimated" changes how the value is flagged.
+    quality: Option<String>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -258,6 +270,20 @@ fn command(
         battery_flow_state: BatteryFlowState::Unknown,
         extended: BTreeMap::new(),
         registered_channels: BTreeSet::new(),
+        channel_readings: body
+            .channels
+            .into_iter()
+            .map(|(key, reading)| {
+                (
+                    key,
+                    ChannelReading {
+                        power_watts: reading.power_watts,
+                        energy_watt_hours: reading.energy_watt_hours,
+                        estimated: reading.quality.as_deref() == Some("estimated"),
+                    },
+                )
+            })
+            .collect(),
         source: ObservationSource {
             kind: ObservationSourceKind::ModernApi,
             source_reference: body.source_reference,

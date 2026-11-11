@@ -97,7 +97,11 @@ test("opens every reporting view from the design navigation", async ({
   await expect(
     page.getByRole("heading", { name: /all systems/i }),
   ).toBeVisible();
-  await expect(page.getByText("Rooftop South")).toBeVisible();
+  // The name now appears in the sidebar as well as the table, so the
+  // assertion names the table cell it actually cares about.
+  await expect(
+    page.getByRole("main").getByRole("link", { name: "Rooftop South" }),
+  ).toBeVisible();
 
   for (const [label, heading] of [
     ["Statistics", "Statistics"],

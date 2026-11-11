@@ -55,6 +55,8 @@ async fn lifecycle_uses_safe_defaults_versions_audit_and_confirmation() -> Resul
             actor,
             expected_version: 1,
             name: "Roof PV".to_owned(),
+            description: "Wohnhaus Dach".to_owned(),
+            commissioning_date: Some("2019-04-15".to_owned()),
             timezone: "Europe/Berlin".to_owned(),
             visibility: Visibility::Unlisted,
         })

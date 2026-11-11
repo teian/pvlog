@@ -134,10 +134,11 @@ async fn sqlite_rollups_summaries_invalidations_and_quality_are_bounded()
     let (system_id, _) = insert_system_and_channel(&mut account).await?;
     sqlx::query(
         "INSERT INTO telemetry_rollups \
-         (system_id, resolution, bucket_start, bucket_end, timezone, point_count, \
-          expected_count, coverage_basis_points, calculated_at) \
-         VALUES (?, 'hour', 0, 3600000, 'Europe/Berlin', 12, 12, 10000, 1)",
+         (system_id, scope_kind, scope_id, resolution, bucket_start, bucket_end, timezone, \
+          point_count, expected_count, coverage_basis_points, calculated_at) \
+         VALUES (?, 'system', ?, 'hour', 0, 3600000, 'Europe/Berlin', 12, 12, 10000, 1)",
     )
+    .bind(&system_id)
     .bind(&system_id)
     .execute(&mut account)
     .await?;

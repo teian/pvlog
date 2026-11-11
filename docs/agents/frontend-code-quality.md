@@ -43,13 +43,13 @@ Use these rules for frontend code organization, imports, naming, typing, documen
 
 ## Linting and Code Quality
 
-- **Stylelint**: Run via `bun run lint` alongside ESLint. Config is in `.stylelintrc.json`. Key rules are documented in [frontend-design-system.md](frontend-design-system.md).
-- **ESLint Rules**:
-  - Enforce FSD boundaries with `boundaries/dependencies`.
+- **Stylelint**: Run via `bun run lint` alongside oxlint. Config is in `.stylelintrc.json`. Key rules are documented in [frontend-design-system.md](frontend-design-system.md).
+- **oxlint Rules**:
+  - Enforce FSD layer boundaries with per-layer `no-restricted-imports` overrides in `.oxlintrc.json`.
   - `react/no-multi-comp`: Error.
   - `unicorn/filename-case`: PascalCase for components.
   - `max-lines`: Warn at 300 lines.
-  - `@typescript-eslint/consistent-type-imports`: Error.
+  - `typescript/consistent-type-imports`: Error.
   - `max-lines-per-function`: Warn at 100.
   - `complexity`: Warn at 10.
   - `react/jsx-no-literals`: Warn; flags hardcoded string literals in JSX children to enforce i18n.
@@ -90,9 +90,9 @@ Private, purely mechanical helpers, such as a one-liner that just calls another 
 
 **Exceptions**: `src/shared/components/ui/` files are mechanical shadcn/Radix wrappers; JSDoc is not required there.
 
-### ESLint enforcement
+### Lint enforcement
 
-`eslint-plugin-jsdoc` is configured in `eslint.config.js` with the following rules active as warnings on all exported symbols:
+JSDoc rules are configured in `.oxlintrc.json` with the following rules active as warnings on all exported symbols:
 
 - `jsdoc/require-jsdoc` — requires a JSDoc block on every exported function, type alias, interface, and variable declaration.
 - `jsdoc/require-param` + `jsdoc/require-param-description` — every `@param` must exist and have a description.

@@ -1,3 +1,6 @@
+use crate::{
+    ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal, principal_identity,
+};
 use axum::{
     Extension, Json, Router,
     body::Body,
@@ -12,16 +15,21 @@ use pvlog_application::{
     ModernAnalyticsUseCases, QueryPlanRequest, QueryResolution, RequestedResolution, SeriesField,
     StatisticsPeriod,
 };
-use pvlog_domain::{SystemId, UserId, WeatherDataRunId};
+use pvlog_domain::{ApiScope, Permission, SystemId, UserId, WeatherDataRunId};
 use serde::Deserialize;
 use std::{collections::BTreeSet, sync::Arc};
 
 #[derive(Clone)]
 struct AnalyticsState {
     service: Arc<dyn ModernAnalyticsUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
 }
 
-pub fn analytics_router(service: Arc<dyn ModernAnalyticsUseCases>) -> Router {
+/// Builds the router for the series, statistics, data-quality and analysis-export routes.
+pub fn analytics_router(
+    service: Arc<dyn ModernAnalyticsUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
+) -> Router {
     Router::new()
         .route("/api/v1/systems/{system_id}/series", get(time_series))
         .route("/api/v1/systems/{system_id}/statistics", get(statistics))
@@ -30,7 +38,10 @@ pub fn analytics_router(service: Arc<dyn ModernAnalyticsUseCases>) -> Router {
             get(data_quality),
         )
         .route("/api/v1/systems/{system_id}/analysis-exports", post(export))
-        .with_state(AnalyticsState { service })
+        .with_state(AnalyticsState {
+            service,
+            authorizer,
+        })
 }
 
 #[derive(Clone, Deserialize)]
@@ -44,6 +55,9 @@ struct SeriesParameters {
     maximum_points: Option<u32>,
     expected_interval_millis: Option<u64>,
     hot_data_start_epoch_millis: Option<i64>,
+    /// `system` (default), `inverter`, or `string`.
+    scope: Option<String>,
+    scope_id: Option<uuid::Uuid>,
 }
 
 #[derive(Deserialize)]
@@ -68,6 +82,8 @@ struct ExportBody {
     timezone: Option<String>,
     maximum_points: Option<u32>,
     format: String,
+    scope: Option<String>,
+    scope_id: Option<uuid::Uuid>,
     asynchronous: Option<bool>,
     weather_run_id: Option<WeatherDataRunId>,
     include_partial: Option<bool>,
@@ -75,7 +91,7 @@ struct ExportBody {
 
 async fn time_series(
     State(state): State<AnalyticsState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(system_id): Path<SystemId>,
     Query(parameters): Query<SeriesParameters>,
 ) -> Result<Response, AnalyticsApiError> {
@@ -83,7 +99,11 @@ async fn time_series(
     Ok(Json(
         state
             .service
-            .time_series(actor_id(actor)?, system_id, request)
+            .time_series(
+                authorize(&state, principal.as_ref(), system_id).await?,
+                system_id,
+                request,
+            )
             .await?,
     )
     .into_response())
@@ -91,7 +111,7 @@ async fn time_series(
 
 async fn statistics(
     State(state): State<AnalyticsState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(system_id): Path<SystemId>,
     Query(parameters): Query<StatisticsParameters>,
 ) -> Result<Response, AnalyticsApiError> {
@@ -99,7 +119,11 @@ async fn statistics(
     Ok(Json(
         state
             .service
-            .statistics(actor_id(actor)?, system_id, period)
+            .statistics(
+                authorize(&state, principal.as_ref(), system_id).await?,
+                system_id,
+                period,
+            )
             .await?,
     )
     .into_response())
@@ -107,7 +131,7 @@ async fn statistics(
 
 async fn data_quality(
     State(state): State<AnalyticsState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(system_id): Path<SystemId>,
     Query(parameters): Query<RangeParameters>,
 ) -> Result<Response, AnalyticsApiError> {
@@ -118,7 +142,7 @@ async fn data_quality(
         state
             .service
             .data_quality(
-                actor_id(actor)?,
+                authorize(&state, principal.as_ref(), system_id).await?,
                 system_id,
                 parameters.start_epoch_millis,
                 parameters.end_epoch_millis,
@@ -130,7 +154,7 @@ async fn data_quality(
 
 async fn export(
     State(state): State<AnalyticsState>,
-    actor: Option<Extension<UserId>>,
+    principal: Option<Extension<RequestPrincipal>>,
     Path(system_id): Path<SystemId>,
     Json(body): Json<ExportBody>,
 ) -> Result<Response, AnalyticsApiError> {
@@ -149,12 +173,14 @@ async fn export(
         maximum_points: body.maximum_points,
         expected_interval_millis: None,
         hot_data_start_epoch_millis: None,
+        scope: body.scope,
+        scope_id: body.scope_id,
     };
     match state
         .service
         .export(AnalysisExportRequest {
             system_id,
-            actor: actor_id(actor)?,
+            actor: authorize(&state, principal.as_ref(), system_id).await?,
             query: query_request(parameters)?,
             format,
             asynchronous: body.asynchronous.unwrap_or(false),
@@ -196,6 +222,8 @@ fn query_request(parameters: SeriesParameters) -> Result<QueryPlanRequest, Analy
         maximum_points: parameters.maximum_points.unwrap_or(2_000).min(10_000),
         expected_raw_interval_millis: parameters.expected_interval_millis.unwrap_or(300_000),
         hot_data_start_epoch_millis: parameters.hot_data_start_epoch_millis.unwrap_or(i64::MIN),
+        scope: parameters.scope,
+        scope_id: parameters.scope_id,
         available_rollups: BTreeSet::from([
             QueryResolution::FifteenMinutes,
             QueryResolution::Hourly,
@@ -250,10 +278,33 @@ fn parse_period(value: &str) -> Result<StatisticsPeriod, AnalyticsApiError> {
     }
 }
 
-fn actor_id(actor: Option<Extension<UserId>>) -> Result<UserId, AnalyticsApiError> {
-    actor
-        .map(|Extension(actor)| actor)
-        .ok_or(AnalyticsApiError::Forbidden)
+/// Browser sessions act as their user; account API keys act as their owner but
+/// only with the telemetry-read scope and RBAC permission on the addressed system.
+async fn authorize(
+    state: &AnalyticsState,
+    principal: Option<&Extension<RequestPrincipal>>,
+    system_id: SystemId,
+) -> Result<UserId, AnalyticsApiError> {
+    match principal.map(|Extension(principal)| principal) {
+        Some(RequestPrincipal::User(user_id)) => Ok(*user_id),
+        Some(credential @ RequestPrincipal::ApiCredential { scopes, .. }) => {
+            if !scopes.contains(&ApiScope::TelemetryRead) {
+                return Err(AnalyticsApiError::Forbidden);
+            }
+            let identity = principal_identity(credential)?;
+            let authorized = state
+                .authorizer
+                .authorize_system(
+                    identity,
+                    system_id,
+                    Permission::TelemetryRead,
+                    "analytics.read",
+                )
+                .await?;
+            Ok(authorized.actor_user_id)
+        }
+        None => Err(AnalyticsApiError::Forbidden),
+    }
 }
 
 fn download_response(
@@ -343,6 +394,13 @@ enum AnalyticsApiError {
     Invalid,
     Forbidden,
     Domain(ModernAnalyticsError),
+}
+
+impl From<RequestAuthorizationError> for AnalyticsApiError {
+    /// Maps any request authorization failure to a forbidden response.
+    fn from(_: RequestAuthorizationError) -> Self {
+        Self::Forbidden
+    }
 }
 
 impl From<ModernAnalyticsError> for AnalyticsApiError {

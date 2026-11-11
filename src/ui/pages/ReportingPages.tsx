@@ -1,7 +1,10 @@
 /* eslint-disable react/no-multi-comp, max-lines -- Cohesive reporting route family with shared empty, metric, and header renderers. */
 import { useSession } from "@/features/auth";
 import {
+  SystemSelector,
+  useOrderedSystemIds,
   useSeasonalReport,
+  useSelectedSystem,
   useStatisticsReport,
   useSystemOverviews,
   useWeatherReport,
@@ -28,10 +31,13 @@ import { Link } from "react-router";
 
 function usePageContext() {
   const session = useSession();
+  const systemIds = useOrderedSystemIds(session.data?.systemIds ?? []);
+  const { systemId, selectSystem } = useSelectedSystem(systemIds);
   return {
     accountId: session.data?.accountId,
-    systemId: session.data?.systemIds[0] ?? "",
-    systemIds: session.data?.systemIds ?? [],
+    systemId,
+    systemIds,
+    selectSystem,
   };
 }
 
@@ -164,6 +170,11 @@ export function StatisticsPage() {
         description={t("reporting.statistics.description")}
         title={t("reporting.statistics.title")}
       />
+      <SystemSelector
+        onSelect={context.selectSystem}
+        selectedSystemId={context.systemId}
+        systemIds={context.systemIds}
+      />
       <EmptyOrError empty={!context.systemId} error={report.isError} />
       {report.isPending && context.systemId ? (
         <p className="text-sm text-muted-foreground">
@@ -278,6 +289,11 @@ export function SeasonalPage() {
         description={t("reporting.seasonal.description")}
         title={t("reporting.seasonal.title")}
       />
+      <SystemSelector
+        onSelect={context.selectSystem}
+        selectedSystemId={context.systemId}
+        systemIds={context.systemIds}
+      />
       <EmptyOrError empty={!context.systemId} error={report.isError} />
       {report.data ? (
         <Card>
@@ -331,6 +347,11 @@ export function WeatherPage() {
       <Header
         description={t("reporting.weather.description")}
         title={t("reporting.weather.title")}
+      />
+      <SystemSelector
+        onSelect={context.selectSystem}
+        selectedSystemId={context.systemId}
+        systemIds={context.systemIds}
       />
       <EmptyOrError empty={!context.systemId} error={report.isError} />
       {report.data ? (

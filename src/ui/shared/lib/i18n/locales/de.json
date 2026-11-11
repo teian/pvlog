@@ -254,6 +254,11 @@
     "generation": "Erzeugung",
     "consumption": "Verbrauch",
     "coverage": "Abdeckung",
+    "systemSelector": {
+      "label": "Anlage",
+      "placeholder": "Anlage auswählen",
+      "archived": "{{name}} (archiviert)"
+    },
     "systems": {
       "title": "Alle Anlagen",
       "description": "Für dein Konto verfügbare Anlagen",

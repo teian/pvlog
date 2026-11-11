@@ -32,12 +32,14 @@ mod api_keys;
 mod audit;
 mod authentication;
 mod authorization;
+mod channels;
 mod connectors;
 mod dashboard;
 mod equipment_catalog;
 mod forecasting;
 mod geocoding;
 mod identities;
+mod insights;
 mod inverters;
 mod local_password;
 mod managed_resources;
@@ -47,14 +49,15 @@ mod rbac;
 mod readiness;
 mod reporting;
 mod sessions;
+mod sharing;
 mod systems;
 mod telemetry;
 mod user_lifecycle;
 
 pub use administration::{
-    AdministrationApiError, AdministrationApiUseCases, BackupResult, ConnectionTestResult,
-    EmailEncryption, EmailNotificationSettings, RetentionBackupSettings, WeatherFeedSettings,
-    administration_router,
+    AccountSummary, AdministrationApiError, AdministrationApiUseCases, BackupResult,
+    ConnectionTestResult, EmailEncryption, EmailNotificationSettings, RetentionBackupSettings,
+    WeatherFeedSettings, administration_router,
 };
 pub use analytics::analytics_router;
 pub use api_keys::{
@@ -70,12 +73,15 @@ pub use authorization::{
     AuthorizedRequest, ModernRequestAuthorizer, RequestAuthorizationError, actor_user_id,
     principal_identity,
 };
+pub use channels::{
+    ChannelApiError, ChannelApiUseCases, ChannelBindingInput, ChannelResponse, channels_router,
+};
 pub use connectors::{
     ConnectorAdminError, ConnectorAdminResponse, ConnectorAdminUseCases, connectors_router,
 };
 pub use dashboard::{
     DashboardAlertResponse, DashboardApiError, DashboardApiUseCases, DashboardIngestionResponse,
-    DashboardResponse, dashboard_router,
+    DashboardResponse, DashboardRestriction, dashboard_router,
 };
 pub use equipment_catalog::{
     CatalogPageResponse, EquipmentCatalogApiError, equipment_catalog_router,
@@ -91,6 +97,10 @@ pub use forecasting::{
 pub use geocoding::{GeocodingApi, GeocodingError, GeocodingResult, geocoding_router};
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,
+};
+pub use insights::{
+    BestBucket, InsightApiError, InsightApiUseCases, InsightRange, PreviousPeriod, RangeSummary,
+    RevenueSummary, StringContribution, WeatherClassShare, WeatherMonth, insights_router,
 };
 pub use inverters::{
     InverterApiError, InverterApiUseCases, InverterInput, InverterResponse, PvStringInput,
@@ -116,6 +126,10 @@ pub use reporting::{
 pub use sessions::{
     SessionApiError, SessionBootstrap, SessionBootstrapUseCases, SessionConnector, SessionUser,
     sessions_router,
+};
+pub use sharing::{
+    PublicDirectoryEntry, PublicSystem, SharingApiError, SharingApiUseCases, SharingInput,
+    SharingState, sharing_router,
 };
 pub use systems::systems_router;
 pub use telemetry::telemetry_router;

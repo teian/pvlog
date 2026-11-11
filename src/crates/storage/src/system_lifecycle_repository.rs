@@ -50,8 +50,8 @@ impl SystemLifecycleRepository for SqliteSystemLifecycleRepository {
         let account = self.router.route(account_id).await.map_err(route_error)?;
         let mut connection = account.acquire().await.map_err(route_error)?;
         let row = sqlx::query(
-            "SELECT id,name,timezone,visibility,lifecycle,version,created_at,updated_at \
-             FROM systems WHERE id=?",
+            "SELECT id,name,description,commissioning_date,timezone,visibility,lifecycle,version,\
+             created_at,updated_at FROM systems WHERE id=?",
         )
         .bind(blob(id.as_uuid()))
         .fetch_optional(&mut *connection)
@@ -106,10 +106,12 @@ impl SystemLifecycleRepository for SqliteSystemLifecycleRepository {
         let account = self.router.route(account_id).await.map_err(route_error)?;
         let mut writer = account.acquire_writer().await.map_err(route_error)?;
         let changed = sqlx::query(
-            "UPDATE systems SET name=?,timezone=?,visibility=?,lifecycle=?,updated_at=?, \
-             version=version+1 WHERE id=? AND version=?",
+            "UPDATE systems SET name=?,description=?,commissioning_date=?,timezone=?,\
+             visibility=?,lifecycle=?,updated_at=?,version=version+1 WHERE id=? AND version=?",
         )
         .bind(&record.name)
+        .bind(&record.description)
+        .bind(record.commissioning_date.as_deref())
         .bind(&record.timezone)
         .bind(visibility_name(record.visibility))
         .bind(lifecycle_name(record.lifecycle))
@@ -197,7 +199,7 @@ impl SystemLifecycleRepository for PostgresSystemLifecycleRepository {
         let mut connection = PgConnection::connect(&self.url)
             .await
             .map_err(|_| PortError::Unavailable)?;
-        let row = sqlx::query("SELECT id,name,timezone,visibility,lifecycle,version,created_at,updated_at FROM account_data.systems WHERE account_id=$1 AND id=$2")
+        let row = sqlx::query("SELECT id,name,description,commissioning_date::TEXT AS commissioning_date,timezone,visibility,lifecycle,version,created_at,updated_at FROM account_data.systems WHERE account_id=$1 AND id=$2")
             .bind(account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut connection).await
             .map_err(|_| PortError::Unavailable)?;
         connection
@@ -240,8 +242,8 @@ impl SystemLifecycleRepository for PostgresSystemLifecycleRepository {
         let mut connection = PgConnection::connect(&self.url)
             .await
             .map_err(|_| PortError::Unavailable)?;
-        let changed = sqlx::query("UPDATE account_data.systems SET name=$1,timezone=$2,visibility=$3,lifecycle=$4,updated_at=$5,version=version+1 WHERE account_id=$6 AND id=$7 AND version=$8")
-            .bind(&record.name).bind(&record.timezone).bind(visibility_name(record.visibility)).bind(lifecycle_name(record.lifecycle)).bind(record.updated_at).bind(account_id.as_uuid()).bind(record.id.as_uuid()).bind(i64::try_from(expected_version).map_err(|_| PortError::Conflict)?).execute(&mut connection).await.map_err(|_| PortError::Unavailable)?.rows_affected() == 1;
+        let changed = sqlx::query("UPDATE account_data.systems SET name=$1,description=$2,commissioning_date=$3::DATE,timezone=$4,visibility=$5,lifecycle=$6,updated_at=$7,version=version+1 WHERE account_id=$8 AND id=$9 AND version=$10")
+            .bind(&record.name).bind(&record.description).bind(record.commissioning_date.as_deref()).bind(&record.timezone).bind(visibility_name(record.visibility)).bind(lifecycle_name(record.lifecycle)).bind(record.updated_at).bind(account_id.as_uuid()).bind(record.id.as_uuid()).bind(i64::try_from(expected_version).map_err(|_| PortError::Conflict)?).execute(&mut connection).await.map_err(|_| PortError::Unavailable)?.rows_affected() == 1;
         connection
             .close()
             .await
@@ -384,6 +386,8 @@ fn sqlite_record(
         id: SystemId::from_uuid(id).map_err(|_| PortError::Unavailable)?,
         account_id,
         name: row.get("name"),
+        description: row.get("description"),
+        commissioning_date: row.get("commissioning_date"),
         timezone: row.get("timezone"),
         visibility: parse_visibility(&row.get::<String, _>("visibility"))?,
         lifecycle: parse_lifecycle(&row.get::<String, _>("lifecycle"))?,
@@ -402,6 +406,8 @@ fn postgres_record(
         id: SystemId::from_uuid(row.get("id")).map_err(|_| PortError::Unavailable)?,
         account_id,
         name: row.get("name"),
+        description: row.try_get("description").unwrap_or_default(),
+        commissioning_date: row.try_get("commissioning_date").ok().flatten(),
         timezone: row.get("timezone"),
         visibility: parse_visibility(&row.get::<String, _>("visibility"))?,
         lifecycle: parse_lifecycle(&row.get::<String, _>("lifecycle"))?,

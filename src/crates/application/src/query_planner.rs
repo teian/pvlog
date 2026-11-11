@@ -110,6 +110,12 @@ pub struct QueryPlanRequest {
     /// Observations before this instant have been compacted to segments.
     pub hot_data_start_epoch_millis: i64,
     pub available_rollups: BTreeSet<QueryResolution>,
+    /// Equipment level to read: `system`, `inverter`, or `string`.
+    ///
+    /// Carried through to the storage read; planning is scope-independent
+    /// because every scope offers the same resolutions.
+    pub scope: Option<String>,
+    pub scope_id: Option<uuid::Uuid>,
 }
 
 /// Produces a deterministic physical read plan without accessing storage.

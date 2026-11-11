@@ -122,6 +122,8 @@ async fn sqlite_system_lifecycle_uses_registry_and_optimistic_concurrency()
     );
     let updated = service
         .update_system(UpdateSystem {
+            description: String::new(),
+            commissioning_date: None,
             id: created.id,
             actor: user_id,
             expected_version: created.version,
@@ -134,6 +136,8 @@ async fn sqlite_system_lifecycle_uses_registry_and_optimistic_concurrency()
     assert!(
         service
             .update_system(UpdateSystem {
+                description: String::new(),
+                commissioning_date: None,
                 id: created.id,
                 actor: user_id,
                 expected_version: created.version,
