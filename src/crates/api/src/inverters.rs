@@ -13,7 +13,7 @@ use axum::{
 use pvlog_application::PortError;
 use pvlog_domain::{
     AccountId, ApiScope, EquipmentValueProvenance, InverterId, InverterSpecificationSnapshot,
-    Permission, SolarModuleSpecificationSnapshot, StringId, SystemId, UserId,
+    Permission, SolarModuleSpecificationSnapshot, StringId, StringShading, SystemId, UserId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -34,6 +34,12 @@ pub struct PvStringInput {
     pub module_peak_power_watts: i64,
     pub orientation_degrees: Option<u16>,
     pub tilt_degrees: Option<u8>,
+    /// Power temperature coefficient in ppm per degree Celsius; -3500 is -0.35 %/°C.
+    #[serde(default)]
+    pub temperature_coefficient_ppm_per_celsius: Option<i32>,
+    /// Recurring daily shading entries.
+    #[serde(default)]
+    pub shading: Vec<StringShading>,
     pub effective_from: i64,
     pub effective_to: Option<i64>,
 }
@@ -71,6 +77,8 @@ pub struct PvStringResponse {
     pub total_peak_power_watts: Option<i64>,
     pub orientation_degrees: Option<u16>,
     pub tilt_degrees: Option<u8>,
+    pub temperature_coefficient_ppm_per_celsius: Option<i32>,
+    pub shading: Vec<StringShading>,
     pub effective_from: i64,
     pub effective_to: Option<i64>,
 }
@@ -97,6 +105,16 @@ pub struct InverterResponse {
 
 #[async_trait]
 pub trait InverterApiUseCases: Send + Sync {
+    /// Checks an input completely without storing anything, so a caller can
+    /// reject a whole request before it creates the first record.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same error `create` would return for this input.
+    fn validate(&self, input: &InverterInput) -> Result<(), InverterApiError> {
+        let _ = input;
+        Ok(())
+    }
     async fn list(
         &self,
         account_id: AccountId,

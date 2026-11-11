@@ -68,6 +68,10 @@ name = "series-scopes"
 path = "../../../tests/rust/pvlog/series_scopes.rs"
 
 [[test]]
+name = "inverter-validation"
+path = "../../../tests/rust/pvlog/inverter_validation.rs"
+
+[[test]]
 name = "runtime-smoke"
 path = "../../../tests/rust/smoke/runtime_smoke.rs"
 

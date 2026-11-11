@@ -61,8 +61,8 @@ pub use shared::{CurrencyCode, Money, Visibility};
 pub use systems::{
     CalculationSettings, CapacityPeriod, ChannelDataType, ChannelDefinition, ChannelDisplay,
     ChannelLifecycle, ChannelScale, EffectivePeriod, Equipment, EquipmentKind, GeographicPrecision,
-    Inverter, NetCalculationMode, PowerCalculationMode, PvString, PvSystem, SystemLifecycle,
-    SystemPrivacy, Tariff, TariffDirection,
+    Inverter, NetCalculationMode, PowerCalculationMode, PvString, PvSystem, StringShading,
+    SystemLifecycle, SystemPrivacy, TEMPERATURE_COEFFICIENT_PPM_RANGE, Tariff, TariffDirection,
 };
 pub use telemetry::{
     AggregateValue, ArchivedSegment, BatteryFlowState, BatteryReading, CanonicalObservation,

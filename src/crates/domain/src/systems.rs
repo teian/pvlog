@@ -46,6 +46,37 @@ impl EffectivePeriod {
     }
 }
 
+/// Recurring daily shading of a PV string between two local times of day.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StringShading {
+    /// Minutes after local midnight at which the shading starts.
+    pub from_minute_of_day: u16,
+    /// Minutes after local midnight at which the shading ends.
+    pub to_minute_of_day: u16,
+    /// What casts the shadow, as the owner describes it.
+    #[serde(default)]
+    pub label: String,
+    /// Share of the string's output lost while shaded; 10000 is all of it.
+    pub loss_basis_points: u16,
+}
+
+impl StringShading {
+    /// Most shading entries one string may carry.
+    pub const MAXIMUM_ENTRIES: usize = 24;
+
+    /// Reports whether the entry describes a non-empty span within one day and a possible loss.
+    #[must_use]
+    pub const fn is_valid(&self) -> bool {
+        self.from_minute_of_day < self.to_minute_of_day
+            && self.to_minute_of_day <= 1_440
+            && self.loss_basis_points <= 10_000
+    }
+}
+
+/// Bounds of a module's power temperature coefficient in ppm per degree Celsius.
+pub const TEMPERATURE_COEFFICIENT_PPM_RANGE: std::ops::RangeInclusive<i32> = -20_000..=0;
+
 /// Photovoltaic system aggregate configuration.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct PvSystem {

@@ -7,7 +7,7 @@ use pvlog_application::{
 };
 use pvlog_domain::{
     AccountId, AuditEventId, CatalogEntryId, ChannelId, EquipmentId, EquipmentValueProvenance,
-    InverterId, StringId, SystemId, TariffId,
+    InverterId, StringId, StringShading, SystemId, TariffId,
 };
 use pvlog_storage::{
     AccountAuditRecord, AccountConfigurationRepository, AccountRepositoryError,
@@ -92,6 +92,23 @@ async fn verify_contract(
             .await?
             .is_empty()
     );
+    let mut inverted_shading = manual_inverter.clone();
+    inverted_shading.strings[0].shading[0].to_minute_of_day = 400;
+    assert!(
+        matches!(
+            repository.save_inverter_aggregate(&inverted_shading).await,
+            Err(AccountRepositoryError::InvalidRecord("PV string"))
+        ),
+        "shading must end after it starts"
+    );
+    let mut positive_coefficient = manual_inverter.clone();
+    positive_coefficient.strings[0].temperature_coefficient_ppm_per_celsius = Some(1);
+    assert!(matches!(
+        repository
+            .save_inverter_aggregate(&positive_coefficient)
+            .await,
+        Err(AccountRepositoryError::InvalidRecord("PV string"))
+    ));
     let mut invalid_inverter = manual_inverter;
     invalid_inverter.strings[0].inverter_id = InverterId::new();
     assert!(matches!(
@@ -316,6 +333,13 @@ fn inverter(system_id: SystemId, effective_from: i64, effective_to: Option<i64>)
             total_peak_power_watts: None,
             orientation_degrees: Some(180),
             tilt_degrees: Some(35),
+            temperature_coefficient_ppm_per_celsius: Some(-3_500),
+            shading: vec![StringShading {
+                from_minute_of_day: 420,
+                to_minute_of_day: 540,
+                label: "Chimney".to_owned(),
+                loss_basis_points: 3_000,
+            }],
             effective_from,
             effective_to,
             created_at: 1,

@@ -288,6 +288,8 @@ fn inverter(system_id: SystemId) -> InverterRecord {
             total_peak_power_watts: Some(8_000),
             orientation_degrees: Some(180),
             tilt_degrees: Some(35),
+            temperature_coefficient_ppm_per_celsius: None,
+            shading: Vec::new(),
             effective_from: 0,
             effective_to: None,
             created_at: 1,

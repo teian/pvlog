@@ -6,7 +6,8 @@ use std::fmt;
 use async_trait::async_trait;
 use pvlog_domain::{
     AccountId, AuditEventId, ChannelId, EquipmentId, EquipmentValueProvenance, InverterId,
-    InverterSpecificationSnapshot, SolarModuleSpecificationSnapshot, StringId, SystemId, TariffId,
+    InverterSpecificationSnapshot, SolarModuleSpecificationSnapshot, StringId, StringShading,
+    SystemId, TEMPERATURE_COEFFICIENT_PPM_RANGE, TariffId,
 };
 use serde_json::Value;
 #[cfg(feature = "postgres")]
@@ -84,6 +85,10 @@ pub struct PvStringRecord {
     pub total_peak_power_watts: Option<i64>,
     pub orientation_degrees: Option<u16>,
     pub tilt_degrees: Option<u8>,
+    /// Power temperature coefficient in ppm per degree Celsius.
+    pub temperature_coefficient_ppm_per_celsius: Option<i32>,
+    /// Recurring daily shading entries.
+    pub shading: Vec<StringShading>,
     pub effective_from: i64,
     pub effective_to: Option<i64>,
     pub created_at: i64,
@@ -281,7 +286,7 @@ impl AccountConfigurationRepository for SqliteAccountConfigurationRepository {
             .execute(&mut *transaction)
             .await?;
         for string in &record.strings {
-            sqlx::query("INSERT INTO pv_strings (id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot_json,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,effective_from,effective_to,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            sqlx::query("INSERT INTO pv_strings (id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot_json,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,temperature_coefficient_ppm_per_celsius,shading_json,effective_from,effective_to,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
                 .bind(blob(string.id.as_uuid())).bind(blob(string.inverter_id.as_uuid()))
                 .bind(&string.name).bind(i64::from(string.panel_count)).bind(&string.panel_manufacturer)
                 .bind(&string.panel_model).bind(string.rated_power_watts).bind(&string.module_catalog_entry_id)
@@ -289,6 +294,8 @@ impl AccountConfigurationRepository for SqliteAccountConfigurationRepository {
                 .bind(string.module_specification_snapshot.as_ref().map(serde_json::to_string).transpose()?)
                 .bind(string.module_peak_power_watts).bind(string.total_peak_power_watts)
                 .bind(string.orientation_degrees.map(i64::from)).bind(string.tilt_degrees.map(i64::from))
+                .bind(string.temperature_coefficient_ppm_per_celsius)
+                .bind(serde_json::to_string(&string.shading)?)
                 .bind(string.effective_from).bind(string.effective_to).bind(string.created_at)
                 .bind(string.updated_at).execute(&mut *transaction).await?;
         }
@@ -306,7 +313,7 @@ impl AccountConfigurationRepository for SqliteAccountConfigurationRepository {
         let mut records = Vec::with_capacity(rows.len());
         for row in &rows {
             let mut inverter = sqlite_inverter(row)?;
-            let strings = sqlx::query("SELECT id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot_json,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,effective_from,effective_to,created_at,updated_at FROM pv_strings WHERE inverter_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>?) ORDER BY effective_from,id")
+            let strings = sqlx::query("SELECT id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot_json,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,temperature_coefficient_ppm_per_celsius,shading_json,effective_from,effective_to,created_at,updated_at FROM pv_strings WHERE inverter_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>?) ORDER BY effective_from,id")
                 .bind(blob(inverter.id.as_uuid())).bind(at).bind(at).fetch_all(&mut *connection).await?;
             inverter.strings = strings
                 .iter()
@@ -438,7 +445,7 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
             .execute(&mut *transaction)
             .await?;
         for string in &record.strings {
-            sqlx::query("INSERT INTO account_data.pv_strings (account_id,id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,effective_from,effective_to,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)")
+            sqlx::query("INSERT INTO account_data.pv_strings (account_id,id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,temperature_coefficient_ppm_per_celsius,shading,effective_from,effective_to,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)")
                 .bind(self.account_id.as_uuid()).bind(string.id.as_uuid()).bind(string.inverter_id.as_uuid())
                 .bind(&string.name).bind(i32::try_from(string.panel_count).map_err(|_| AccountRepositoryError::InvalidRecord("PV string"))?)
                 .bind(&string.panel_manufacturer).bind(&string.panel_model).bind(string.rated_power_watts)
@@ -447,6 +454,8 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
                 .bind(string.module_specification_snapshot.as_ref().map(sqlx::types::Json))
                 .bind(string.module_peak_power_watts).bind(string.total_peak_power_watts)
                 .bind(string.orientation_degrees.map(i32::from)).bind(string.tilt_degrees.map(i32::from))
+                .bind(string.temperature_coefficient_ppm_per_celsius)
+                .bind(sqlx::types::Json(&string.shading))
                 .bind(string.effective_from).bind(string.effective_to).bind(string.created_at)
                 .bind(string.updated_at).execute(&mut *transaction).await?;
         }
@@ -464,7 +473,7 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
         let mut records = Vec::with_capacity(rows.len());
         for row in &rows {
             let mut inverter = pg_inverter(row)?;
-            let strings = sqlx::query("SELECT id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,effective_from,effective_to,created_at,updated_at FROM account_data.pv_strings WHERE account_id=$1 AND inverter_id=$2 AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>$3) ORDER BY effective_from,id")
+            let strings = sqlx::query("SELECT id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,temperature_coefficient_ppm_per_celsius,shading,effective_from,effective_to,created_at,updated_at FROM account_data.pv_strings WHERE account_id=$1 AND inverter_id=$2 AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>$3) ORDER BY effective_from,id")
                 .bind(self.account_id.as_uuid()).bind(inverter.id.as_uuid()).bind(at).fetch_all(&mut connection).await?;
             inverter.strings = strings.iter().map(pg_pv_string).collect::<Result<_, _>>()?;
             records.push(inverter);
@@ -591,6 +600,11 @@ fn validate_inverter(r: &InverterRecord) -> Result<(), AccountRepositoryError> {
             || string.rated_power_watts <= 0
             || string.orientation_degrees.is_some_and(|value| value > 359)
             || string.tilt_degrees.is_some_and(|value| value > 90)
+            || string
+                .temperature_coefficient_ppm_per_celsius
+                .is_some_and(|value| !TEMPERATURE_COEFFICIENT_PPM_RANGE.contains(&value))
+            || string.shading.len() > StringShading::MAXIMUM_ENTRIES
+            || string.shading.iter().any(|entry| !entry.is_valid())
         {
             return Err(AccountRepositoryError::InvalidRecord("PV string"));
         }
@@ -778,6 +792,12 @@ fn sqlite_pv_string(r: &sqlx::sqlite::SqliteRow) -> Result<PvStringRecord, Accou
             .map(u8::try_from)
             .transpose()
             .map_err(|_| AccountRepositoryError::InvalidStoredValue)?,
+        temperature_coefficient_ppm_per_celsius: r
+            .get::<Option<i64>, _>("temperature_coefficient_ppm_per_celsius")
+            .map(i32::try_from)
+            .transpose()
+            .map_err(|_| AccountRepositoryError::InvalidStoredValue)?,
+        shading: serde_json::from_str(&r.get::<String, _>("shading_json"))?,
         effective_from: r.get("effective_from"),
         effective_to: r.get("effective_to"),
         created_at: r.get("created_at"),
@@ -941,6 +961,10 @@ fn pg_pv_string(r: &sqlx::postgres::PgRow) -> Result<PvStringRecord, AccountRepo
             .map(u8::try_from)
             .transpose()
             .map_err(|_| AccountRepositoryError::InvalidStoredValue)?,
+        temperature_coefficient_ppm_per_celsius: r.get("temperature_coefficient_ppm_per_celsius"),
+        shading: r
+            .get::<sqlx::types::Json<Vec<StringShading>>, _>("shading")
+            .0,
         effective_from: r.get("effective_from"),
         effective_to: r.get("effective_to"),
         created_at: r.get("created_at"),

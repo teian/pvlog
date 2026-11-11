@@ -212,6 +212,9 @@ impl InverterApiUseCases for InverterStub {
                     ),
                     orientation_degrees: string.orientation_degrees,
                     tilt_degrees: string.tilt_degrees,
+                    temperature_coefficient_ppm_per_celsius: string
+                        .temperature_coefficient_ppm_per_celsius,
+                    shading: string.shading,
                     effective_from: string.effective_from,
                     effective_to: string.effective_to,
                 })

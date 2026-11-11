@@ -8,7 +8,10 @@ use pvlog_api::{
     PvStringResponse,
 };
 use pvlog_application::{EquipmentCatalog, confirm_inverter_snapshot, confirm_string_composition};
-use pvlog_domain::{AccountId, EquipmentValueProvenance, InverterId, StringId, SystemId, UserId};
+use pvlog_domain::{
+    AccountId, EquipmentValueProvenance, InverterId, StringId, StringShading, SystemId,
+    TEMPERATURE_COEFFICIENT_PPM_RANGE, UserId,
+};
 use pvlog_storage::{
     AccountConfigurationRepository, DatabaseTarget, InverterRecord,
     PostgresAccountConfigurationRepository, PvStringRecord, SqliteAccountConfigurationRepository,
@@ -73,27 +76,14 @@ impl ManagementInverterApi {
         }
     }
 
-    async fn save(
+    /// Builds the record an input would be stored as, checking it against the catalog.
+    fn prepare(
         &self,
-        account_id: AccountId,
         system_id: SystemId,
-        inverter_id: Option<InverterId>,
+        id: InverterId,
         input: InverterInput,
-    ) -> Result<InverterResponse, InverterApiError> {
-        validate(&input)?;
-        let now = now();
-        let id = inverter_id.unwrap_or_default();
-        let repository = self.repository(account_id).await?;
-        if inverter_id.is_some()
-            && !repository
-                .effective_inverters(system_id, now)
-                .await
-                .map_err(|_| InverterApiError::Unavailable)?
-                .iter()
-                .any(|record| record.id == id)
-        {
-            return Err(InverterApiError::Forbidden);
-        }
+        now: i64,
+    ) -> Result<InverterRecord, InverterApiError> {
         let inverter_snapshot = input
             .specification_snapshot
             .map(|snapshot| confirm_inverter_snapshot(&self.catalog, snapshot))
@@ -116,7 +106,7 @@ impl ManagementInverterApi {
             .into_iter()
             .map(|string| build_string(&self.catalog, id, string, now))
             .collect::<Result<Vec<_>, _>>()?;
-        let record = InverterRecord {
+        Ok(InverterRecord {
             id,
             system_id,
             name: input.name,
@@ -133,7 +123,31 @@ impl ManagementInverterApi {
             created_at: now,
             updated_at: now,
             strings,
-        };
+        })
+    }
+
+    async fn save(
+        &self,
+        account_id: AccountId,
+        system_id: SystemId,
+        inverter_id: Option<InverterId>,
+        input: InverterInput,
+    ) -> Result<InverterResponse, InverterApiError> {
+        validate(&input)?;
+        let now = now();
+        let id = inverter_id.unwrap_or_default();
+        let repository = self.repository(account_id).await?;
+        if inverter_id.is_some()
+            && !repository
+                .effective_inverters(system_id, now)
+                .await
+                .map_err(|_| InverterApiError::Unavailable)?
+                .iter()
+                .any(|record| record.id == id)
+        {
+            return Err(InverterApiError::Forbidden);
+        }
+        let record = self.prepare(system_id, id, input, now)?;
         repository
             .save_inverter_aggregate(&record)
             .await
@@ -150,6 +164,12 @@ impl ManagementInverterApi {
 
 #[async_trait]
 impl InverterApiUseCases for ManagementInverterApi {
+    fn validate(&self, input: &InverterInput) -> Result<(), InverterApiError> {
+        validate(input)?;
+        self.prepare(SystemId::new(), InverterId::new(), input.clone(), now())
+            .map(|_| ())
+    }
+
     async fn list(
         &self,
         account_id: AccountId,
@@ -261,6 +281,8 @@ fn build_string(
         total_peak_power_watts: Some(total_peak_power_watts),
         orientation_degrees: string.orientation_degrees,
         tilt_degrees: string.tilt_degrees,
+        temperature_coefficient_ppm_per_celsius: string.temperature_coefficient_ppm_per_celsius,
+        shading: string.shading,
         effective_from: string.effective_from,
         effective_to: string.effective_to,
         created_at: now,
@@ -286,6 +308,21 @@ fn validate(input: &InverterInput) -> Result<(), InverterApiError> {
         })
     {
         return Err(InverterApiError::InvalidInput("equipment"));
+    }
+    for string in &input.strings {
+        if string
+            .temperature_coefficient_ppm_per_celsius
+            .is_some_and(|value| !TEMPERATURE_COEFFICIENT_PPM_RANGE.contains(&value))
+        {
+            return Err(InverterApiError::InvalidInput(
+                "temperatureCoefficientPpmPerCelsius",
+            ));
+        }
+        if string.shading.len() > StringShading::MAXIMUM_ENTRIES
+            || string.shading.iter().any(|entry| !entry.is_valid())
+        {
+            return Err(InverterApiError::InvalidInput("shading"));
+        }
     }
     Ok(())
 }
@@ -325,6 +362,9 @@ fn response(record: InverterRecord) -> InverterResponse {
                 total_peak_power_watts: string.total_peak_power_watts,
                 orientation_degrees: string.orientation_degrees,
                 tilt_degrees: string.tilt_degrees,
+                temperature_coefficient_ppm_per_celsius: string
+                    .temperature_coefficient_ppm_per_celsius,
+                shading: string.shading,
                 effective_from: string.effective_from,
                 effective_to: string.effective_to,
             })

@@ -115,7 +115,7 @@ fn distance(zone: &CountryZone, latitude: f64, longitude: f64) -> f64 {
     if delta_longitude > 180.0 {
         delta_longitude = 360.0 - delta_longitude;
     }
-    let scale = ((zone.latitude + latitude) / 2.0).to_radians().cos();
+    let scale = f64::midpoint(zone.latitude, latitude).to_radians().cos();
     let x = delta_longitude * scale;
     let y = zone.latitude - latitude;
     x * x + y * y

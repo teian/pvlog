@@ -5,23 +5,35 @@ use axum::{
     http::{Method, Request, StatusCode},
 };
 use pvlog_api::{
-    AuthorizedRequest, ModernRequestAuthorizer, RequestAuthorizationError, systems_router,
+    AuthorizedRequest, InverterApiError, InverterApiUseCases, InverterInput, InverterResponse,
+    ModernRequestAuthorizer, RequestAuthorizationError, systems_router,
+    systems_router_with_equipment,
 };
 use pvlog_application::{
     CreateSystem, SystemLifecycleError, SystemLifecycleRecord, SystemLifecycleUseCases,
     UpdateSystem,
 };
 use pvlog_domain::{
-    AccountId, Permission, PrincipalId, SystemId, SystemLifecycle, UserId, Visibility,
+    AccountId, EquipmentValueProvenance, InverterId, Permission, PrincipalId, SystemId,
+    SystemLifecycle, UserId, Visibility,
 };
-use std::{error::Error, sync::Arc};
+use std::{
+    error::Error,
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
+};
 use tower::ServiceExt as _;
 
 #[tokio::test]
 async fn system_mutations_require_actor_and_etag_preconditions() -> Result<(), Box<dyn Error>> {
     let actor = UserId::new();
-    let app = systems_router(Arc::new(Stub), Arc::new(AllowAuthorizer { actor }))
-        .layer(Extension(pvlog_api::RequestPrincipal::User(actor)));
+    let app = systems_router(
+        Arc::new(Stub::default()),
+        Arc::new(AllowAuthorizer { actor }),
+    )
+    .layer(Extension(pvlog_api::RequestPrincipal::User(actor)));
     let system_id = SystemId::new();
     let response = app
         .clone()
@@ -94,8 +106,11 @@ async fn post_system(
 #[tokio::test]
 async fn a_system_is_created_from_a_name_and_optional_setup_fields() -> Result<(), Box<dyn Error>> {
     let actor = UserId::new();
-    let app = systems_router(Arc::new(Stub), Arc::new(AllowAuthorizer { actor }))
-        .layer(Extension(pvlog_api::RequestPrincipal::User(actor)));
+    let app = systems_router(
+        Arc::new(Stub::default()),
+        Arc::new(AllowAuthorizer { actor }),
+    )
+    .layer(Extension(pvlog_api::RequestPrincipal::User(actor)));
 
     let (status, body) = post_system(
         app.clone(),
@@ -128,7 +143,170 @@ async fn a_system_is_created_from_a_name_and_optional_setup_fields() -> Result<(
     Ok(())
 }
 
-struct Stub;
+#[tokio::test]
+async fn a_system_and_its_equipment_are_created_together_or_not_at_all()
+-> Result<(), Box<dyn Error>> {
+    let actor = UserId::new();
+    let systems = Arc::new(Stub::default());
+    let equipment = Arc::new(EquipmentStub::default());
+    let app = systems_router_with_equipment(
+        systems.clone(),
+        Arc::new(AllowAuthorizer { actor }),
+        equipment.clone(),
+    )
+    .layer(Extension(pvlog_api::RequestPrincipal::User(actor)));
+
+    let (status, body) = post_system(
+        app.clone(),
+        r#"{"name":"Roof","clientTimezone":"UTC","inverters":[
+            {"name":"East","effectiveFrom":0,"strings":[
+                {"name":"S1","panelCount":10,"modulePeakPowerWatts":400,"effectiveFrom":0}]},
+            {"name":"West","effectiveFrom":0,"strings":[
+                {"name":"S2","panelCount":0,"modulePeakPowerWatts":400,"effectiveFrom":0}]}]}"#,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["title"], "invalid_equipment");
+    assert_eq!(body["detail"], "equipment");
+    assert_eq!(
+        systems.created.load(Ordering::SeqCst),
+        0,
+        "an invalid string must not leave a system behind"
+    );
+    assert_eq!(equipment.created.load(Ordering::SeqCst), 0);
+
+    let (status, _) = post_system(
+        app.clone(),
+        r#"{"name":"Roof","clientTimezone":"UTC","inverters":[
+            {"name":"East","effectiveFrom":0,"strings":[
+                {"name":"S1","panelCount":10,"modulePeakPowerWatts":400,"effectiveFrom":0}]},
+            {"name":"unstorable","effectiveFrom":0,"strings":[
+                {"name":"S2","panelCount":10,"modulePeakPowerWatts":400,"effectiveFrom":0}]}]}"#,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(systems.created.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        systems.deleted.load(Ordering::SeqCst),
+        1,
+        "a storage failure removes the system that was just created"
+    );
+
+    let (status, _) = post_system(
+        app,
+        r#"{"name":"Roof","clientTimezone":"UTC","inverters":[
+            {"name":"East","effectiveFrom":0,"strings":[
+                {"name":"S1","panelCount":10,"modulePeakPowerWatts":400,"effectiveFrom":0,
+                 "temperatureCoefficientPpmPerCelsius":-3500,
+                 "shading":[{"fromMinuteOfDay":420,"toMinuteOfDay":540,"label":"Chimney",
+                             "lossBasisPoints":3000}]}]}]}"#,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(systems.deleted.load(Ordering::SeqCst), 1);
+    assert_eq!(equipment.created.load(Ordering::SeqCst), 2);
+    Ok(())
+}
+
+#[tokio::test]
+async fn equipment_is_refused_where_it_cannot_be_stored() -> Result<(), Box<dyn Error>> {
+    let actor = UserId::new();
+    let systems = Arc::new(Stub::default());
+    let app = systems_router(systems.clone(), Arc::new(AllowAuthorizer { actor }))
+        .layer(Extension(pvlog_api::RequestPrincipal::User(actor)));
+    let (status, _) = post_system(
+        app,
+        r#"{"name":"Roof","clientTimezone":"UTC","inverters":[
+            {"name":"East","effectiveFrom":0,"strings":[
+                {"name":"S1","panelCount":10,"modulePeakPowerWatts":400,"effectiveFrom":0}]}]}"#,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(systems.created.load(Ordering::SeqCst), 0);
+    Ok(())
+}
+
+/// Rejects strings without panels and fails to store an inverter named `unstorable`.
+#[derive(Default)]
+struct EquipmentStub {
+    created: AtomicUsize,
+}
+
+#[async_trait]
+impl InverterApiUseCases for EquipmentStub {
+    fn validate(&self, input: &InverterInput) -> Result<(), InverterApiError> {
+        if input.strings.iter().any(|string| string.panel_count == 0) {
+            return Err(InverterApiError::InvalidInput("equipment"));
+        }
+        Ok(())
+    }
+
+    async fn list(
+        &self,
+        _account_id: AccountId,
+        _system_id: SystemId,
+        _at: i64,
+    ) -> Result<Vec<InverterResponse>, InverterApiError> {
+        Ok(Vec::new())
+    }
+
+    async fn create(
+        &self,
+        _actor: UserId,
+        _account_id: AccountId,
+        system_id: SystemId,
+        input: InverterInput,
+    ) -> Result<InverterResponse, InverterApiError> {
+        if input.name == "unstorable" {
+            return Err(InverterApiError::Unavailable);
+        }
+        self.created.fetch_add(1, Ordering::SeqCst);
+        Ok(InverterResponse {
+            id: InverterId::new(),
+            system_id,
+            name: input.name,
+            manufacturer: None,
+            model: None,
+            serial_reference: None,
+            rated_power_watts: None,
+            catalog_entry_id: None,
+            catalog_revision: None,
+            value_provenance: EquipmentValueProvenance::Manual,
+            specification_snapshot: None,
+            effective_from: input.effective_from,
+            effective_to: input.effective_to,
+            version: 1,
+            strings: Vec::new(),
+        })
+    }
+
+    async fn update(
+        &self,
+        _actor: UserId,
+        _account_id: AccountId,
+        _system_id: SystemId,
+        _inverter_id: InverterId,
+        _input: InverterInput,
+    ) -> Result<InverterResponse, InverterApiError> {
+        Err(InverterApiError::Unavailable)
+    }
+
+    async fn delete(
+        &self,
+        _actor: UserId,
+        _account_id: AccountId,
+        _system_id: SystemId,
+        _inverter_id: InverterId,
+    ) -> Result<(), InverterApiError> {
+        Err(InverterApiError::Unavailable)
+    }
+}
+
+#[derive(Default)]
+struct Stub {
+    created: AtomicUsize,
+    deleted: AtomicUsize,
+}
 struct AllowAuthorizer {
     actor: UserId,
 }
@@ -216,6 +394,7 @@ impl SystemLifecycleUseCases for Stub {
         if request.name.trim().is_empty() {
             return Err(SystemLifecycleError::InvalidField("name_required"));
         }
+        self.created.fetch_add(1, Ordering::SeqCst);
         let mut created = record(
             SystemId::new(),
             request.account_id,
@@ -277,6 +456,7 @@ impl SystemLifecycleUseCases for Stub {
         _version: u64,
         _confirmed: bool,
     ) -> Result<(), SystemLifecycleError> {
+        self.deleted.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
 }

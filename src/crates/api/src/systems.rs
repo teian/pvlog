@@ -14,18 +14,37 @@ use serde::Deserialize;
 use std::sync::Arc;
 
 use crate::{
-    ModernRequestAuthorizer, Problem, RequestAuthorizationError, RequestPrincipal,
-    principal_identity,
+    InverterApiError, InverterApiUseCases, InverterInput, ModernRequestAuthorizer, Problem,
+    RequestAuthorizationError, RequestPrincipal, principal_identity,
 };
 
 #[derive(Clone)]
 struct SystemState {
     service: Arc<dyn SystemLifecycleUseCases>,
     authorizer: Arc<dyn ModernRequestAuthorizer>,
+    /// Stores inverters submitted together with a new system.
+    equipment: Option<Arc<dyn InverterApiUseCases>>,
 }
 pub fn systems_router(
     service: Arc<dyn SystemLifecycleUseCases>,
     authorizer: Arc<dyn ModernRequestAuthorizer>,
+) -> Router {
+    router(service, authorizer, None)
+}
+
+/// Creates the system routes with creation of a system and its inverters in one request.
+pub fn systems_router_with_equipment(
+    service: Arc<dyn SystemLifecycleUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
+    equipment: Arc<dyn InverterApiUseCases>,
+) -> Router {
+    router(service, authorizer, Some(equipment))
+}
+
+fn router(
+    service: Arc<dyn SystemLifecycleUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
+    equipment: Option<Arc<dyn InverterApiUseCases>>,
 ) -> Router {
     Router::new()
         .route("/api/v1/systems", post(create))
@@ -35,6 +54,7 @@ pub fn systems_router(
         .with_state(SystemState {
             service,
             authorizer,
+            equipment,
         })
 }
 
@@ -59,6 +79,9 @@ struct CreateBody {
     client_timezone: Option<String>,
     #[serde(flatten)]
     details: DetailsBody,
+    /// Inverters with their strings to create together with the system.
+    #[serde(default)]
+    inverters: Vec<InverterInput>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -116,6 +139,18 @@ async fn create(
     Json(body): Json<CreateBody>,
 ) -> Result<Response, SystemApiError> {
     let (actor, account_id) = authorize_create(&state, principal).await?;
+    // Everything is checked before the first record exists, so invalid
+    // equipment cannot leave a system behind.
+    let equipment = match (&state.equipment, body.inverters.is_empty()) {
+        (_, true) => None,
+        (Some(equipment), false) => {
+            for inverter in &body.inverters {
+                equipment.validate(inverter)?;
+            }
+            Some(equipment)
+        }
+        (None, false) => return Err(SystemApiError::InvalidEquipment("inverters")),
+    };
     let record = state
         .service
         .create_system(CreateSystem {
@@ -127,6 +162,22 @@ async fn create(
             details: body.details.into(),
         })
         .await?;
+    if let Some(equipment) = equipment {
+        for inverter in body.inverters {
+            if let Err(error) = equipment
+                .create(actor, account_id, record.id, inverter)
+                .await
+            {
+                // Storage failed after validation passed; remove the system again
+                // so the request either creates everything or nothing.
+                let _ = state
+                    .service
+                    .delete_system(record.id, actor, record.version, true)
+                    .await;
+                return Err(error.into());
+            }
+        }
+    }
     Ok(with_etag(StatusCode::CREATED, record))
 }
 async fn update(
@@ -309,6 +360,8 @@ fn with_etag(status: StatusCode, record: SystemLifecycleRecord) -> Response {
 
 enum SystemApiError {
     Domain(SystemLifecycleError),
+    /// Equipment submitted with a new system failed validation; names the field.
+    InvalidEquipment(&'static str),
     Forbidden,
     PreconditionRequired,
     Unavailable,
@@ -321,6 +374,15 @@ impl From<RequestAuthorizationError> for SystemApiError {
             RequestAuthorizationError::Unavailable => Self::Domain(
                 SystemLifecycleError::Repository(pvlog_application::PortError::Unavailable),
             ),
+        }
+    }
+}
+impl From<InverterApiError> for SystemApiError {
+    fn from(value: InverterApiError) -> Self {
+        match value {
+            InverterApiError::InvalidInput(field) => Self::InvalidEquipment(field),
+            InverterApiError::Forbidden => Self::Forbidden,
+            InverterApiError::NotFound | InverterApiError::Unavailable => Self::Unavailable,
         }
     }
 }
@@ -348,6 +410,9 @@ impl IntoResponse for SystemApiError {
             ),
             Self::Domain(SystemLifecycleError::InvalidField(code)) => {
                 (StatusCode::UNPROCESSABLE_ENTITY, "invalid_system", code)
+            }
+            Self::InvalidEquipment(field) => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "invalid_equipment", field)
             }
             Self::Domain(
                 SystemLifecycleError::InvalidInput | SystemLifecycleError::ConfirmationRequired,

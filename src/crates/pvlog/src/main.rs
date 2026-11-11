@@ -779,9 +779,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 local_password,
                 request_authorizer.clone(),
             ))
-            .merge(pvlog_api::systems_router(
+            .merge(pvlog_api::systems_router_with_equipment(
                 system_lifecycle,
                 request_authorizer.clone(),
+                inverter_api.clone(),
             ))
             .merge(pvlog_api::account_api_keys_router(
                 account_api_keys,

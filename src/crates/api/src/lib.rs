@@ -131,7 +131,7 @@ pub use sharing::{
     PublicDirectoryEntry, PublicSystem, SharingApiError, SharingApiUseCases, SharingInput,
     SharingState, sharing_router,
 };
-pub use systems::systems_router;
+pub use systems::{systems_router, systems_router_with_equipment};
 pub use telemetry::telemetry_router;
 pub use user_lifecycle::user_lifecycle_router;
 
