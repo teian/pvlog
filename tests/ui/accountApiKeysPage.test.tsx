@@ -60,6 +60,65 @@ describe("AccountApiKeyManager", () => {
     expect(await screen.findByText("Home uploader")).toBeVisible();
   });
 
+  it("lists a data source key as managed and points uploaders to data sources", async () => {
+    const systemId = "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f71";
+    const dataSourceId = "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f73";
+    keys = [
+      {
+        ...metadata(),
+        name: `data-source:${dataSourceId}:1780000000000`,
+        systemId,
+        dataSourceId,
+      },
+    ];
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = input.toString();
+      if (url === `/api/v1/systems/${systemId}`)
+        return json({
+          id: systemId,
+          accountId: id,
+          name: "South roof",
+          timezone: "Europe/Berlin",
+          visibility: "private",
+          lifecycle: "active",
+          version: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        });
+      if (url === `/api/v1/systems/${systemId}/data-sources`)
+        return json([
+          {
+            id: dataSourceId,
+            systemId,
+            name: "Roof logger",
+            profile: "smalog",
+            state: "receiving",
+            serverUrl: "https://pvlog.example",
+            readingsLastDay: 1,
+            createdAtEpochMillis: 1,
+            updatedAtEpochMillis: 1,
+          },
+        ]);
+      return json(keys);
+    });
+    renderManager();
+
+    // The technical credential name is replaced by what the key belongs to.
+    expect(await screen.findByText("Roof logger")).toBeVisible();
+    expect(screen.getByText("Managed by data source")).toBeVisible();
+    expect(screen.getByText(/System: South roof/)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "Manage in the data source" }),
+    ).toHaveAttribute("href", `/systems/${systemId}/settings/data-sources`);
+    expect(screen.queryByText(/data-source:/)).not.toBeInTheDocument();
+    // It can still be revoked here.
+    expect(screen.getByRole("button", { name: "Revoke" })).toBeVisible();
+    // The creation form says where a logger is connected.
+    expect(
+      screen.getByRole("link", { name: "Add a data source to a system" }),
+    ).toHaveAttribute("href", "/systems");
+  });
+
   it("explains missing permissions and revokes keys independently", async () => {
     keys = [metadata()];
     const user = userEvent.setup();

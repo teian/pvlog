@@ -202,6 +202,21 @@ async fn verify_lifecycle(
         ));
     }
 
+    // The credential names its data source, so the account's key list can
+    // show it as managed; a hand-made key name does not.
+    assert_eq!(
+        pvlog::data_sources::credential_data_source(&credential.name),
+        Some(source.id)
+    );
+    assert_eq!(
+        pvlog::data_sources::credential_data_source("Home Assistant"),
+        None
+    );
+    assert_eq!(
+        pvlog::data_sources::credential_data_source("data-source:not-a-uuid:1"),
+        None
+    );
+
     // Two sources feed one system; each is credited with its own readings.
     let second = api
         .create(owner, account_id, system_id, input("Garage", "generic"))

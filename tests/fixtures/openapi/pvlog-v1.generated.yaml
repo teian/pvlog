@@ -3621,6 +3621,12 @@ components:
         createdAtEpochMillis: { type: integer, format: int64 }
         expiresAtEpochMillis: { type: [integer, "null"], format: int64 }
         revokedAtEpochMillis: { type: [integer, "null"], format: int64 }
+        systemId:
+          anyOf: [{ $ref: "#/components/schemas/UuidV7" }, { type: "null" }]
+          description: System the key is restricted to; null for an account-wide key.
+        dataSourceId:
+          anyOf: [{ $ref: "#/components/schemas/UuidV7" }, { type: "null" }]
+          description: Data source that owns the key. Such a key is created and regenerated through its data source and can only be revoked here.
     IssuedAccountApiKey:
       type: object
       additionalProperties: false

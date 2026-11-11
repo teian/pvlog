@@ -138,8 +138,7 @@ impl StorageDataSourceApi {
                 account_id,
                 actor,
                 Some(system_id),
-                // Credential names are unique per owner even after revocation.
-                format!("data-source:{id}:{now}"),
+                credential_name(id, now),
                 BTreeSet::from([ApiScope::TelemetryWrite]),
                 None,
             )
@@ -281,6 +280,28 @@ impl StorageDataSourceApi {
             .await
             .map_err(|_| DataSourceApiError::Unavailable)
     }
+}
+
+/// Prefix of the name every data source credential carries.
+const CREDENTIAL_NAME_PREFIX: &str = "data-source:";
+
+/// Names the credential issued for a data source at `now`.
+///
+/// Credential names are unique per owner even after revocation, so the issue
+/// time keeps a regenerated credential's name distinct.
+fn credential_name(id: DataSourceId, now: i64) -> String {
+    format!("{CREDENTIAL_NAME_PREFIX}{id}:{now}")
+}
+
+/// Reads the owning data source back out of a credential name.
+///
+/// Returns `None` for a credential a user created by hand.
+#[must_use]
+pub fn credential_data_source(name: &str) -> Option<DataSourceId> {
+    let (id, _issued_at) = name.strip_prefix(CREDENTIAL_NAME_PREFIX)?.split_once(':')?;
+    uuid::Uuid::parse_str(id)
+        .ok()
+        .and_then(|uuid| DataSourceId::from_uuid(uuid).ok())
 }
 
 /// Trims a name and rejects an empty or overlong one.

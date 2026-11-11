@@ -1023,7 +1023,16 @@
       "permissions": "Berechtigungen",
       "status": "Status"
     },
-    "title": "Konto-API-Keys"
+    "title": "Konto-API-Keys",
+    "uploaderHint": "Um einen Logger zu verbinden, brauchst du keinen Schlüssel von hier: Eine Datenquelle stellt ihren eigenen Schlüssel aus, der nur für eine Anlage gilt.",
+    "uploaderHintLink": "Datenquelle zu einer Anlage hinzufügen",
+    "managed": {
+      "badge": "Von Datenquelle verwaltet",
+      "system": "Anlage: {{name}}.",
+      "link": "In der Datenquelle verwalten",
+      "unknownSource": "Datenquelle",
+      "unknownSystem": "unbekannt"
+    }
   },
   "system": {
     "tabs": {

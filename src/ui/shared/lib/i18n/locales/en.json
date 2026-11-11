@@ -1023,7 +1023,16 @@
       "permissions": "Permissions",
       "status": "Status"
     },
-    "title": "Account API keys"
+    "title": "Account API keys",
+    "uploaderHint": "To connect a logger, you do not need a key from here: a data source issues its own key, valid for one system only.",
+    "uploaderHintLink": "Add a data source to a system",
+    "managed": {
+      "badge": "Managed by data source",
+      "system": "System: {{name}}.",
+      "link": "Manage in the data source",
+      "unknownSource": "Data source",
+      "unknownSystem": "unknown"
+    }
   },
   "system": {
     "tabs": {

@@ -16,6 +16,10 @@ export const accountApiKeySchema = z.object({
   createdAtEpochMillis: z.number().int(),
   expiresAtEpochMillis: z.number().int().nullable(),
   revokedAtEpochMillis: z.number().int().nullable(),
+  /** System the key is restricted to; null for an account-wide key. */
+  systemId: z.uuid().nullable().default(null),
+  /** Data source that owns the key; such a key is managed from there. */
+  dataSourceId: z.uuid().nullable().default(null),
 });
 
 /** One-time API-key creation response. */

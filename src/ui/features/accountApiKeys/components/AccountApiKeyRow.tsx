@@ -1,3 +1,4 @@
+import { ManagedApiKeyName } from "@/features/accountApiKeys/components/ManagedApiKeyName";
 import {
   accountApiKeyScopeKey,
   type AccountApiKey,
@@ -33,7 +34,16 @@ export function AccountApiKeyRow({
   const active = apiKey.revokedAtEpochMillis === null;
   return (
     <TableRow>
-      <TableCell className="font-medium">{apiKey.name}</TableCell>
+      <TableCell className="font-medium">
+        {apiKey.systemId && apiKey.dataSourceId ? (
+          <ManagedApiKeyName
+            dataSourceId={apiKey.dataSourceId}
+            systemId={apiKey.systemId}
+          />
+        ) : (
+          apiKey.name
+        )}
+      </TableCell>
       <TableCell>
         <div className="flex flex-wrap gap-1">
           {apiKey.scopes.map((scope) => (

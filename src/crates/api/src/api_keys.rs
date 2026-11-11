@@ -10,7 +10,9 @@ use axum::{
     response::{IntoResponse, Response},
     routing::post,
 };
-use pvlog_domain::{AccountId, ApiCredentialId, ApiScope, Permission, PrincipalId, UserId};
+use pvlog_domain::{
+    AccountId, ApiCredentialId, ApiScope, DataSourceId, Permission, PrincipalId, SystemId, UserId,
+};
 use secrecy::{ExposeSecret as _, SecretString};
 use serde::{Deserialize, Serialize};
 
@@ -26,6 +28,11 @@ pub struct AccountApiKeyMetadata {
     pub created_at_epoch_millis: i64,
     pub expires_at_epoch_millis: Option<i64>,
     pub revoked_at_epoch_millis: Option<i64>,
+    /// System the key is restricted to; absent for an account-wide key.
+    pub system_id: Option<SystemId>,
+    /// Data source that owns the key. Such a key is managed from the data
+    /// source and can only be revoked here.
+    pub data_source_id: Option<DataSourceId>,
 }
 
 /// Public least-privilege permission vocabulary for account API keys.

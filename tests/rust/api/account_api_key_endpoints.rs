@@ -150,6 +150,8 @@ fn metadata(
         created_at_epoch_millis: 1_780_000_000_000,
         expires_at_epoch_millis: None,
         revoked_at_epoch_millis: None,
+        system_id: None,
+        data_source_id: None,
     })
 }
 

@@ -35,6 +35,12 @@ export function AccountApiKeyManager() {
           <CardDescription>
             {t("accountApiKeys.createDescription")}
           </CardDescription>
+          <CardDescription>
+            {t("accountApiKeys.uploaderHint")}{" "}
+            <a className="underline" href="/systems">
+              {t("accountApiKeys.uploaderHintLink")}
+            </a>
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <AccountApiKeyCreateForm

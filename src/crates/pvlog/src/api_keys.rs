@@ -132,6 +132,7 @@ impl AccountApiKeyUseCases for ManagementAccountApiKeyService {
 }
 
 fn metadata(record: ApiTokenRecord) -> Result<AccountApiKeyMetadata, AccountApiKeyError> {
+    let data_source_id = crate::data_sources::credential_data_source(&record.name);
     Ok(AccountApiKeyMetadata {
         id: record.id,
         name: record.name,
@@ -143,6 +144,8 @@ fn metadata(record: ApiTokenRecord) -> Result<AccountApiKeyMetadata, AccountApiK
         created_at_epoch_millis: record.created_at,
         expires_at_epoch_millis: record.expires_at,
         revoked_at_epoch_millis: record.revoked_at,
+        system_id: record.system_id,
+        data_source_id,
     })
 }
 
