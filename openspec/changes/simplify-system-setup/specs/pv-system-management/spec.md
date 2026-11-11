@@ -75,6 +75,39 @@ The system SHALL persist each string's temperature coefficient and its shading e
 - **WHEN** a user adds a shading entry with a time range and a loss percentage to a string and saves
 - **THEN** reading the string returns that entry
 
+### Requirement: Stable string identity
+
+Saving an inverter SHALL keep the identifier of every string that is resubmitted with its identifier, SHALL create a string for every entry without one, and SHALL remove only strings that are left out. Measurement channels bound to a kept string SHALL remain bound.
+
+#### Scenario: Inverter is edited
+
+- **WHEN** an owner renames an inverter and saves it with its existing strings
+- **THEN** each string keeps its identifier and every channel bound to it stays bound
+
+#### Scenario: String is left out
+
+- **WHEN** an owner saves an inverter without one of its former strings
+- **THEN** that string is removed and the other strings keep their identifiers
+
+#### Scenario: Unknown string identifier is submitted
+
+- **WHEN** a save names a string identifier that does not belong to the inverter
+- **THEN** the system rejects the request without changing the inverter
+
+### Requirement: Strings without module identity
+
+The system SHALL accept a string that states panel count and power per panel without a module manufacturer or model. Forecast readiness SHALL report the missing module identity for such a string.
+
+#### Scenario: Array is described by capacity only
+
+- **WHEN** an owner saves a string with panel count, power per panel, orientation and tilt and no module manufacturer or model
+- **THEN** the string is stored and contributes to the system's capacity
+
+#### Scenario: Forecast for a string without module identity
+
+- **WHEN** forecast readiness is evaluated for a string without module manufacturer or model
+- **THEN** the string is reported as not forecast-ready with module identity as the reason
+
 ### Requirement: Typed measurement channels
 
 Each measurement channel SHALL have a data type, a unit, a decimal scale and an aggregation kind, and its values SHALL be stored without loss at that scale. A channel key defined by a source profile SHALL be registered with the profile's definition; any other unknown key SHALL be registered as unassigned with the unit the client supplied.

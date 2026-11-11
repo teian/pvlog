@@ -261,6 +261,8 @@ Imports run as jobs in the existing `import_jobs` table and are limited in size 
 - System create and update accept and return location label, country code, coordinates, timezone, status interval, commissioning date and declared capacity; the location search returns the country code.
 - Strings persist temperature coefficient and shading entries.
 - System creation with equipment becomes one server-side operation instead of a client-driven sequence. The system registry and the equipment live in different databases, so one transaction cannot span them: all equipment is validated completely before the first record is written, and a storage failure afterwards removes the system that was just created.
+- Saving an inverter no longer deletes and recreates its strings. Strings carry their identifier in the request and keep it, because measurement channels and adopted equipment refer to strings by identifier.
+- A string no longer requires module manufacturer and model, which the quick entry does not ask for; forecast readiness already reports the missing module identity.
 - The dashboard response distinguishes "no observation" from "observation at time T"; status badges in the system list and equipment cards are derived from telemetry, not lifecycle.
 - Measurement channels are implemented for PostgreSQL.
 - The OpenAPI contract documents the `channels` map that the server already accepts.
