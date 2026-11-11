@@ -1,9 +1,10 @@
 use std::{error::Error, str::FromStr as _};
 
 use pvlog_domain::{
-    AccountId, CalculationSettings, ChannelScale, GeographicPrecision, IanaTimezone, Inverter,
-    InverterId, NetCalculationMode, PowerCalculationMode, PvString, PvSystem, StringId, SystemId,
-    SystemLifecycle, SystemPrivacy, Visibility, Watts,
+    AccountId, CalculationSettings, ChannelScale, ForecastCompleteness, ForecastCompletenessReason,
+    GeographicPrecision, IanaTimezone, Inverter, InverterId, NetCalculationMode,
+    PowerCalculationMode, PvString, PvSystem, StringId, SystemId, SystemLifecycle, SystemPrivacy,
+    Visibility, Watts,
 };
 use time::macros::date;
 
@@ -83,6 +84,45 @@ fn new_system_shape_can_apply_privacy_first_defaults() -> Result<(), Box<dyn Err
     let mut invalid = system.clone();
     invalid.inverters[0].strings[0].inverter_id = InverterId::new();
     assert!(invalid.validate_hierarchy().is_err());
+    Ok(())
+}
+
+/// A system is usable before any equipment is entered: it validates, reports no
+/// capacity, and names equipment as what a forecast is missing.
+#[test]
+fn system_without_equipment_is_valid_and_reports_missing_equipment() -> Result<(), Box<dyn Error>> {
+    let system = PvSystem {
+        id: SystemId::new(),
+        account_id: AccountId::new(),
+        name: "Name only".to_owned(),
+        description: None,
+        timezone: IanaTimezone::from_str("Europe/Berlin")?,
+        commissioning_date: date!(2025 - 01 - 01),
+        country_code: None,
+        latitude_microdegrees: None,
+        longitude_microdegrees: None,
+        status_interval_seconds: 300,
+        lifecycle: SystemLifecycle::Active,
+        privacy: SystemPrivacy::default(),
+        calculation: CalculationSettings {
+            power: PowerCalculationMode::MeasuredOnly,
+            net: NetCalculationMode::Measured,
+            derive_interval_energy: false,
+            currency: None,
+        },
+        inverters: Vec::new(),
+    };
+
+    system.validate_hierarchy()?;
+    let snapshot = system.effective_capacity_snapshot(date!(2025 - 06 - 01))?;
+    assert_eq!(snapshot.total_peak_power, Watts::new(0));
+    assert!(snapshot.inverters.is_empty());
+    assert_eq!(
+        snapshot.completeness,
+        ForecastCompleteness::Unavailable {
+            reasons: vec![ForecastCompletenessReason::NoEffectiveEquipment],
+        }
+    );
     Ok(())
 }
 

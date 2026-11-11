@@ -69,6 +69,21 @@ async fn an_unbound_channel_contributes_to_no_scope() -> Result<(), Box<dyn Erro
     Ok(())
 }
 
+/// A system created from a name alone has no strings to sum, so its series is
+/// what the uploader reported for the plant.
+#[tokio::test]
+async fn a_system_without_equipment_reports_its_plant_readings() -> Result<(), Box<dyn Error>> {
+    let mut fixture = Fixture::new().await?;
+    let bare = fixture
+        .add_system_without_equipment(&[1_500, 1_600])
+        .await?;
+    fixture.system_id = bare;
+
+    let system = fixture.read(SeriesScope::System).await?;
+    assert_eq!(system, vec![1_500, 1_600]);
+    Ok(())
+}
+
 struct Fixture {
     _directory: TempDir,
     target: DatabaseTarget,
@@ -138,6 +153,41 @@ impl Fixture {
         }
         account.close().await?;
         Ok(())
+    }
+
+    /// Adds a second system that has plant readings but no inverter or string.
+    async fn add_system_without_equipment(
+        &mut self,
+        generation_watts: &[i64],
+    ) -> Result<SystemId, Box<dyn Error>> {
+        let system_id = SystemId::new();
+        let mut account = connect(&self.account_path).await?;
+        sqlx::query(
+            "INSERT INTO systems (id, name, timezone, status_interval_seconds, \
+             power_calculation_mode, net_calculation_mode, created_at, updated_at) \
+             VALUES (?, 'Name only', 'Europe/Berlin', 300, 'reported', 'separate_flows', 1, 1)",
+        )
+        .bind(system_id.as_uuid().as_bytes().as_slice())
+        .execute(&mut account)
+        .await?;
+        for (index, watts) in generation_watts.iter().enumerate() {
+            let measured_at =
+                FIRST_INSTANT + STEP_MILLIS * i64::try_from(index).unwrap_or_default();
+            sqlx::query(
+                "INSERT INTO telemetry_hot (observation_id, system_id, measured_at, received_at, \
+                 source_kind, source_identity, quality_flags, generation_power_watts, \
+                 canonical_hash) VALUES (?, ?, ?, ?, 'modern_api', 'bare', 0, ?, zeroblob(32))",
+            )
+            .bind(Uuid::now_v7().as_bytes().as_slice())
+            .bind(system_id.as_uuid().as_bytes().as_slice())
+            .bind(measured_at)
+            .bind(measured_at)
+            .bind(watts)
+            .execute(&mut account)
+            .await?;
+        }
+        account.close().await?;
+        Ok(system_id)
     }
 
     async fn read(&self, scope: SeriesScope) -> Result<Vec<i64>, Box<dyn Error>> {
