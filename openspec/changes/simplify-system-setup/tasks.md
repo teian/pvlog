@@ -9,7 +9,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 - [x] 1.3 Extend system create and update to accept and return name, description, location label, country code, coordinates, timezone, status interval, commissioning date and declared capacity, deriving the timezone from the location's country when omitted and from the client otherwise; verify with API tests for the name-only case, timezone derivation and each field-specific rejection.
 - [x] 1.4 Make creation with inverters and strings one all-or-nothing server operation and persist string temperature coefficient and shading; verify that an invalid string leaves no system behind and that saved loss inputs are returned unchanged.
 - [x] 1.5 Report declared versus derived capacity on the system resource; verify both scenarios of the declared-capacity requirement with tests.
-- [ ] 1.6 Document the extended system and string schemas in OpenAPI and update the contract fixture and checksum; verify `openapi:lint`, `openapi:routes`, `openapi:compare` and `test:release-artifacts` pass.
+- [x] 1.6 Document the extended system and string schemas in OpenAPI and update the contract fixture and checksum; verify `openapi:lint`, `openapi:routes`, `openapi:compare` and `test:release-artifacts` pass.
 
 ## 2. Data sources and system-restricted credentials
 

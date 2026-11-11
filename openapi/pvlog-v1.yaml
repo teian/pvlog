@@ -651,14 +651,26 @@ paths:
       operationId: createSystem
       tags: [Systems]
       summary: Create a private PV system
-      description: Creates one system in the authenticated user's ownership context using private and active defaults. No separate account identifier is accepted.
+      description: Creates one system in the authenticated user's ownership context using private and active defaults. Only the name is required; location, capacity, reporting interval and equipment are optional and can be added later. No separate account identifier is accepted.
       security: [{ bearerAuth: [systems:write] }]
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/CreateSystem" }
-            example: { name: Roof PV, timezone: Europe/Berlin }
+            examples:
+              nameOnly:
+                summary: Only the name is required
+                value: { name: Roof PV, clientTimezone: Europe/Berlin }
+              withLocation:
+                summary: Location and declared capacity
+                value:
+                  name: Roof PV
+                  locationLabel: Leipzig, Germany
+                  countryCode: DE
+                  latitudeMicrodegrees: 51340000
+                  longitudeMicrodegrees: 12370000
+                  declaredCapacityWatts: 9900
       responses:
         "201": { $ref: "#/components/responses/SystemResponse" }
         "422": { $ref: "#/components/responses/ValidationProblem" }
@@ -3433,6 +3445,10 @@ components:
         displayName: { type: string }
         latitude: { type: number, minimum: -90, maximum: 90 }
         longitude: { type: number, minimum: -180, maximum: 180 }
+        countryCode:
+          type: string
+          pattern: "^[A-Z]{2}$"
+          description: ISO 3166-1 alpha-2 code of the country, when the provider reports it. Pass it on when creating a system so its timezone can be derived.
         attribution: { type: string }
     FreeFormObject:
       type: object
@@ -3665,8 +3681,40 @@ components:
         orientationDegrees:
           { type: [integer, "null"], minimum: 0, maximum: 359 }
         tiltDegrees: { type: [integer, "null"], minimum: 0, maximum: 90 }
+        temperatureCoefficientPpmPerCelsius:
+          type: [integer, "null"]
+          minimum: -20000
+          maximum: 0
+          description: Power temperature coefficient of the modules in parts per million per degree Celsius; -3500 is -0.35 %/°C.
+        shading:
+          type: array
+          maxItems: 24
+          default: []
+          items: { $ref: "#/components/schemas/StringShading" }
         effectiveFrom: { type: integer, format: int64 }
         effectiveTo: { type: [integer, "null"], format: int64 }
+    StringShading:
+      type: object
+      additionalProperties: false
+      description: Recurring daily shading of a PV string between two local times of day.
+      required: [fromMinuteOfDay, toMinuteOfDay, lossBasisPoints]
+      properties:
+        fromMinuteOfDay:
+          type: integer
+          minimum: 0
+          maximum: 1439
+          description: Minutes after local midnight at which the shading starts.
+        toMinuteOfDay:
+          type: integer
+          minimum: 1
+          maximum: 1440
+          description: Minutes after local midnight at which the shading ends; later than fromMinuteOfDay.
+        label: { type: string, default: "" }
+        lossBasisPoints:
+          type: integer
+          minimum: 0
+          maximum: 10000
+          description: Share of the string's output lost while shaded; 10000 is all of it.
     InverterInput:
       type: object
       additionalProperties: false
@@ -4235,36 +4283,106 @@ components:
         responseStatus: { type: [integer, "null"], minimum: 100, maximum: 599 }
         errorClass: { type: [string, "null"] }
         durationMilliseconds: { type: integer, minimum: 0 }
+    SystemDetails:
+      type: object
+      description: Optional system fields that can be supplied at creation and changed later.
+      properties:
+        description: { type: string, default: "" }
+        commissioningDate:
+          type: [string, "null"]
+          format: date
+          description: Local commissioning date.
+        locationLabel:
+          type: [string, "null"]
+          description: Label of the place the owner picked, shown next to the coordinates.
+        countryCode:
+          type: [string, "null"]
+          pattern: "^[A-Za-z]{2}$"
+          description: ISO 3166-1 alpha-2 code of the country the location lies in, as the location search returns it.
+        latitudeMicrodegrees:
+          type: [integer, "null"]
+          minimum: -90000000
+          maximum: 90000000
+          description: Supplied together with longitudeMicrodegrees or not at all.
+        longitudeMicrodegrees:
+          type: [integer, "null"]
+          minimum: -180000000
+          maximum: 180000000
+        statusIntervalSeconds:
+          type: [integer, "null"]
+          minimum: 30
+          maximum: 86400
+          description: Expected seconds between readings. Omitted on update to keep the current value; a new system defaults to 300.
+        declaredCapacityWatts:
+          type: [integer, "null"]
+          format: int64
+          minimum: 1
+          description: Capacity the owner states. Used until the system has strings, which then define the capacity.
     CreateSystem:
-      type: object
-      additionalProperties: false
-      required: [name, timezone]
-      properties:
-        {
-          name: { type: string, minLength: 1 },
-          timezone: { type: string, example: Europe/Berlin },
-        }
+      allOf:
+        - $ref: "#/components/schemas/SystemDetails"
+        - type: object
+          required: [name]
+          properties:
+            name: { type: string, minLength: 1 }
+            timezone:
+              type: [string, "null"]
+              example: Europe/Berlin
+              description: IANA timezone the owner chose. When omitted the timezone is taken from the country of the location, and otherwise from clientTimezone.
+            clientTimezone:
+              type: [string, "null"]
+              description: IANA timezone of the client, used when neither timezone nor the location's country decides it.
+            inverters:
+              type: array
+              description: Inverters with their strings to create together with the system. All of them are validated before anything is stored, so the request creates everything or nothing.
+              items: { $ref: "#/components/schemas/InverterInput" }
     UpdateSystem:
-      type: object
-      required: [name, timezone, visibility]
-      properties:
-        {
-          name: { type: string, minLength: 1 },
-          timezone: { type: string },
-          visibility: { enum: [private, account, unlisted, public] },
-        }
+      allOf:
+        - $ref: "#/components/schemas/SystemDetails"
+        - type: object
+          required: [name, timezone, visibility]
+          properties:
+            name: { type: string, minLength: 1 }
+            timezone: { type: string }
+            visibility: { enum: [private, account, unlisted, public] }
     System:
       allOf:
         - $ref: "#/components/schemas/UpdateSystem"
         - type: object
-          required: [id, accountId, lifecycle, version]
+          required:
+            [
+              id,
+              accountId,
+              lifecycle,
+              version,
+              statusIntervalSeconds,
+              createdAt,
+              updatedAt,
+            ]
           properties:
-            {
-              id: { $ref: "#/components/schemas/UuidV7" },
-              accountId: { $ref: "#/components/schemas/UuidV7" },
-              lifecycle: { enum: [active, archived, pending_deletion] },
-              version: { type: integer, minimum: 1 },
-            }
+            id: { $ref: "#/components/schemas/UuidV7" }
+            accountId: { $ref: "#/components/schemas/UuidV7" }
+            lifecycle: { enum: [active, archived, pending_deletion] }
+            version: { type: integer, minimum: 1 }
+            statusIntervalSeconds:
+              { type: integer, minimum: 30, maximum: 86400 }
+            createdAt: { type: integer, format: int64 }
+            updatedAt: { type: integer, format: int64 }
+            derivedCapacityWatts:
+              type: [integer, "null"]
+              format: int64
+              readOnly: true
+              description: Sum of the rated power of the system's strings; null without strings.
+            capacityWatts:
+              type: [integer, "null"]
+              format: int64
+              readOnly: true
+              description: Capacity to display and validate against. The derived capacity when strings exist, otherwise the declared one.
+            capacitySource:
+              type: [string, "null"]
+              enum: [derived, declared, null]
+              readOnly: true
+              description: Where capacityWatts comes from. With "derived", a declared capacity is overridden.
     ManagedResource:
       type: object
       required: [id, accountId, kind, version, attributes]
