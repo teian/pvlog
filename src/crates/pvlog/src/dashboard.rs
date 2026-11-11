@@ -9,7 +9,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use pvlog_api::{
     DashboardAlertResponse, DashboardApiError, DashboardApiUseCases, DashboardIngestionResponse,
-    DashboardResponse,
+    DashboardResponse, DashboardRestriction,
 };
 use pvlog_application::Clock;
 use pvlog_domain::{AccountId, SystemId, UserId};
@@ -57,6 +57,7 @@ impl StorageDashboardApi {
     async fn visible_systems(
         &self,
         actor: UserId,
+        restriction: DashboardRestriction,
     ) -> Result<Vec<(AccountId, SystemId)>, DashboardApiError> {
         let accounts = self
             .management
@@ -65,12 +66,27 @@ impl StorageDashboardApi {
             .map_err(|_| DashboardApiError::Unavailable)?;
         let mut visible = Vec::new();
         for account in accounts {
+            if restriction
+                .account_id
+                .is_some_and(|allowed| allowed != account.id)
+            {
+                continue;
+            }
             let systems = self
                 .management
                 .systems_for_account(account.id)
                 .await
                 .map_err(|_| DashboardApiError::Unavailable)?;
-            visible.extend(systems.into_iter().map(|system| (account.id, system)));
+            visible.extend(
+                systems
+                    .into_iter()
+                    .filter(|system| {
+                        restriction
+                            .system_id
+                            .is_none_or(|allowed| allowed == *system)
+                    })
+                    .map(|system| (account.id, system)),
+            );
         }
         Ok(visible)
     }
@@ -78,10 +94,14 @@ impl StorageDashboardApi {
 
 #[async_trait]
 impl DashboardApiUseCases for StorageDashboardApi {
-    async fn dashboard(&self, actor: UserId) -> Result<DashboardResponse, DashboardApiError> {
+    async fn dashboard(
+        &self,
+        actor: UserId,
+        restriction: DashboardRestriction,
+    ) -> Result<DashboardResponse, DashboardApiError> {
         let now = i64::try_from(self.clock.now().epoch_millis())
             .map_err(|_| DashboardApiError::Unavailable)?;
-        let visible = self.visible_systems(actor).await?;
+        let visible = self.visible_systems(actor, restriction).await?;
 
         let mut newest = SystemSnapshot::default();
         let mut accepted_today = 0_u64;

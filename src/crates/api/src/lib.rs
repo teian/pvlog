@@ -81,7 +81,7 @@ pub use connectors::{
 };
 pub use dashboard::{
     DashboardAlertResponse, DashboardApiError, DashboardApiUseCases, DashboardIngestionResponse,
-    DashboardResponse, dashboard_router,
+    DashboardResponse, DashboardRestriction, dashboard_router,
 };
 pub use equipment_catalog::{
     CatalogPageResponse, EquipmentCatalogApiError, equipment_catalog_router,

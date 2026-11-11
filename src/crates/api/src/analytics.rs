@@ -1,4 +1,6 @@
-use crate::RequestPrincipal;
+use crate::{
+    ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal, principal_identity,
+};
 use axum::{
     Extension, Json, Router,
     body::Body,
@@ -13,16 +15,20 @@ use pvlog_application::{
     ModernAnalyticsUseCases, QueryPlanRequest, QueryResolution, RequestedResolution, SeriesField,
     StatisticsPeriod,
 };
-use pvlog_domain::{SystemId, UserId, WeatherDataRunId};
+use pvlog_domain::{ApiScope, Permission, SystemId, UserId, WeatherDataRunId};
 use serde::Deserialize;
 use std::{collections::BTreeSet, sync::Arc};
 
 #[derive(Clone)]
 struct AnalyticsState {
     service: Arc<dyn ModernAnalyticsUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
 }
 
-pub fn analytics_router(service: Arc<dyn ModernAnalyticsUseCases>) -> Router {
+pub fn analytics_router(
+    service: Arc<dyn ModernAnalyticsUseCases>,
+    authorizer: Arc<dyn ModernRequestAuthorizer>,
+) -> Router {
     Router::new()
         .route("/api/v1/systems/{system_id}/series", get(time_series))
         .route("/api/v1/systems/{system_id}/statistics", get(statistics))
@@ -31,7 +37,10 @@ pub fn analytics_router(service: Arc<dyn ModernAnalyticsUseCases>) -> Router {
             get(data_quality),
         )
         .route("/api/v1/systems/{system_id}/analysis-exports", post(export))
-        .with_state(AnalyticsState { service })
+        .with_state(AnalyticsState {
+            service,
+            authorizer,
+        })
 }
 
 #[derive(Clone, Deserialize)]
@@ -89,7 +98,11 @@ async fn time_series(
     Ok(Json(
         state
             .service
-            .time_series(actor_id(principal.as_ref())?, system_id, request)
+            .time_series(
+                authorize(&state, principal.as_ref(), system_id).await?,
+                system_id,
+                request,
+            )
             .await?,
     )
     .into_response())
@@ -105,7 +118,11 @@ async fn statistics(
     Ok(Json(
         state
             .service
-            .statistics(actor_id(principal.as_ref())?, system_id, period)
+            .statistics(
+                authorize(&state, principal.as_ref(), system_id).await?,
+                system_id,
+                period,
+            )
             .await?,
     )
     .into_response())
@@ -124,7 +141,7 @@ async fn data_quality(
         state
             .service
             .data_quality(
-                actor_id(principal.as_ref())?,
+                authorize(&state, principal.as_ref(), system_id).await?,
                 system_id,
                 parameters.start_epoch_millis,
                 parameters.end_epoch_millis,
@@ -162,7 +179,7 @@ async fn export(
         .service
         .export(AnalysisExportRequest {
             system_id,
-            actor: actor_id(principal.as_ref())?,
+            actor: authorize(&state, principal.as_ref(), system_id).await?,
             query: query_request(parameters)?,
             format,
             asynchronous: body.asynchronous.unwrap_or(false),
@@ -260,11 +277,31 @@ fn parse_period(value: &str) -> Result<StatisticsPeriod, AnalyticsApiError> {
     }
 }
 
-/// Both browser sessions and account API keys act as their owning user.
-fn actor_id(principal: Option<&Extension<RequestPrincipal>>) -> Result<UserId, AnalyticsApiError> {
+/// Browser sessions act as their user; account API keys act as their owner but
+/// only with the telemetry-read scope and RBAC permission on the addressed system.
+async fn authorize(
+    state: &AnalyticsState,
+    principal: Option<&Extension<RequestPrincipal>>,
+    system_id: SystemId,
+) -> Result<UserId, AnalyticsApiError> {
     match principal.map(|Extension(principal)| principal) {
         Some(RequestPrincipal::User(user_id)) => Ok(*user_id),
-        Some(RequestPrincipal::ApiCredential { owner_user_id, .. }) => Ok(*owner_user_id),
+        Some(credential @ RequestPrincipal::ApiCredential { scopes, .. }) => {
+            if !scopes.contains(&ApiScope::TelemetryRead) {
+                return Err(AnalyticsApiError::Forbidden);
+            }
+            let identity = principal_identity(credential)?;
+            let authorized = state
+                .authorizer
+                .authorize_system(
+                    identity,
+                    system_id,
+                    Permission::TelemetryRead,
+                    "analytics.read",
+                )
+                .await?;
+            Ok(authorized.actor_user_id)
+        }
         None => Err(AnalyticsApiError::Forbidden),
     }
 }
@@ -356,6 +393,12 @@ enum AnalyticsApiError {
     Invalid,
     Forbidden,
     Domain(ModernAnalyticsError),
+}
+
+impl From<RequestAuthorizationError> for AnalyticsApiError {
+    fn from(_: RequestAuthorizationError) -> Self {
+        Self::Forbidden
+    }
 }
 
 impl From<ModernAnalyticsError> for AnalyticsApiError {

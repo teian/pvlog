@@ -820,7 +820,10 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 reporting,
                 request_authorizer.clone(),
             ))
-            .merge(pvlog_api::analytics_router(analytics))
+            .merge(pvlog_api::analytics_router(
+                analytics,
+                request_authorizer.clone(),
+            ))
             .merge(pvlog_api::telemetry_router(
                 telemetry,
                 request_authorizer.clone(),

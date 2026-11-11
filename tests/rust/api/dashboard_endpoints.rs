@@ -8,7 +8,7 @@ use axum::{
 };
 use pvlog_api::{
     DashboardApiError, DashboardApiUseCases, DashboardIngestionResponse, DashboardResponse,
-    RequestPrincipal, dashboard_router,
+    DashboardRestriction, RequestPrincipal, dashboard_router,
 };
 use pvlog_domain::UserId;
 use tower::ServiceExt as _;
@@ -45,7 +45,11 @@ struct Dashboard;
 
 #[async_trait]
 impl DashboardApiUseCases for Dashboard {
-    async fn dashboard(&self, _actor: UserId) -> Result<DashboardResponse, DashboardApiError> {
+    async fn dashboard(
+        &self,
+        _actor: UserId,
+        _restriction: DashboardRestriction,
+    ) -> Result<DashboardResponse, DashboardApiError> {
         Ok(DashboardResponse {
             observed_at_epoch_millis: 0,
             age_seconds: 1,

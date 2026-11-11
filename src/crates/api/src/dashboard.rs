@@ -7,7 +7,7 @@ use axum::{Extension, Json, Router, http::StatusCode, response::Response, routin
 use serde::Serialize;
 
 use crate::RequestPrincipal;
-use pvlog_domain::UserId;
+use pvlog_domain::{AccountId, ApiScope, SystemId, UserId};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,10 +41,24 @@ pub struct DashboardIngestionResponse {
     pub lag_seconds: u64,
 }
 
+/// Narrowing applied to the systems a dashboard may aggregate.
+///
+/// Browser sessions are unrestricted; API credentials carry the account and the
+/// optional system they were issued for.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct DashboardRestriction {
+    pub account_id: Option<AccountId>,
+    pub system_id: Option<SystemId>,
+}
+
 #[async_trait]
 pub trait DashboardApiUseCases: Send + Sync {
     /// Projects the operational dashboard for one authenticated principal.
-    async fn dashboard(&self, actor: UserId) -> Result<DashboardResponse, DashboardApiError>;
+    async fn dashboard(
+        &self,
+        actor: UserId,
+        restriction: DashboardRestriction,
+    ) -> Result<DashboardResponse, DashboardApiError>;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -65,12 +79,29 @@ async fn dashboard(
     let Some(Extension(principal)) = principal else {
         return Err(DashboardHttpError::Unauthorized);
     };
-    let actor = match principal {
-        RequestPrincipal::User(user_id) => user_id,
-        RequestPrincipal::ApiCredential { owner_user_id, .. } => owner_user_id,
+    let (actor, restriction) = match principal {
+        RequestPrincipal::User(user_id) => (user_id, DashboardRestriction::default()),
+        RequestPrincipal::ApiCredential {
+            owner_user_id,
+            account_id,
+            system_id,
+            scopes,
+            ..
+        } => {
+            if !scopes.contains(&ApiScope::TelemetryRead) {
+                return Err(DashboardHttpError::Forbidden);
+            }
+            (
+                owner_user_id,
+                DashboardRestriction {
+                    account_id: Some(account_id),
+                    system_id,
+                },
+            )
+        }
     };
     service
-        .dashboard(actor)
+        .dashboard(actor, restriction)
         .await
         .map(Json)
         .map_err(|_| DashboardHttpError::Unavailable)
@@ -78,6 +109,7 @@ async fn dashboard(
 
 enum DashboardHttpError {
     Unauthorized,
+    Forbidden,
     Unavailable,
 }
 
@@ -85,6 +117,7 @@ impl axum::response::IntoResponse for DashboardHttpError {
     fn into_response(self) -> Response {
         match self {
             Self::Unauthorized => StatusCode::UNAUTHORIZED,
+            Self::Forbidden => StatusCode::FORBIDDEN,
             Self::Unavailable => StatusCode::SERVICE_UNAVAILABLE,
         }
         .into_response()
