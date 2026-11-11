@@ -31,8 +31,8 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 
 ## 4. Guided setup and per-system settings in the UI
 
-- [ ] 4.1 Add the `systemSetup` feature and the `/setup` route with the three steps, the "More options" disclosure, the one-time configuration view with copy actions and the waiting state that polls for the first reading; remove the unused `onboarding` feature and redirect `/onboarding`; verify with component tests for the name-only path, skipping the data source, and the waiting, test-reading and verified states.
-- [ ] 4.2 Redirect a signed-in user who may manage systems and has none to `/setup`; verify with a browser test from first sign-in to a verified test reading.
+- [x] 4.1 Add the `systemSetup` feature and the `/setup` route with the three steps, the "More options" disclosure, the one-time configuration view with copy actions and the waiting state that polls for the first reading; remove the unused `onboarding` feature and redirect `/onboarding`; verify with component tests for the name-only path, skipping the data source, and the waiting, test-reading and verified states.
+- [x] 4.2 Redirect a signed-in user who may manage systems and has none to `/setup`; verify with a browser test from first sign-in to a verified test reading.
 - [ ] 4.3 Add the Settings tab to the system page with routed sections and build General (all system fields, with the location saved) and Data sources (list with state, add, rename, regenerate with confirmation, delete); verify with component tests that the sections are read-only without management permission and that regeneration warns before invalidating.
 - [ ] 4.4 Move the equipment editor into the Equipment section with quick entry and detailed entry, and remove "Equipment templates" and "System resources" from Administration with redirects; verify that equipment is editable in exactly one place and that the former URLs redirect.
 - [ ] 4.5 Build the Measurement channels section with unassigned channels highlighted and bind, rename and retire actions; verify with component tests that binding moves the channel under its target and updates the checklist.

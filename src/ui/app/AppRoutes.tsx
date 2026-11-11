@@ -33,6 +33,10 @@ const OnboardingPage = lazy(async () => {
   const page = await import("@/pages/OnboardingPage");
   return { default: page.OnboardingPage };
 });
+const SetupPage = lazy(async () => {
+  const page = await import("@/pages/SetupPage");
+  return { default: page.SetupPage };
+});
 const SystemChartsPage = lazy(async () => {
   const page = await import("@/pages/SystemChartsPage");
   return { default: page.SystemChartsPage };
@@ -101,10 +105,30 @@ export function AppRoutes() {
           <Route
             element={
               <ProtectedRoute permission="system_manage">
+                <SetupPage />
+              </ProtectedRoute>
+            }
+            path="/setup"
+          />
+          <Route
+            element={
+              <ProtectedRoute permission="system_manage">
+                <SetupPage />
+              </ProtectedRoute>
+            }
+            path="/setup/:systemId"
+          />
+          <Route
+            element={<Navigate replace to="/setup" />}
+            path="/onboarding"
+          />
+          <Route
+            element={
+              <ProtectedRoute permission="system_manage">
                 <OnboardingPage />
               </ProtectedRoute>
             }
-            path="/onboarding"
+            path="/systems/manage"
           />
           <Route
             element={

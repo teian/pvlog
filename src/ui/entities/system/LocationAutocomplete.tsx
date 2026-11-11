@@ -1,8 +1,6 @@
 /* eslint-disable complexity, max-lines-per-function -- the async combobox keeps input, keyboard, loading, result, and attribution states in one ARIA-owned unit */
-import {
-  searchAddresses,
-  type GeocodingResult,
-} from "@/features/systemManagement/api/systemManagementApi";
+import { searchAddresses } from "@/entities/system/systemApi";
+import type { GeocodingResult } from "@/entities/system/system.types";
 import { Button, Field, FieldLabel, Input } from "@/shared/components";
 import { LoaderCircleIcon, MapPinIcon, SearchIcon } from "lucide-react";
 import { useEffect, useId, useState } from "react";
@@ -11,13 +9,15 @@ import { useTranslation } from "react-i18next";
 const MIN_QUERY_LENGTH = 3;
 const SEARCH_DELAY_MS = 350;
 
-/** Resolves typed addresses into keyboard-selectable OpenStreetMap suggestions. @param props - Current address and change callback. @returns Accessible asynchronous combobox. */
+/** Resolves typed addresses into keyboard-selectable OpenStreetMap suggestions. @param props - Current address, change callback and an optional callback that receives the chosen place, or undefined once the text no longer matches it. @returns Accessible asynchronous combobox. */
 export function LocationAutocomplete({
   value,
   onChange,
+  onSelect,
 }: {
   value: string;
   onChange: (value: string) => void;
+  onSelect?: (result: GeocodingResult | undefined) => void;
 }) {
   const { t, i18n } = useTranslation();
   const listId = useId();
@@ -66,6 +66,7 @@ export function LocationAutocomplete({
     setResults([]);
     setError(false);
     onChange(result.displayName);
+    onSelect?.(result);
   };
 
   return (
@@ -91,6 +92,7 @@ export function LocationAutocomplete({
               setSelected(undefined);
               setSearched(false);
               onChange(event.target.value);
+              onSelect?.(undefined);
             }}
             onKeyDown={(event) => {
               if (!open) return;

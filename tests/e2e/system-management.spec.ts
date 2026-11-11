@@ -98,7 +98,7 @@ test("matches the management hierarchy and edit-wizard behavior", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto("/onboarding");
+  await page.goto("/systems/manage");
 
   await expect(
     page.getByRole("heading", { level: 1, name: "System management" }),
@@ -134,7 +134,7 @@ for (const viewport of [
     page,
   }) => {
     await page.setViewportSize(viewport);
-    await page.goto("/onboarding");
+    await page.goto("/systems/manage");
     await expect(
       page.getByRole("heading", { name: "South Roof" }),
     ).toBeVisible();

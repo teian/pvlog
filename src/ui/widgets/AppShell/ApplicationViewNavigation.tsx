@@ -48,7 +48,7 @@ export function ApplicationViewNavigation({
     },
     { icon: SunIcon, labelKey: "seasonal", to: "/seasonal" },
     { icon: CloudSunIcon, labelKey: "weather", to: "/weather" },
-    { icon: BriefcaseIcon, labelKey: "manage", to: "/onboarding" },
+    { icon: BriefcaseIcon, labelKey: "manage", to: "/systems/manage" },
   ];
 
   return items.map(({ end, icon: Icon, labelKey, to }) => (

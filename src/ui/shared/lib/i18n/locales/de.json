@@ -11,16 +11,80 @@
   "features": {
     "authConnectorPresets": {
       "facebook": {
-        "description": "Eine Facebook-Login-App mit dem generischen OAuth2-Connector verwenden."
+        "description": "Verwende eine Facebook-Login-App mit dem allgemeinen OAuth2-Connector."
       },
       "github": {
-        "description": "Eine GitHub-OAuth-App mit dem generischen OAuth2-Connector verwenden."
+        "description": "Verwende eine GitHub-OAuth-App mit dem allgemeinen OAuth2-Connector."
       },
       "google": {
-        "description": "Google OpenID Connect Discovery mit Standard-Identitätsbereichen verwenden."
+        "description": "Verwende Google OpenID Connect Discovery mit den Standard-Identity-Scopes."
       },
       "x": {
-        "description": "Einen vertraulichen X-Client mit OAuth2 Authorization Code und PKCE verwenden."
+        "description": "Verwende einen vertraulichen X-Client mit OAuth2 Authorization Code und PKCE."
+      }
+    },
+    "equipmentCatalog": {
+      "title": "Gerätevorlagen",
+      "description": "Fülle bearbeitbare Gerätedaten optional aus dem gebündelten Offline-Katalog vor oder erfasse alle Werte manuell.",
+      "inverterTitle": "Wechselrichterkatalog",
+      "moduleTitle": "Solarmodulkatalog",
+      "search": "Hersteller oder Modell suchen",
+      "inverterPlaceholder": "Zum Beispiel SMA, Fronius oder Huawei",
+      "modulePlaceholder": "Zum Beispiel Hersteller oder 450-W-Modell",
+      "moduleOption": "{{manufacturer}} {{model}} · {{watts}} W",
+      "loading": "Katalog wird geladen…",
+      "error": "Der Gerätekatalog konnte nicht geladen werden. Die manuelle Eingabe bleibt verfügbar.",
+      "empty": "Kein passender Katalogeintrag. Fahre mit der manuellen Eingabe fort.",
+      "results": "Passende Vorlagen",
+      "choose": "Vorlage auswählen",
+      "manualInverter": "Wechselrichter manuell erfassen",
+      "manualModule": "Solarmodul manuell erfassen",
+      "manufacturer": "Hersteller",
+      "model": "Modell",
+      "inverterData": "Bestätigte technische Wechselrichterdaten",
+      "moduleData": "Bestätigte technische Modul- und Stringdaten",
+      "moduleCount": "Module im String",
+      "modulePower": "Peakleistung je Modul (W)",
+      "totalPower": "Berechnete String-Peakleistung: {{watts}} W",
+      "no": "Nein",
+      "confirmTitle": "Geräte-Snapshot bestätigen",
+      "inverterSnapshot": "Bearbeitbarer Wechselrichter-Snapshot (JSON)",
+      "moduleSnapshot": "Bearbeitbarer Modul-Snapshot (JSON)",
+      "snapshotGuidance": "Jedes vorausgefüllte Feld bleibt bearbeitbar. Gespeichert wird dieser bestätigte Snapshot; spätere Katalogversionen ändern ihn nicht.",
+      "provenanceLegend": "Herkunft: manuell, kopiert, angepasst oder ältere Vorlagenrevision.",
+      "save": "Bestätigte Geräte speichern",
+      "saved": "Gerätekonfiguration wurde gespeichert.",
+      "validationError": "Die bestätigten Werte sind ungültig. Prüfe die Snapshot-Werte.",
+      "customInverter": "Manueller Wechselrichter",
+      "customManufacturer": "Manueller Hersteller",
+      "customModel": "Manuelles Modell",
+      "defaultString": "PV-String 1",
+      "fields": {
+        "revision": "Katalogrevision",
+        "topology": "Topologie",
+        "mppts": "MPPT-Tracker",
+        "strings": "Stringeingänge",
+        "mpptAllocation": "Strings je MPPT",
+        "dcVoltage": "MPPT-Spannungsbereich",
+        "dcCurrent": "Maximaler DC-Strom",
+        "acPower": "AC-Nennleistung",
+        "phases": "AC-Phasen",
+        "communications": "Kommunikation",
+        "temperature": "Betriebstemperatur",
+        "source": "Quelle",
+        "cellTechnology": "Zelltechnologie",
+        "pmax": "Pmax je Modul",
+        "stringTotal": "String-Peakleistung",
+        "voc": "Leerlaufspannung (Voc)",
+        "vmp": "MPP-Spannung (Vmp)",
+        "isc": "Kurzschlussstrom (Isc)",
+        "imp": "MPP-Strom (Imp)",
+        "efficiency": "Wirkungsgrad",
+        "bifaciality": "Bifazialität",
+        "temperatureCoefficients": "Isc- / Voc- / Pmax-Temperaturkoeffizienten",
+        "dimensions": "Abmessungen (L × B × H)",
+        "weight": "Gewicht",
+        "loads": "Statische Last vorne / hinten"
       }
     }
   },
@@ -163,7 +227,10 @@
   "dashboard": {
     "accepted": "{{count}} heute angenommen",
     "activeAlertDescription": "Prüfe die betroffene Anlage und ihre neuesten Messwerte.",
-    "alertState": { "open": "Offen", "resolved": "Gelöst" },
+    "alertState": {
+      "open": "Offen",
+      "resolved": "Gelöst"
+    },
     "alertsDescription": "Letzte Änderungen des Warnungsstatus.",
     "alertsTitle": "Letzte Warnungen",
     "battery": "Batterie",
@@ -564,86 +631,6 @@
       "audit_read": "Audit-Protokoll lesen"
     }
   },
-  "features": {
-    "authConnectorPresets": {
-      "facebook": {
-        "description": "Verwende eine Facebook-Login-App mit dem allgemeinen OAuth2-Connector."
-      },
-      "github": {
-        "description": "Verwende eine GitHub-OAuth-App mit dem allgemeinen OAuth2-Connector."
-      },
-      "google": {
-        "description": "Verwende Google OpenID Connect Discovery mit den Standard-Identity-Scopes."
-      },
-      "x": {
-        "description": "Verwende einen vertraulichen X-Client mit OAuth2 Authorization Code und PKCE."
-      }
-    },
-    "equipmentCatalog": {
-      "title": "Gerätevorlagen",
-      "description": "Fülle bearbeitbare Gerätedaten optional aus dem gebündelten Offline-Katalog vor oder erfasse alle Werte manuell.",
-      "inverterTitle": "Wechselrichterkatalog",
-      "moduleTitle": "Solarmodulkatalog",
-      "search": "Hersteller oder Modell suchen",
-      "inverterPlaceholder": "Zum Beispiel SMA, Fronius oder Huawei",
-      "modulePlaceholder": "Zum Beispiel Hersteller oder 450-W-Modell",
-      "moduleOption": "{{manufacturer}} {{model}} · {{watts}} W",
-      "loading": "Katalog wird geladen…",
-      "error": "Der Gerätekatalog konnte nicht geladen werden. Die manuelle Eingabe bleibt verfügbar.",
-      "empty": "Kein passender Katalogeintrag. Fahre mit der manuellen Eingabe fort.",
-      "results": "Passende Vorlagen",
-      "choose": "Vorlage auswählen",
-      "manualInverter": "Wechselrichter manuell erfassen",
-      "manualModule": "Solarmodul manuell erfassen",
-      "manufacturer": "Hersteller",
-      "model": "Modell",
-      "inverterData": "Bestätigte technische Wechselrichterdaten",
-      "moduleData": "Bestätigte technische Modul- und Stringdaten",
-      "moduleCount": "Module im String",
-      "modulePower": "Peakleistung je Modul (W)",
-      "totalPower": "Berechnete String-Peakleistung: {{watts}} W",
-      "no": "Nein",
-      "confirmTitle": "Geräte-Snapshot bestätigen",
-      "inverterSnapshot": "Bearbeitbarer Wechselrichter-Snapshot (JSON)",
-      "moduleSnapshot": "Bearbeitbarer Modul-Snapshot (JSON)",
-      "snapshotGuidance": "Jedes vorausgefüllte Feld bleibt bearbeitbar. Gespeichert wird dieser bestätigte Snapshot; spätere Katalogversionen ändern ihn nicht.",
-      "provenanceLegend": "Herkunft: manuell, kopiert, angepasst oder ältere Vorlagenrevision.",
-      "save": "Bestätigte Geräte speichern",
-      "saved": "Gerätekonfiguration wurde gespeichert.",
-      "validationError": "Die bestätigten Werte sind ungültig. Prüfe die Snapshot-Werte.",
-      "customInverter": "Manueller Wechselrichter",
-      "customManufacturer": "Manueller Hersteller",
-      "customModel": "Manuelles Modell",
-      "defaultString": "PV-String 1",
-      "fields": {
-        "revision": "Katalogrevision",
-        "topology": "Topologie",
-        "mppts": "MPPT-Tracker",
-        "strings": "Stringeingänge",
-        "mpptAllocation": "Strings je MPPT",
-        "dcVoltage": "MPPT-Spannungsbereich",
-        "dcCurrent": "Maximaler DC-Strom",
-        "acPower": "AC-Nennleistung",
-        "phases": "AC-Phasen",
-        "communications": "Kommunikation",
-        "temperature": "Betriebstemperatur",
-        "source": "Quelle",
-        "cellTechnology": "Zelltechnologie",
-        "pmax": "Pmax je Modul",
-        "stringTotal": "String-Peakleistung",
-        "voc": "Leerlaufspannung (Voc)",
-        "vmp": "MPP-Spannung (Vmp)",
-        "isc": "Kurzschlussstrom (Isc)",
-        "imp": "MPP-Strom (Imp)",
-        "efficiency": "Wirkungsgrad",
-        "bifaciality": "Bifazialität",
-        "temperatureCoefficients": "Isc- / Voc- / Pmax-Temperaturkoeffizienten",
-        "dimensions": "Abmessungen (L × B × H)",
-        "weight": "Gewicht",
-        "loads": "Statische Last vorne / hinten"
-      }
-    }
-  },
   "onboarding": {
     "awaitingVerification": "Sende einen Testmesswert, um die Erfassung zu prüfen.",
     "back": "Zurück",
@@ -1038,5 +1025,119 @@
       "dataQuality": "Datenqualität"
     },
     "tabsLabel": "Anlagenbereiche"
+  },
+  "setup": {
+    "title": "Anlage einrichten",
+    "steps": {
+      "label": "Schritte der Einrichtung",
+      "system": "Anlage",
+      "dataSource": "Datenquelle",
+      "verify": "Erste Daten"
+    },
+    "descriptions": {
+      "system": "Nur der Name ist nötig. Alles andere lässt sich jetzt oder später ergänzen.",
+      "dataSource": "Wähle den Logger, der die Messwerte dieser Anlage sendet. PVLog zeigt danach alles, was er braucht.",
+      "verify": "PVLog wartet auf den ersten Messwert deiner Datenquelle."
+    },
+    "system": {
+      "name": "Name der Anlage",
+      "nameRequired": "Gib einen Namen für die Anlage ein.",
+      "capacity": "Installierte Leistung (kWp)",
+      "capacityHint": "Optional. Gilt, bis Wechselrichter und Strings erfasst sind; danach ergibt sich die Leistung aus ihnen.",
+      "capacityInvalid": "Gib die Leistung als positive Zahl ein, zum Beispiel 9,9.",
+      "moreOptions": "Weitere Optionen",
+      "timezone": "Zeitzone",
+      "timezonePlaceholder": "Wird aus dem Standort abgeleitet",
+      "timezoneHint": "Leer lassen, um die Zeitzone aus dem Standort zu übernehmen, oder aus diesem Browser, wenn kein Standort gewählt ist.",
+      "statusInterval": "Sekunden zwischen Messwerten",
+      "statusIntervalHint": "Wie oft dein Logger meldet. Nach drei ausgebliebenen Intervallen gilt eine Anlage als veraltet. Standard: 300.",
+      "statusIntervalInvalid": "Gib eine ganze Zahl von Sekunden zwischen 30 und 86400 ein.",
+      "commissioningDate": "Inbetriebnahme",
+      "description": "Beschreibung",
+      "creating": "Anlage wird angelegt…",
+      "create": "Anlage anlegen und weiter",
+      "errors": {
+        "forbidden": "Du darfst in diesem Konto keine Anlagen anlegen.",
+        "invalid": "Die Anlage konnte nicht angelegt werden. Prüfe deine Eingaben.",
+        "unavailable": "Die Anlage konnte gerade nicht angelegt werden. Versuche es gleich noch einmal.",
+        "fields": {
+          "name_required": "Gib einen Namen für die Anlage ein.",
+          "timezone_required": "Wähle unter „Weitere Optionen“ eine Zeitzone.",
+          "timezone_unknown": "Die Zeitzone ist keine bekannte IANA-Zeitzone wie Europe/Berlin.",
+          "coordinates_incomplete": "Der Standort ist unvollständig. Wähle ihn erneut aus den Vorschlägen.",
+          "latitude_out_of_range": "Der Breitengrad des Standorts ist ungültig. Wähle ihn erneut aus den Vorschlägen.",
+          "longitude_out_of_range": "Der Längengrad des Standorts ist ungültig. Wähle ihn erneut aus den Vorschlägen.",
+          "country_code_invalid": "Das Land des Standorts konnte nicht gelesen werden. Wähle ihn erneut aus den Vorschlägen.",
+          "status_interval_out_of_range": "Gib eine ganze Zahl von Sekunden zwischen 30 und 86400 ein.",
+          "declared_capacity_not_positive": "Gib die Leistung als positive Zahl ein.",
+          "commissioning_date_invalid": "Das Inbetriebnahmedatum ist kein gültiges Datum."
+        }
+      }
+    },
+    "dataSource": {
+      "profileLegend": "Welcher Logger sendet die Daten?",
+      "connect": "Datenquelle anlegen",
+      "connecting": "Datenquelle wird angelegt…",
+      "later": "Später verbinden",
+      "continue": "Ich habe die Konfiguration kopiert",
+      "noKeyTitle": "Datenquelle angelegt",
+      "noKeyDescription": "Diese Art von Datenquelle braucht keinen API-Schlüssel. Einen Import startest du in den Einstellungen der Anlage."
+    },
+    "verify": {
+      "waitingTitle": "Warte auf den ersten Messwert…",
+      "waitingDescription": "Diese Seite aktualisiert sich von selbst, sobald dein Logger liefert.",
+      "sendTest": "Test-Messwert senden",
+      "finishWithoutData": "Ohne Daten abschließen",
+      "testTitle": "Test-Messwert empfangen",
+      "testDescription": "PVLog kann Messwerte für diese Datenquelle speichern. Ein Test-Messwert zählt nicht als Daten; die Einrichtung wartet weiter auf deinen Logger.",
+      "testError": "Der Test-Messwert konnte nicht gesendet werden. Versuche es gleich noch einmal.",
+      "loadError": "Die Prüfung auf den ersten Messwert ist fehlgeschlagen. Sie wird automatisch wiederholt.",
+      "receivedTitle": "Deine Anlage empfängt Daten",
+      "receivedDescription": "Das ist der neueste Messwert, den PVLog gespeichert hat.",
+      "openSystem": "Anlage öffnen",
+      "measuredAt": "Gemessen am",
+      "source": "Datenquelle",
+      "sourceUnknown": "Keiner Datenquelle zugeordnet",
+      "generationPower": "Erzeugungsleistung",
+      "generationEnergy": "Erzeugte Energie",
+      "consumptionPower": "Verbrauchsleistung",
+      "consumptionEnergy": "Verbrauchte Energie",
+      "docsLink": "Dokumentation zu Uploadern und Fehlersuche"
+    }
+  },
+  "dataSources": {
+    "name": "Name der Datenquelle",
+    "configuration": {
+      "onceTitle": "Kopiere diese Konfiguration jetzt",
+      "onceDescription": "Der API-Schlüssel wird nur dieses eine Mal angezeigt. PVLog speichert nur seinen Hash. Geht er verloren, erzeuge in den Einstellungen der Anlage einen neuen.",
+      "serverUrl": "Server-URL",
+      "systemId": "Anlagen-ID",
+      "apiKey": "API-Schlüssel",
+      "copy": "{{label}} kopieren",
+      "copied": "{{label}} kopiert"
+    },
+    "profiles": {
+      "smalog": {
+        "name": "smalog",
+        "description": "Der Logger für SMA-Wechselrichter. Sendet alle Werte von Wechselrichtern, Trackern und Batterie sowie die gespeicherte Historie."
+      },
+      "sbfspot": {
+        "name": "SBFspot",
+        "description": "Eine bestehende SBFspot-Datenbank, hochgeladen vom Dienst sbfspot-push."
+      },
+      "generic": {
+        "name": "Anderer Uploader",
+        "description": "Ein Skript, Home Assistant oder jedes Werkzeug, das HTTP-Anfragen senden kann."
+      },
+      "import": {
+        "name": "Import",
+        "description": "Für die Übernahme von Historie aus Dateien. Braucht keinen API-Schlüssel."
+      }
+    },
+    "errors": {
+      "loadTitle": "Datenquellen konnten nicht geladen werden",
+      "loadDescription": "Lade die Seite neu oder versuche es gleich noch einmal.",
+      "createDescription": "Die Datenquelle konnte nicht angelegt werden. Vielleicht wird der Name für diese Anlage schon verwendet."
+    }
   }
 }

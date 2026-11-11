@@ -8,41 +8,6 @@ import {
 import { sessionJsonRequest } from "@/shared/api/sessionRequest";
 import { z } from "zod";
 
-const geocodingResultSchema = z.object({
-  displayName: z.string().min(1),
-  latitude: z.number().min(-90).max(90),
-  longitude: z.number().min(-180).max(180),
-  attribution: z.string().min(1),
-});
-
-export type GeocodingResult = z.infer<typeof geocodingResultSchema>;
-
-/** Searches address suggestions through the authenticated server-side provider. @param query - Partial free-form address. @param language - Preferred result language. @param limit - Maximum suggestions. @param signal - Optional cancellation signal. @returns Validated OpenStreetMap matches. */
-export async function searchAddresses(
-  query: string,
-  language: string,
-  limit = 5,
-  signal?: AbortSignal,
-): Promise<GeocodingResult[]> {
-  const parameters = new URLSearchParams({
-    q: query,
-    language,
-    limit: String(limit),
-  });
-  const response = await fetch(
-    `/api/v1/geocoding/search?${parameters.toString()}`,
-    {
-      credentials: "same-origin",
-      ...(signal ? { signal } : {}),
-    },
-  );
-  if (!response.ok)
-    throw new Error(
-      `system_management_request_failed:${String(response.status)}`,
-    );
-  return z.array(geocodingResultSchema).parse(await response.json());
-}
-
 /** Loads mutable system metadata and its effective inverter/string tree. @param systemId - System to load. @returns Complete management card model. */
 export async function fetchManagedSystem(
   systemId: string,

@@ -89,7 +89,7 @@ function renderPage() {
         new QueryClient({ defaultOptions: { queries: { retry: false } } })
       }
     >
-      <MemoryRouter initialEntries={["/onboarding"]}>
+      <MemoryRouter initialEntries={["/systems/manage"]}>
         <OnboardingPage />
       </MemoryRouter>
     </QueryClientProvider>,

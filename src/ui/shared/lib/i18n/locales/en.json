@@ -22,6 +22,70 @@
       "x": {
         "description": "Use an X confidential client with OAuth2 Authorization Code and PKCE."
       }
+    },
+    "equipmentCatalog": {
+      "title": "Equipment templates",
+      "description": "Optionally prefill editable equipment values from the bundled offline catalog, or enter every value manually.",
+      "inverterTitle": "Inverter catalog",
+      "moduleTitle": "Solar-module catalog",
+      "search": "Search manufacturer or model",
+      "inverterPlaceholder": "For example SMA, Fronius or Huawei",
+      "modulePlaceholder": "For example manufacturer or 450 W model",
+      "moduleOption": "{{manufacturer}} {{model}} · {{watts}} W",
+      "loading": "Loading catalog…",
+      "error": "The equipment catalog could not be loaded. Manual entry remains available.",
+      "empty": "No matching catalog entry. Continue with manual entry.",
+      "results": "Matching templates",
+      "choose": "Choose a template",
+      "manualInverter": "Enter inverter manually",
+      "manualModule": "Enter solar module manually",
+      "manufacturer": "Manufacturer",
+      "model": "Model",
+      "inverterData": "Confirmed inverter technical data",
+      "moduleData": "Confirmed module and string technical data",
+      "moduleCount": "Modules in string",
+      "modulePower": "Peak power per module (W)",
+      "totalPower": "Calculated string peak power: {{watts}} W",
+      "no": "No",
+      "confirmTitle": "Confirm equipment snapshot",
+      "inverterSnapshot": "Editable inverter specification snapshot (JSON)",
+      "moduleSnapshot": "Editable module specification snapshot (JSON)",
+      "snapshotGuidance": "Every prefilled field remains editable. Saving stores this confirmed snapshot; later catalog releases do not change it.",
+      "provenanceLegend": "Provenance: manual, copied, customized, or an older template revision.",
+      "save": "Save confirmed equipment",
+      "saved": "Equipment configuration saved.",
+      "validationError": "The confirmed values are invalid. Review the marked snapshot values.",
+      "customInverter": "Manual inverter",
+      "customManufacturer": "Manual manufacturer",
+      "customModel": "Manual model",
+      "defaultString": "PV string 1",
+      "fields": {
+        "revision": "Catalog revision",
+        "topology": "Topology",
+        "mppts": "MPPT trackers",
+        "strings": "String inputs",
+        "mpptAllocation": "Strings per MPPT",
+        "dcVoltage": "MPPT voltage range",
+        "dcCurrent": "Maximum DC current",
+        "acPower": "Rated AC power",
+        "phases": "AC phases",
+        "communications": "Communications",
+        "temperature": "Operating temperature",
+        "source": "Source",
+        "cellTechnology": "Cell technology",
+        "pmax": "Pmax per module",
+        "stringTotal": "String peak power",
+        "voc": "Open-circuit voltage (Voc)",
+        "vmp": "Maximum-power voltage (Vmp)",
+        "isc": "Short-circuit current (Isc)",
+        "imp": "Maximum-power current (Imp)",
+        "efficiency": "Efficiency",
+        "bifaciality": "Bifaciality",
+        "temperatureCoefficients": "Isc / Voc / Pmax temperature coefficients",
+        "dimensions": "Dimensions (L × W × H)",
+        "weight": "Weight",
+        "loads": "Front / rear static load"
+      }
     }
   },
   "home": {
@@ -163,7 +227,10 @@
   "dashboard": {
     "accepted": "{{count}} accepted today",
     "activeAlertDescription": "Review the affected system and its latest telemetry.",
-    "alertState": { "open": "Open", "resolved": "Resolved" },
+    "alertState": {
+      "open": "Open",
+      "resolved": "Resolved"
+    },
     "alertsDescription": "Recent alert state changes.",
     "alertsTitle": "Recent alerts",
     "battery": "Battery",
@@ -564,86 +631,6 @@
       "audit_read": "Read audit trail"
     }
   },
-  "features": {
-    "authConnectorPresets": {
-      "facebook": {
-        "description": "Use a Facebook Login app with the generic OAuth2 connector."
-      },
-      "github": {
-        "description": "Use a GitHub OAuth app with the generic OAuth2 connector."
-      },
-      "google": {
-        "description": "Use Google OpenID Connect discovery with standard identity scopes."
-      },
-      "x": {
-        "description": "Use an X confidential client with OAuth2 Authorization Code and PKCE."
-      }
-    },
-    "equipmentCatalog": {
-      "title": "Equipment templates",
-      "description": "Optionally prefill editable equipment values from the bundled offline catalog, or enter every value manually.",
-      "inverterTitle": "Inverter catalog",
-      "moduleTitle": "Solar-module catalog",
-      "search": "Search manufacturer or model",
-      "inverterPlaceholder": "For example SMA, Fronius or Huawei",
-      "modulePlaceholder": "For example manufacturer or 450 W model",
-      "moduleOption": "{{manufacturer}} {{model}} · {{watts}} W",
-      "loading": "Loading catalog…",
-      "error": "The equipment catalog could not be loaded. Manual entry remains available.",
-      "empty": "No matching catalog entry. Continue with manual entry.",
-      "results": "Matching templates",
-      "choose": "Choose a template",
-      "manualInverter": "Enter inverter manually",
-      "manualModule": "Enter solar module manually",
-      "manufacturer": "Manufacturer",
-      "model": "Model",
-      "inverterData": "Confirmed inverter technical data",
-      "moduleData": "Confirmed module and string technical data",
-      "moduleCount": "Modules in string",
-      "modulePower": "Peak power per module (W)",
-      "totalPower": "Calculated string peak power: {{watts}} W",
-      "no": "No",
-      "confirmTitle": "Confirm equipment snapshot",
-      "inverterSnapshot": "Editable inverter specification snapshot (JSON)",
-      "moduleSnapshot": "Editable module specification snapshot (JSON)",
-      "snapshotGuidance": "Every prefilled field remains editable. Saving stores this confirmed snapshot; later catalog releases do not change it.",
-      "provenanceLegend": "Provenance: manual, copied, customized, or an older template revision.",
-      "save": "Save confirmed equipment",
-      "saved": "Equipment configuration saved.",
-      "validationError": "The confirmed values are invalid. Review the marked snapshot values.",
-      "customInverter": "Manual inverter",
-      "customManufacturer": "Manual manufacturer",
-      "customModel": "Manual model",
-      "defaultString": "PV string 1",
-      "fields": {
-        "revision": "Catalog revision",
-        "topology": "Topology",
-        "mppts": "MPPT trackers",
-        "strings": "String inputs",
-        "mpptAllocation": "Strings per MPPT",
-        "dcVoltage": "MPPT voltage range",
-        "dcCurrent": "Maximum DC current",
-        "acPower": "Rated AC power",
-        "phases": "AC phases",
-        "communications": "Communications",
-        "temperature": "Operating temperature",
-        "source": "Source",
-        "cellTechnology": "Cell technology",
-        "pmax": "Pmax per module",
-        "stringTotal": "String peak power",
-        "voc": "Open-circuit voltage (Voc)",
-        "vmp": "Maximum-power voltage (Vmp)",
-        "isc": "Short-circuit current (Isc)",
-        "imp": "Maximum-power current (Imp)",
-        "efficiency": "Efficiency",
-        "bifaciality": "Bifaciality",
-        "temperatureCoefficients": "Isc / Voc / Pmax temperature coefficients",
-        "dimensions": "Dimensions (L × W × H)",
-        "weight": "Weight",
-        "loads": "Front / rear static load"
-      }
-    }
-  },
   "onboarding": {
     "awaitingVerification": "Send a test observation to verify ingestion.",
     "back": "Back",
@@ -1038,5 +1025,119 @@
       "dataQuality": "Data quality"
     },
     "tabsLabel": "System sections"
+  },
+  "setup": {
+    "title": "Set up a system",
+    "steps": {
+      "label": "Setup steps",
+      "system": "System",
+      "dataSource": "Data source",
+      "verify": "First data"
+    },
+    "descriptions": {
+      "system": "Only the name is required. Everything else can be added now or later.",
+      "dataSource": "Choose the logger that will send this system's readings. PVLog then shows everything it needs.",
+      "verify": "PVLog waits for the first reading from your data source."
+    },
+    "system": {
+      "name": "System name",
+      "nameRequired": "Enter a name for the system.",
+      "capacity": "Installed capacity (kWp)",
+      "capacityHint": "Optional. Used until inverters and strings are entered, which then define the capacity.",
+      "capacityInvalid": "Enter the capacity as a positive number, for example 9.9.",
+      "moreOptions": "More options",
+      "timezone": "Timezone",
+      "timezonePlaceholder": "Derived from the location",
+      "timezoneHint": "Leave empty to take the timezone from the location, or from this browser if no location is chosen.",
+      "statusInterval": "Seconds between readings",
+      "statusIntervalHint": "How often your logger reports. PVLog treats a system as stale after three missed intervals. Default: 300.",
+      "statusIntervalInvalid": "Enter a whole number of seconds between 30 and 86400.",
+      "commissioningDate": "Commissioning date",
+      "description": "Description",
+      "creating": "Creating system…",
+      "create": "Create system and continue",
+      "errors": {
+        "forbidden": "You are not allowed to create systems in this account.",
+        "invalid": "The system could not be created. Check the values you entered.",
+        "unavailable": "The system could not be created right now. Try again in a moment.",
+        "fields": {
+          "name_required": "Enter a name for the system.",
+          "timezone_required": "Choose a timezone under “More options”.",
+          "timezone_unknown": "The timezone is not a known IANA timezone such as Europe/Berlin.",
+          "coordinates_incomplete": "The location is incomplete. Choose it again from the suggestions.",
+          "latitude_out_of_range": "The location's latitude is out of range. Choose it again from the suggestions.",
+          "longitude_out_of_range": "The location's longitude is out of range. Choose it again from the suggestions.",
+          "country_code_invalid": "The location's country could not be read. Choose it again from the suggestions.",
+          "status_interval_out_of_range": "Enter a whole number of seconds between 30 and 86400.",
+          "declared_capacity_not_positive": "Enter the capacity as a positive number.",
+          "commissioning_date_invalid": "The commissioning date is not a valid date."
+        }
+      }
+    },
+    "dataSource": {
+      "profileLegend": "Which logger sends the data?",
+      "connect": "Create data source",
+      "connecting": "Creating data source…",
+      "later": "Connect later",
+      "continue": "I have copied the configuration",
+      "noKeyTitle": "Data source created",
+      "noKeyDescription": "This kind of data source needs no API key. You can start an import from the system's settings."
+    },
+    "verify": {
+      "waitingTitle": "Waiting for the first reading…",
+      "waitingDescription": "This page updates by itself as soon as your logger delivers.",
+      "sendTest": "Send test reading",
+      "finishWithoutData": "Finish without data",
+      "testTitle": "Test reading received",
+      "testDescription": "PVLog can store readings for this data source. A test reading is not counted as data; the setup keeps waiting for your logger.",
+      "testError": "The test reading could not be sent. Try again in a moment.",
+      "loadError": "The check for the first reading failed. It is retried automatically.",
+      "receivedTitle": "Your system is receiving data",
+      "receivedDescription": "This is the newest reading PVLog stored.",
+      "openSystem": "Open system",
+      "measuredAt": "Measured at",
+      "source": "Data source",
+      "sourceUnknown": "Not attributed to a data source",
+      "generationPower": "Generation power",
+      "generationEnergy": "Generation energy",
+      "consumptionPower": "Consumption power",
+      "consumptionEnergy": "Consumption energy",
+      "docsLink": "Uploader and troubleshooting documentation"
+    }
+  },
+  "dataSources": {
+    "name": "Name of the data source",
+    "configuration": {
+      "onceTitle": "Copy this configuration now",
+      "onceDescription": "The API key is shown only this once. PVLog stores only its hash. If you lose it, regenerate the key in the system's settings.",
+      "serverUrl": "Server URL",
+      "systemId": "System ID",
+      "apiKey": "API key",
+      "copy": "Copy {{label}}",
+      "copied": "{{label}} copied"
+    },
+    "profiles": {
+      "smalog": {
+        "name": "smalog",
+        "description": "The SMA inverter logger. Sends every inverter, tracker and battery value and its stored history."
+      },
+      "sbfspot": {
+        "name": "SBFspot",
+        "description": "An existing SBFspot database, uploaded by the sbfspot-push service."
+      },
+      "generic": {
+        "name": "Other uploader",
+        "description": "A script, Home Assistant or any tool that can send HTTP requests."
+      },
+      "import": {
+        "name": "Import",
+        "description": "For bringing in history from files. Needs no API key."
+      }
+    },
+    "errors": {
+      "loadTitle": "Data sources could not be loaded",
+      "loadDescription": "Reload the page, or try again in a moment.",
+      "createDescription": "The data source could not be created. The name may already be in use for this system."
+    }
   }
 }

@@ -1,6 +1,6 @@
 /* eslint-disable max-lines, max-lines-per-function -- the handoff specifies a single-page wizard whose two numbered sections share one atomic draft */
 import { InverterDraftEditor } from "@/features/systemManagement/components/InverterDraftEditor";
-import { LocationAutocomplete } from "@/features/systemManagement/components/LocationAutocomplete";
+import { LocationAutocomplete } from "@/entities/system";
 import { SystemWizardSectionHeading } from "@/features/systemManagement/components/SystemWizardSectionHeading";
 import type {
   ManagedSystem,
