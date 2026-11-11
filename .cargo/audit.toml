@@ -1,9 +1,9 @@
 [advisories]
 ignore = [
     "RUSTSEC-2023-0071", # OIDC only performs public-key verification; no fixed rsa release exists.
-    "RUSTSEC-2024-0436", # Transitive paste dependency of utoipa-axum.
+    "RUSTSEC-2026-0459", # sqlx-sqlite 0.9.0 caps libsqlite3-sys <0.38; remove once sqlx allows >=0.39.
 ]
 
-# cargo-deny performs the yanked-crate check with a narrow, documented spin exception.
+# cargo-deny performs the yanked-crate check.
 [yanked]
 enabled = false
