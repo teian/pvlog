@@ -37,6 +37,10 @@ const SetupPage = lazy(async () => {
   const page = await import("@/pages/SetupPage");
   return { default: page.SetupPage };
 });
+const SystemSettingsPage = lazy(async () => {
+  const page = await import("@/pages/SystemSettingsPage");
+  return { default: page.SystemSettingsPage };
+});
 const SystemChartsPage = lazy(async () => {
   const page = await import("@/pages/SystemChartsPage");
   return { default: page.SystemChartsPage };
@@ -173,6 +177,7 @@ export function AppRoutes() {
             <Route element={<SystemChartsPage />} index />
             <Route element={<SystemForecastPage />} path="forecast" />
             <Route element={<DataQualityPage />} path="data-quality" />
+            <Route element={<SystemSettingsPage />} path="settings/:section?" />
           </Route>
           <Route
             element={

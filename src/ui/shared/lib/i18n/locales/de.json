@@ -1022,7 +1022,8 @@
   "system": {
     "tabs": {
       "charts": "Diagramme",
-      "dataQuality": "Datenqualität"
+      "dataQuality": "Datenqualität",
+      "settings": "Einstellungen"
     },
     "tabsLabel": "Anlagenbereiche"
   },
@@ -1114,7 +1115,10 @@
       "systemId": "Anlagen-ID",
       "apiKey": "API-Schlüssel",
       "copy": "{{label}} kopieren",
-      "copied": "{{label}} kopiert"
+      "copied": "{{label}} kopiert",
+      "title": "Konfiguration für deinen Logger",
+      "dialogDescription": "Alles, was der Logger braucht, um Messwerte an diese Anlage zu senden.",
+      "close": "Schließen"
     },
     "profiles": {
       "smalog": {
@@ -1137,7 +1141,75 @@
     "errors": {
       "loadTitle": "Datenquellen konnten nicht geladen werden",
       "loadDescription": "Lade die Seite neu oder versuche es gleich noch einmal.",
-      "createDescription": "Die Datenquelle konnte nicht angelegt werden. Vielleicht wird der Name für diese Anlage schon verwendet."
+      "createDescription": "Die Datenquelle konnte nicht angelegt werden. Vielleicht wird der Name für diese Anlage schon verwendet.",
+      "actionDescription": "Die Aktion konnte nicht abgeschlossen werden. Versuche es gleich noch einmal."
+    },
+    "description": "Jede Datenquelle hat ihren eigenen API-Schlüssel, der nur für diese Anlage gilt. Ihr Zustand zeigt, ob noch Messwerte ankommen.",
+    "profile": "Logger",
+    "add": "Datenquelle hinzufügen",
+    "rename": "Umbenennen",
+    "saveName": "Speichern",
+    "cancel": "Abbrechen",
+    "noReading": "Noch kein Messwert",
+    "troubleshooting": "Fehlersuche",
+    "testSent": "Test-Messwert gespeichert. Er zählt nicht als Daten.",
+    "states": {
+      "never_connected": "Nie verbunden",
+      "receiving": "Empfängt",
+      "stale": "Keine aktuellen Daten",
+      "disconnected": "Schlüssel widerrufen"
+    },
+    "columns": {
+      "name": "Name",
+      "profile": "Logger",
+      "state": "Zustand",
+      "lastReading": "Letzter Messwert",
+      "actions": "Aktionen"
+    },
+    "empty": {
+      "title": "Noch keine Datenquelle",
+      "description": "Füge eine Datenquelle hinzu, um Server-URL, Anlagen-ID und API-Schlüssel für deinen Logger zu erhalten."
+    },
+    "regenerate": {
+      "action": "Schlüssel neu erzeugen",
+      "title": "API-Schlüssel neu erzeugen?",
+      "description": "Der aktuelle Schlüssel von „{{name}}“ funktioniert sofort nicht mehr. Dein Logger kann erst wieder hochladen, wenn du ihm den neuen Schlüssel gibst.",
+      "confirm": "Schlüssel neu erzeugen"
+    },
+    "delete": {
+      "action": "Löschen",
+      "title": "Diese Datenquelle löschen?",
+      "description": "Der Schlüssel von „{{name}}“ funktioniert sofort nicht mehr. Bereits gelieferte Messwerte bleiben erhalten.",
+      "confirm": "Datenquelle löschen"
+    }
+  },
+  "systemSettings": {
+    "sectionsLabel": "Bereiche der Einstellungen",
+    "readOnly": "Du kannst diese Einstellungen ansehen, aber nicht ändern.",
+    "loadErrorTitle": "Die Anlage konnte nicht geladen werden",
+    "loadErrorDescription": "Lade die Seite neu oder versuche es gleich noch einmal.",
+    "sections": {
+      "general": {
+        "title": "Allgemein",
+        "description": "Name, Standort, Zeitzone und wie oft die Anlage meldet."
+      },
+      "data-sources": {
+        "title": "Datenquellen",
+        "description": "Die Logger und Importe, die die Messwerte dieser Anlage liefern."
+      }
+    },
+    "general": {
+      "timezoneRequired": "Gib eine IANA-Zeitzone wie Europe/Berlin ein.",
+      "capacityOverridden": "Die Strings dieser Anlage ergeben zusammen {{capacity}} kWp; dieser Wert gilt statt der Angabe hier.",
+      "save": "Änderungen speichern",
+      "saving": "Wird gespeichert…",
+      "saved": "Änderungen gespeichert.",
+      "errors": {
+        "forbidden": "Du darfst diese Anlage nicht ändern.",
+        "conflict": "Die Anlage wurde inzwischen an anderer Stelle geändert. Lade die Seite neu und wiederhole deine Änderung.",
+        "invalid": "Die Änderungen konnten nicht gespeichert werden. Prüfe deine Eingaben.",
+        "unavailable": "Die Änderungen konnten gerade nicht gespeichert werden. Versuche es gleich noch einmal."
+      }
     }
   }
 }

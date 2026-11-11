@@ -1022,7 +1022,8 @@
   "system": {
     "tabs": {
       "charts": "Charts",
-      "dataQuality": "Data quality"
+      "dataQuality": "Data quality",
+      "settings": "Settings"
     },
     "tabsLabel": "System sections"
   },
@@ -1114,7 +1115,10 @@
       "systemId": "System ID",
       "apiKey": "API key",
       "copy": "Copy {{label}}",
-      "copied": "{{label}} copied"
+      "copied": "{{label}} copied",
+      "title": "Configuration for your logger",
+      "dialogDescription": "Everything the logger needs to send readings to this system.",
+      "close": "Close"
     },
     "profiles": {
       "smalog": {
@@ -1137,7 +1141,75 @@
     "errors": {
       "loadTitle": "Data sources could not be loaded",
       "loadDescription": "Reload the page, or try again in a moment.",
-      "createDescription": "The data source could not be created. The name may already be in use for this system."
+      "createDescription": "The data source could not be created. The name may already be in use for this system.",
+      "actionDescription": "The action could not be completed. Try again in a moment."
+    },
+    "description": "Each data source has its own API key, valid for this system only. Its state shows whether readings still arrive.",
+    "profile": "Logger",
+    "add": "Add data source",
+    "rename": "Rename",
+    "saveName": "Save",
+    "cancel": "Cancel",
+    "noReading": "No reading yet",
+    "troubleshooting": "Troubleshooting",
+    "testSent": "Test reading stored. It is not counted as data.",
+    "states": {
+      "never_connected": "Never connected",
+      "receiving": "Receiving",
+      "stale": "No recent data",
+      "disconnected": "Key revoked"
+    },
+    "columns": {
+      "name": "Name",
+      "profile": "Logger",
+      "state": "State",
+      "lastReading": "Last reading",
+      "actions": "Actions"
+    },
+    "empty": {
+      "title": "No data source yet",
+      "description": "Add a data source to get the server URL, system ID and API key your logger needs."
+    },
+    "regenerate": {
+      "action": "Regenerate key",
+      "title": "Regenerate the API key?",
+      "description": "The current key of “{{name}}” stops working immediately. Your logger cannot upload until you give it the new key.",
+      "confirm": "Regenerate key"
+    },
+    "delete": {
+      "action": "Delete",
+      "title": "Delete this data source?",
+      "description": "The key of “{{name}}” stops working immediately. Readings it already delivered are kept.",
+      "confirm": "Delete data source"
+    }
+  },
+  "systemSettings": {
+    "sectionsLabel": "Settings sections",
+    "readOnly": "You can view these settings but not change them.",
+    "loadErrorTitle": "The system could not be loaded",
+    "loadErrorDescription": "Reload the page, or try again in a moment.",
+    "sections": {
+      "general": {
+        "title": "General",
+        "description": "Name, location, timezone and how often the system reports."
+      },
+      "data-sources": {
+        "title": "Data sources",
+        "description": "The loggers and imports that deliver this system's readings."
+      }
+    },
+    "general": {
+      "timezoneRequired": "Enter an IANA timezone such as Europe/Berlin.",
+      "capacityOverridden": "The strings of this system add up to {{capacity}} kWp, which is used instead of this value.",
+      "save": "Save changes",
+      "saving": "Saving…",
+      "saved": "Changes saved.",
+      "errors": {
+        "forbidden": "You are not allowed to change this system.",
+        "conflict": "The system was changed elsewhere in the meantime. Reload the page and repeat your change.",
+        "invalid": "The changes could not be saved. Check the values you entered.",
+        "unavailable": "The changes could not be saved right now. Try again in a moment."
+      }
     }
   }
 }

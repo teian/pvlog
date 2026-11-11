@@ -34,6 +34,9 @@ export function SystemLayoutPage() {
             <NavLink className={tabClass} to="data-quality">
               {t("system.tabs.dataQuality")}
             </NavLink>
+            <NavLink className={tabClass} to="settings">
+              {t("system.tabs.settings")}
+            </NavLink>
           </nav>
         </header>
         <Outlet />
