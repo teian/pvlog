@@ -4,9 +4,7 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use argon2::{
     Algorithm, Argon2, Params, Version,
-    password_hash::{
-        PasswordHash as PhcPasswordHash, PasswordHasher as _, PasswordVerifier as _, SaltString,
-    },
+    password_hash::{PasswordHasher as _, PasswordVerifier as _, phc::PasswordHash as PhcPasswordHash},
 };
 use async_trait::async_trait;
 use pvlog_domain::{CredentialDigest, PasswordHash, PasswordRecoveryId, UserId, UserStatus};
@@ -64,11 +62,9 @@ impl Argon2CredentialService {
 #[async_trait]
 impl CredentialService for Argon2CredentialService {
     async fn hash_password(&self, password: &SecretString) -> Result<PasswordHash, PortError> {
-        let salt = SaltString::encode_b64(Uuid::new_v4().as_bytes())
-            .map_err(|_| PortError::Rejected("password_salt_generation_failed".to_owned()))?;
         let encoded = self
             .argon2()?
-            .hash_password(password.expose_secret().as_bytes(), &salt)
+            .hash_password(password.expose_secret().as_bytes())
             .map_err(|_| PortError::Rejected("password_hashing_failed".to_owned()))?
             .to_string();
         PasswordHash::new(encoded)
