@@ -73,6 +73,61 @@ async fn system_mutations_require_actor_and_etag_preconditions() -> Result<(), B
     Ok(())
 }
 
+async fn post_system(
+    app: axum::Router,
+    body: &'static str,
+) -> Result<(StatusCode, serde_json::Value), Box<dyn Error>> {
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri("/api/v1/systems")
+                .header("content-type", "application/json")
+                .body(Body::from(body))?,
+        )
+        .await?;
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), 64 * 1024).await?;
+    Ok((status, serde_json::from_slice(&bytes)?))
+}
+
+#[tokio::test]
+async fn a_system_is_created_from_a_name_and_optional_setup_fields() -> Result<(), Box<dyn Error>> {
+    let actor = UserId::new();
+    let app = systems_router(Arc::new(Stub), Arc::new(AllowAuthorizer { actor }))
+        .layer(Extension(pvlog_api::RequestPrincipal::User(actor)));
+
+    let (status, body) = post_system(
+        app.clone(),
+        r#"{"name":"Roof","clientTimezone":"Europe/Vienna"}"#,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["timezone"], "Europe/Vienna");
+    assert_eq!(body["statusIntervalSeconds"], 300);
+    assert!(body["declaredCapacityWatts"].is_null());
+
+    let (status, body) = post_system(
+        app.clone(),
+        r#"{"name":"Roof","timezone":"Europe/Berlin","locationLabel":"Leipzig","countryCode":"DE",
+            "latitudeMicrodegrees":51340000,"longitudeMicrodegrees":12370000,
+            "statusIntervalSeconds":600,"declaredCapacityWatts":9900}"#,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["locationLabel"], "Leipzig");
+    assert_eq!(body["countryCode"], "DE");
+    assert_eq!(body["latitudeMicrodegrees"], 51_340_000);
+    assert_eq!(body["longitudeMicrodegrees"], 12_370_000);
+    assert_eq!(body["statusIntervalSeconds"], 600);
+    assert_eq!(body["declaredCapacityWatts"], 9_900);
+
+    let (status, body) = post_system(app, r#"{"name":" ","clientTimezone":"UTC"}"#).await?;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(body["detail"], "name_required");
+    Ok(())
+}
+
 struct Stub;
 struct AllowAuthorizer {
     actor: UserId,
@@ -125,6 +180,12 @@ fn record(
     SystemLifecycleRecord {
         description: String::new(),
         commissioning_date: None,
+        location_label: None,
+        country_code: None,
+        latitude_microdegrees: None,
+        longitude_microdegrees: None,
+        status_interval_seconds: 300,
+        declared_capacity_watts: None,
         id,
         account_id,
         name,
@@ -152,13 +213,28 @@ impl SystemLifecycleUseCases for Stub {
         &self,
         request: CreateSystem,
     ) -> Result<SystemLifecycleRecord, SystemLifecycleError> {
-        Ok(record(
+        if request.name.trim().is_empty() {
+            return Err(SystemLifecycleError::InvalidField("name_required"));
+        }
+        let mut created = record(
             SystemId::new(),
             request.account_id,
             request.name,
-            request.timezone,
+            request
+                .timezone
+                .or(request.client_timezone)
+                .unwrap_or_default(),
             1,
-        ))
+        );
+        created.location_label = request.details.location_label;
+        created.country_code = request.details.country_code;
+        created.latitude_microdegrees = request.details.latitude_microdegrees;
+        created.longitude_microdegrees = request.details.longitude_microdegrees;
+        created.declared_capacity_watts = request.details.declared_capacity_watts;
+        if let Some(interval) = request.details.status_interval_seconds {
+            created.status_interval_seconds = interval;
+        }
+        Ok(created)
     }
     async fn update_system(
         &self,

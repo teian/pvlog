@@ -8,7 +8,7 @@ Guides a user from an empty account to a PV system that verifiably receives data
 
 ### Requirement: Minimal system creation
 
-The system SHALL create a PV system from a name alone. Location, coordinates, timezone, declared capacity, status interval, commissioning date, description and equipment SHALL be optional at creation and changeable later. When no timezone is supplied the system SHALL derive it from the supplied coordinates and otherwise from the timezone the client reports.
+The system SHALL create a PV system from a name alone. Location, coordinates, timezone, declared capacity, status interval, commissioning date, description and equipment SHALL be optional at creation and changeable later. When no timezone is supplied the system SHALL derive it from the country of the supplied location and otherwise from the timezone the client reports.
 
 #### Scenario: System is created with only a name
 
@@ -17,8 +17,18 @@ The system SHALL create a PV system from a name alone. Location, coordinates, ti
 
 #### Scenario: Timezone follows the location
 
-- **WHEN** a user creates a system with coordinates and no explicit timezone
-- **THEN** the stored timezone is the one that applies at those coordinates
+- **WHEN** a user creates a system with a location in a country that has one timezone and no explicit timezone
+- **THEN** the stored timezone is that country's timezone, regardless of the client's timezone
+
+#### Scenario: Country has several timezones
+
+- **WHEN** a user creates a system with coordinates in a country that has several timezones and no explicit timezone
+- **THEN** the stored timezone is the country's timezone whose reference position is nearest to the coordinates
+
+#### Scenario: Location has no country
+
+- **WHEN** a user creates a system with coordinates but without a country and no explicit timezone
+- **THEN** the stored timezone is the one the client reports
 
 #### Scenario: Name is missing
 

@@ -50,8 +50,9 @@ impl SystemLifecycleRepository for SqliteSystemLifecycleRepository {
         let account = self.router.route(account_id).await.map_err(route_error)?;
         let mut connection = account.acquire().await.map_err(route_error)?;
         let row = sqlx::query(
-            "SELECT id,name,description,commissioning_date,timezone,visibility,lifecycle,version,\
-             created_at,updated_at FROM systems WHERE id=?",
+            "SELECT id,name,description,commissioning_date,timezone,location_label,country_code,\
+             latitude_e6,longitude_e6,status_interval_seconds,declared_capacity_watts,visibility,\
+             lifecycle,version,created_at,updated_at FROM systems WHERE id=?",
         )
         .bind(blob(id.as_uuid()))
         .fetch_optional(&mut *connection)
@@ -69,13 +70,22 @@ impl SystemLifecycleRepository for SqliteSystemLifecycleRepository {
         let mut writer = account.acquire_writer().await.map_err(route_error)?;
         sqlx::query(
             "INSERT INTO systems \
-             (id,name,description,timezone,visibility,lifecycle,status_interval_seconds, \
-              power_calculation_mode,net_calculation_mode,created_at,updated_at) \
-             VALUES (?,?, '',?,?,?,300,'reported','separate_flows',?,?)",
+             (id,name,description,commissioning_date,timezone,location_label,country_code, \
+              latitude_e6,longitude_e6,status_interval_seconds,declared_capacity_watts, \
+              visibility,lifecycle,power_calculation_mode,net_calculation_mode,created_at, \
+              updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'reported','separate_flows',?,?)",
         )
         .bind(blob(record.id.as_uuid()))
         .bind(&record.name)
+        .bind(&record.description)
+        .bind(record.commissioning_date.as_deref())
         .bind(&record.timezone)
+        .bind(record.location_label.as_deref())
+        .bind(record.country_code.as_deref())
+        .bind(record.latitude_microdegrees)
+        .bind(record.longitude_microdegrees)
+        .bind(i64::from(record.status_interval_seconds))
+        .bind(record.declared_capacity_watts)
         .bind(visibility_name(record.visibility))
         .bind(lifecycle_name(record.lifecycle))
         .bind(record.created_at)
@@ -107,12 +117,20 @@ impl SystemLifecycleRepository for SqliteSystemLifecycleRepository {
         let mut writer = account.acquire_writer().await.map_err(route_error)?;
         let changed = sqlx::query(
             "UPDATE systems SET name=?,description=?,commissioning_date=?,timezone=?,\
-             visibility=?,lifecycle=?,updated_at=?,version=version+1 WHERE id=? AND version=?",
+             location_label=?,country_code=?,latitude_e6=?,longitude_e6=?,status_interval_seconds=?,\
+             declared_capacity_watts=?,visibility=?,lifecycle=?,updated_at=?,version=version+1 \
+             WHERE id=? AND version=?",
         )
         .bind(&record.name)
         .bind(&record.description)
         .bind(record.commissioning_date.as_deref())
         .bind(&record.timezone)
+        .bind(record.location_label.as_deref())
+        .bind(record.country_code.as_deref())
+        .bind(record.latitude_microdegrees)
+        .bind(record.longitude_microdegrees)
+        .bind(i64::from(record.status_interval_seconds))
+        .bind(record.declared_capacity_watts)
         .bind(visibility_name(record.visibility))
         .bind(lifecycle_name(record.lifecycle))
         .bind(record.updated_at)
@@ -199,7 +217,7 @@ impl SystemLifecycleRepository for PostgresSystemLifecycleRepository {
         let mut connection = PgConnection::connect(&self.url)
             .await
             .map_err(|_| PortError::Unavailable)?;
-        let row = sqlx::query("SELECT id,name,description,commissioning_date::TEXT AS commissioning_date,timezone,visibility,lifecycle,version,created_at,updated_at FROM account_data.systems WHERE account_id=$1 AND id=$2")
+        let row = sqlx::query("SELECT id,name,description,commissioning_date::TEXT AS commissioning_date,timezone,location_label,country_code,latitude_e6,longitude_e6,status_interval_seconds,declared_capacity_watts,visibility,lifecycle,version,created_at,updated_at FROM account_data.systems WHERE account_id=$1 AND id=$2")
             .bind(account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut connection).await
             .map_err(|_| PortError::Unavailable)?;
         connection
@@ -213,8 +231,8 @@ impl SystemLifecycleRepository for PostgresSystemLifecycleRepository {
         let mut connection = PgConnection::connect(&self.url)
             .await
             .map_err(|_| PortError::Unavailable)?;
-        sqlx::query("INSERT INTO account_data.systems (account_id,id,name,description,timezone,visibility,lifecycle,status_interval_seconds,power_calculation_mode,net_calculation_mode,created_at,updated_at) VALUES ($1,$2,$3,'',$4,$5,$6,300,'reported','separate_flows',$7,$8)")
-            .bind(record.account_id.as_uuid()).bind(record.id.as_uuid()).bind(&record.name).bind(&record.timezone).bind(visibility_name(record.visibility)).bind(lifecycle_name(record.lifecycle)).bind(record.created_at).bind(record.updated_at).execute(&mut connection).await.map_err(|_| PortError::Unavailable)?;
+        sqlx::query("INSERT INTO account_data.systems (account_id,id,name,description,commissioning_date,timezone,location_label,country_code,latitude_e6,longitude_e6,status_interval_seconds,declared_capacity_watts,visibility,lifecycle,power_calculation_mode,net_calculation_mode,created_at,updated_at) VALUES ($1,$2,$3,$4,$5::DATE,$6,$7,$8,$9,$10,$11,$12,$13,$14,'reported','separate_flows',$15,$16)")
+            .bind(record.account_id.as_uuid()).bind(record.id.as_uuid()).bind(&record.name).bind(&record.description).bind(record.commissioning_date.as_deref()).bind(&record.timezone).bind(record.location_label.as_deref()).bind(record.country_code.as_deref()).bind(record.latitude_microdegrees).bind(record.longitude_microdegrees).bind(i32::try_from(record.status_interval_seconds).map_err(|_| PortError::Unavailable)?).bind(record.declared_capacity_watts).bind(visibility_name(record.visibility)).bind(lifecycle_name(record.lifecycle)).bind(record.created_at).bind(record.updated_at).execute(&mut connection).await.map_err(|_| PortError::Unavailable)?;
         connection
             .close()
             .await
@@ -242,8 +260,8 @@ impl SystemLifecycleRepository for PostgresSystemLifecycleRepository {
         let mut connection = PgConnection::connect(&self.url)
             .await
             .map_err(|_| PortError::Unavailable)?;
-        let changed = sqlx::query("UPDATE account_data.systems SET name=$1,description=$2,commissioning_date=$3::DATE,timezone=$4,visibility=$5,lifecycle=$6,updated_at=$7,version=version+1 WHERE account_id=$8 AND id=$9 AND version=$10")
-            .bind(&record.name).bind(&record.description).bind(record.commissioning_date.as_deref()).bind(&record.timezone).bind(visibility_name(record.visibility)).bind(lifecycle_name(record.lifecycle)).bind(record.updated_at).bind(account_id.as_uuid()).bind(record.id.as_uuid()).bind(i64::try_from(expected_version).map_err(|_| PortError::Conflict)?).execute(&mut connection).await.map_err(|_| PortError::Unavailable)?.rows_affected() == 1;
+        let changed = sqlx::query("UPDATE account_data.systems SET name=$1,description=$2,commissioning_date=$3::DATE,timezone=$4,location_label=$5,country_code=$6,latitude_e6=$7,longitude_e6=$8,status_interval_seconds=$9,declared_capacity_watts=$10,visibility=$11,lifecycle=$12,updated_at=$13,version=version+1 WHERE account_id=$14 AND id=$15 AND version=$16")
+            .bind(&record.name).bind(&record.description).bind(record.commissioning_date.as_deref()).bind(&record.timezone).bind(record.location_label.as_deref()).bind(record.country_code.as_deref()).bind(record.latitude_microdegrees).bind(record.longitude_microdegrees).bind(i32::try_from(record.status_interval_seconds).map_err(|_| PortError::Unavailable)?).bind(record.declared_capacity_watts).bind(visibility_name(record.visibility)).bind(lifecycle_name(record.lifecycle)).bind(record.updated_at).bind(account_id.as_uuid()).bind(record.id.as_uuid()).bind(i64::try_from(expected_version).map_err(|_| PortError::Conflict)?).execute(&mut connection).await.map_err(|_| PortError::Unavailable)?.rows_affected() == 1;
         connection
             .close()
             .await
@@ -371,6 +389,15 @@ fn parse_lifecycle(value: &str) -> Result<SystemLifecycle, PortError> {
     }
 }
 
+/// Narrows a stored coordinate to the microdegree range the schema enforces.
+#[cfg(feature = "sqlite")]
+fn coordinate(value: Option<i64>) -> Result<Option<i32>, PortError> {
+    value
+        .map(i32::try_from)
+        .transpose()
+        .map_err(|_| PortError::Unavailable)
+}
+
 #[cfg(feature = "sqlite")]
 fn blob(id: Uuid) -> Vec<u8> {
     id.as_bytes().to_vec()
@@ -389,6 +416,13 @@ fn sqlite_record(
         description: row.get("description"),
         commissioning_date: row.get("commissioning_date"),
         timezone: row.get("timezone"),
+        location_label: row.get("location_label"),
+        country_code: row.get("country_code"),
+        latitude_microdegrees: coordinate(row.get("latitude_e6"))?,
+        longitude_microdegrees: coordinate(row.get("longitude_e6"))?,
+        status_interval_seconds: u32::try_from(row.get::<i64, _>("status_interval_seconds"))
+            .map_err(|_| PortError::Unavailable)?,
+        declared_capacity_watts: row.get("declared_capacity_watts"),
         visibility: parse_visibility(&row.get::<String, _>("visibility"))?,
         lifecycle: parse_lifecycle(&row.get::<String, _>("lifecycle"))?,
         version: u64::try_from(row.get::<i64, _>("version")).map_err(|_| PortError::Unavailable)?,
@@ -409,6 +443,13 @@ fn postgres_record(
         description: row.try_get("description").unwrap_or_default(),
         commissioning_date: row.try_get("commissioning_date").ok().flatten(),
         timezone: row.get("timezone"),
+        location_label: row.get("location_label"),
+        country_code: row.get("country_code"),
+        latitude_microdegrees: row.get("latitude_e6"),
+        longitude_microdegrees: row.get("longitude_e6"),
+        status_interval_seconds: u32::try_from(row.get::<i32, _>("status_interval_seconds"))
+            .map_err(|_| PortError::Unavailable)?,
+        declared_capacity_watts: row.get("declared_capacity_watts"),
         visibility: parse_visibility(&row.get::<String, _>("visibility"))?,
         lifecycle: parse_lifecycle(&row.get::<String, _>("lifecycle"))?,
         version: u64::try_from(row.get::<i64, _>("version")).map_err(|_| PortError::Unavailable)?,

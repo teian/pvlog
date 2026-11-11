@@ -68,6 +68,7 @@ struct PhotonProperties {
     city: Option<String>,
     state: Option<String>,
     country: Option<String>,
+    countrycode: Option<String>,
 }
 
 impl PhotonProperties {
@@ -141,6 +142,12 @@ impl GeocodingApi for PhotonGeocodingApi {
             .into_iter()
             .filter_map(|feature| {
                 let [longitude, latitude] = feature.geometry.coordinates;
+                let country_code = feature
+                    .properties
+                    .countrycode
+                    .clone()
+                    .filter(|code| code.len() == 2 && code.is_ascii())
+                    .map(|code| code.to_ascii_uppercase());
                 let display_name = feature.properties.display_name();
                 (!display_name.is_empty()
                     && (-90.0..=90.0).contains(&latitude)
@@ -149,6 +156,7 @@ impl GeocodingApi for PhotonGeocodingApi {
                     display_name,
                     latitude,
                     longitude,
+                    country_code,
                     attribution: "© OpenStreetMap contributors".to_owned(),
                 })
             })

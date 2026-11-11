@@ -96,6 +96,10 @@ name = "system-lifecycle"
 path = "../../../tests/rust/application/system_lifecycle.rs"
 
 [[test]]
+name = "timezone-by-country"
+path = "../../../tests/rust/application/timezone_by_country.rs"
+
+[[test]]
 name = "system-configuration"
 path = "../../../tests/rust/application/system_configuration.rs"
 

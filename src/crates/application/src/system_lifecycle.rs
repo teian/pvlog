@@ -1,6 +1,6 @@
 //! Audited PV-system lifecycle with safe defaults and optimistic concurrency.
 
-use crate::{Clock, PortError, RbacRepository};
+use crate::{Clock, PortError, RbacRepository, timezone_for_country};
 use async_trait::async_trait;
 use pvlog_domain::{
     AccountId, BuiltInRole, IanaTimezone, PrincipalId, RoleAssignment, RoleAssignmentId, RoleKind,
@@ -21,18 +21,49 @@ pub struct SystemLifecycleRecord {
     /// Local commissioning date as `YYYY-MM-DD`.
     pub commissioning_date: Option<String>,
     pub timezone: String,
+    /// Label of the place the owner picked, shown next to the coordinates.
+    pub location_label: Option<String>,
+    /// ISO 3166-1 alpha-2 code of the country the location lies in.
+    pub country_code: Option<String>,
+    pub latitude_microdegrees: Option<i32>,
+    pub longitude_microdegrees: Option<i32>,
+    /// Expected seconds between readings; drives staleness detection.
+    pub status_interval_seconds: u32,
+    /// Capacity the owner stated; used until strings define the capacity.
+    pub declared_capacity_watts: Option<i64>,
     pub visibility: Visibility,
     pub lifecycle: SystemLifecycle,
     pub version: u64,
     pub created_at: i64,
     pub updated_at: i64,
 }
+
+/// Optional system fields that can be supplied at creation and changed later.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SystemDetails {
+    pub description: String,
+    pub commissioning_date: Option<String>,
+    pub location_label: Option<String>,
+    /// ISO 3166-1 alpha-2 code of the country the location lies in.
+    pub country_code: Option<String>,
+    pub latitude_microdegrees: Option<i32>,
+    pub longitude_microdegrees: Option<i32>,
+    /// `None` keeps the current interval, or the default for a new system.
+    pub status_interval_seconds: Option<u32>,
+    pub declared_capacity_watts: Option<i64>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CreateSystem {
     pub account_id: AccountId,
     pub actor: UserId,
     pub name: String,
-    pub timezone: String,
+    /// Timezone the owner chose explicitly; wins over every derived value.
+    pub timezone: Option<String>,
+    /// Timezone the client runs in; used when neither an explicit timezone nor
+    /// the location's country decides it.
+    pub client_timezone: Option<String>,
+    pub details: SystemDetails,
 }
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct UpdateSystem {
@@ -40,11 +71,15 @@ pub struct UpdateSystem {
     pub actor: UserId,
     pub expected_version: u64,
     pub name: String,
-    pub description: String,
-    pub commissioning_date: Option<String>,
     pub timezone: String,
     pub visibility: Visibility,
+    pub details: SystemDetails,
 }
+
+/// Default interval between readings for a system that states none.
+pub const DEFAULT_STATUS_INTERVAL_SECONDS: u32 = 300;
+/// Bounds the storage schema enforces for the status interval.
+pub const STATUS_INTERVAL_SECONDS_RANGE: std::ops::RangeInclusive<u32> = 30..=86_400;
 
 #[async_trait]
 pub trait SystemLifecycleRepository: Send + Sync {
@@ -116,6 +151,7 @@ impl SystemLifecycleService {
             clock,
         }
     }
+
     /// Creates a private active system with validated required fields.
     /// # Errors
     /// Returns an error for invalid input, time, or persistence failure.
@@ -123,7 +159,8 @@ impl SystemLifecycleService {
         &self,
         request: CreateSystem,
     ) -> Result<SystemLifecycleRecord, SystemLifecycleError> {
-        validate(&request.name, &request.timezone)?;
+        let timezone = resolve_timezone(&request)?;
+        validate(&request.name, &timezone, &request.details)?;
         let owner_role_id = self.owner_role_id(request.account_id).await?;
         let granted_at = self.clock.now();
         let now =
@@ -132,9 +169,18 @@ impl SystemLifecycleService {
             id: SystemId::new(),
             account_id: request.account_id,
             name: request.name,
-            description: String::new(),
-            commissioning_date: None,
-            timezone: request.timezone,
+            description: request.details.description,
+            commissioning_date: request.details.commissioning_date,
+            timezone,
+            location_label: normalized_label(request.details.location_label),
+            country_code: normalized_country(request.details.country_code),
+            latitude_microdegrees: request.details.latitude_microdegrees,
+            longitude_microdegrees: request.details.longitude_microdegrees,
+            status_interval_seconds: request
+                .details
+                .status_interval_seconds
+                .unwrap_or(DEFAULT_STATUS_INTERVAL_SECONDS),
+            declared_capacity_watts: request.details.declared_capacity_watts,
             visibility: Visibility::Private,
             lifecycle: SystemLifecycle::Active,
             version: 1,
@@ -195,12 +241,20 @@ impl SystemLifecycleService {
         &self,
         request: UpdateSystem,
     ) -> Result<SystemLifecycleRecord, SystemLifecycleError> {
-        validate(&request.name, &request.timezone)?;
+        validate(&request.name, &request.timezone, &request.details)?;
         let mut record = self.load(request.id).await?;
         record.name = request.name;
-        record.description = request.description;
-        record.commissioning_date = request.commissioning_date;
+        record.description = request.details.description;
+        record.commissioning_date = request.details.commissioning_date;
         record.timezone = request.timezone;
+        record.location_label = normalized_label(request.details.location_label);
+        record.country_code = normalized_country(request.details.country_code);
+        record.latitude_microdegrees = request.details.latitude_microdegrees;
+        record.longitude_microdegrees = request.details.longitude_microdegrees;
+        if let Some(interval) = request.details.status_interval_seconds {
+            record.status_interval_seconds = interval;
+        }
+        record.declared_capacity_watts = request.details.declared_capacity_watts;
         record.visibility = request.visibility;
         record.updated_at = self.now()?;
         record.version = request.expected_version.saturating_add(1);
@@ -365,18 +419,104 @@ impl SystemLifecycleUseCases for SystemLifecycleService {
         self.delete(id, actor, version, confirmed).await
     }
 }
-fn validate(name: &str, timezone: &str) -> Result<(), SystemLifecycleError> {
-    if name.trim().is_empty() || IanaTimezone::from_str(timezone).is_err() {
-        Err(SystemLifecycleError::InvalidInput)
-    } else {
-        Ok(())
+/// Picks the explicit timezone, else the one of the location's country, else the client's.
+fn resolve_timezone(request: &CreateSystem) -> Result<String, SystemLifecycleError> {
+    if let Some(timezone) = &request.timezone {
+        return Ok(timezone.clone());
     }
+    let position = request
+        .details
+        .latitude_microdegrees
+        .zip(request.details.longitude_microdegrees);
+    request
+        .details
+        .country_code
+        .as_deref()
+        .and_then(|country| {
+            timezone_for_country(country, position, request.client_timezone.as_deref())
+        })
+        .or_else(|| request.client_timezone.clone())
+        .ok_or(SystemLifecycleError::InvalidField("timezone_required"))
+}
+
+/// Checks every supplied field and names the first one that is invalid.
+fn validate(
+    name: &str,
+    timezone: &str,
+    details: &SystemDetails,
+) -> Result<(), SystemLifecycleError> {
+    let invalid = SystemLifecycleError::InvalidField;
+    if name.trim().is_empty() {
+        return Err(invalid("name_required"));
+    }
+    if IanaTimezone::from_str(timezone).is_err() {
+        return Err(invalid("timezone_unknown"));
+    }
+    match (
+        details.latitude_microdegrees,
+        details.longitude_microdegrees,
+    ) {
+        (None, None) => {}
+        (Some(latitude), Some(longitude)) => {
+            if !(-90_000_000..=90_000_000).contains(&latitude) {
+                return Err(invalid("latitude_out_of_range"));
+            }
+            if !(-180_000_000..=180_000_000).contains(&longitude) {
+                return Err(invalid("longitude_out_of_range"));
+            }
+        }
+        _ => return Err(invalid("coordinates_incomplete")),
+    }
+    if details
+        .country_code
+        .as_deref()
+        .is_some_and(|code| code.len() != 2 || !code.bytes().all(|byte| byte.is_ascii_alphabetic()))
+    {
+        return Err(invalid("country_code_invalid"));
+    }
+    if details
+        .status_interval_seconds
+        .is_some_and(|interval| !STATUS_INTERVAL_SECONDS_RANGE.contains(&interval))
+    {
+        return Err(invalid("status_interval_out_of_range"));
+    }
+    if details
+        .declared_capacity_watts
+        .is_some_and(|capacity| capacity <= 0)
+    {
+        return Err(invalid("declared_capacity_not_positive"));
+    }
+    if details.commissioning_date.as_deref().is_some_and(|date| {
+        time::Date::parse(
+            date,
+            time::macros::format_description!("[year]-[month]-[day]"),
+        )
+        .is_err()
+    }) {
+        return Err(invalid("commissioning_date_invalid"));
+    }
+    Ok(())
+}
+
+/// Stores country codes in upper case.
+fn normalized_country(code: Option<String>) -> Option<String> {
+    code.map(|value| value.to_ascii_uppercase())
+}
+
+/// Stores a blank location label as absent.
+fn normalized_label(label: Option<String>) -> Option<String> {
+    label
+        .map(|value| value.trim().to_owned())
+        .filter(|value| !value.is_empty())
 }
 
 #[derive(Debug, Error)]
 pub enum SystemLifecycleError {
     #[error("system input is invalid")]
     InvalidInput,
+    /// A named field failed validation; the code identifies field and reason.
+    #[error("system field is invalid: {0}")]
+    InvalidField(&'static str),
     #[error("system was not found")]
     NotFound,
     #[error("system version conflict")]

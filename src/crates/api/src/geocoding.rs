@@ -21,6 +21,9 @@ pub struct GeocodingResult {
     pub display_name: String,
     pub latitude: f64,
     pub longitude: f64,
+    /// ISO 3166-1 alpha-2 code of the country, when the provider reports it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub country_code: Option<String>,
     pub attribution: String,
 }
 

@@ -29,6 +29,7 @@ impl GeocodingApi for Stub {
             display_name: "Marienplatz 1, Munich, Germany".to_owned(),
             latitude: 48.137_393_2,
             longitude: 11.575_448_5,
+            country_code: Some("DE".to_owned()),
             attribution: "© OpenStreetMap contributors".to_owned(),
         }])
     }

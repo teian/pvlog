@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use pvlog_application::{
-    Clock, CreateSystem, PortError, RbacRepository, RbacRoleRecord, SystemLifecycleError,
-    SystemLifecycleRecord, SystemLifecycleRepository, SystemLifecycleService, UpdateSystem,
-    built_in_account_roles,
+    Clock, CreateSystem, PortError, RbacRepository, RbacRoleRecord, SystemDetails,
+    SystemLifecycleError, SystemLifecycleRecord, SystemLifecycleRepository, SystemLifecycleService,
+    UpdateSystem, built_in_account_roles,
 };
 use pvlog_domain::{
     AccountId, BuiltInRole, PrincipalId, RoleAssignment, RoleAssignmentId, RoleId, RoleKind,
@@ -27,7 +27,9 @@ async fn lifecycle_uses_safe_defaults_versions_audit_and_confirmation() -> Resul
             account_id,
             actor,
             name: "Roof".to_owned(),
-            timezone: "Europe/Berlin".to_owned(),
+            timezone: Some("Europe/Berlin".to_owned()),
+            client_timezone: None,
+            details: SystemDetails::default(),
         })
         .await?;
     assert_eq!(
@@ -55,10 +57,13 @@ async fn lifecycle_uses_safe_defaults_versions_audit_and_confirmation() -> Resul
             actor,
             expected_version: 1,
             name: "Roof PV".to_owned(),
-            description: "Wohnhaus Dach".to_owned(),
-            commissioning_date: Some("2019-04-15".to_owned()),
             timezone: "Europe/Berlin".to_owned(),
             visibility: Visibility::Unlisted,
+            details: SystemDetails {
+                description: "Wohnhaus Dach".to_owned(),
+                commissioning_date: Some("2019-04-15".to_owned()),
+                ..SystemDetails::default()
+            },
         })
         .await?;
     assert_eq!(updated.version, 2);
@@ -74,6 +79,213 @@ async fn lifecycle_uses_safe_defaults_versions_audit_and_confirmation() -> Resul
     ));
     service.delete(created.id, actor, 3, true).await?;
     assert_eq!(repository.audit_count()?, 4);
+    Ok(())
+}
+
+/// Builds a service over fresh fakes for one account and actor.
+fn service() -> (SystemLifecycleService, AccountId, UserId) {
+    let actor = UserId::new();
+    let account_id = AccountId::new();
+    let service = SystemLifecycleService::new(
+        Arc::new(FakeRepository::default()),
+        Arc::new(FakeRbacRepository::new(account_id, actor)),
+        Arc::new(FixedClock),
+    );
+    (service, account_id, actor)
+}
+
+fn name_only(account_id: AccountId, actor: UserId) -> CreateSystem {
+    CreateSystem {
+        account_id,
+        actor,
+        name: "Roof".to_owned(),
+        timezone: None,
+        client_timezone: Some("Europe/Vienna".to_owned()),
+        details: SystemDetails::default(),
+    }
+}
+
+#[tokio::test]
+async fn a_system_is_created_from_a_name_alone() -> Result<(), Box<dyn Error>> {
+    let (service, account_id, actor) = service();
+    let created = service.create(name_only(account_id, actor)).await?;
+
+    assert_eq!(created.timezone, "Europe/Vienna");
+    assert_eq!(created.status_interval_seconds, 300);
+    assert_eq!(created.location_label, None);
+    assert_eq!(created.latitude_microdegrees, None);
+    assert_eq!(created.declared_capacity_watts, None);
+    assert_eq!(created.commissioning_date, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn the_timezone_follows_the_country_of_the_location_unless_chosen()
+-> Result<(), Box<dyn Error>> {
+    let (service, account_id, actor) = service();
+    // The client sits in Vienna; the plant stands in Lisbon.
+    let located = CreateSystem {
+        details: SystemDetails {
+            location_label: Some("  Lisbon  ".to_owned()),
+            country_code: Some("pt".to_owned()),
+            latitude_microdegrees: Some(38_720_000),
+            longitude_microdegrees: Some(-9_140_000),
+            ..SystemDetails::default()
+        },
+        ..name_only(account_id, actor)
+    };
+    let derived = service.create(located.clone()).await?;
+    assert_eq!(derived.timezone, "Europe/Lisbon");
+    assert_eq!(derived.location_label.as_deref(), Some("Lisbon"));
+    assert_eq!(derived.country_code.as_deref(), Some("PT"));
+
+    let chosen = service
+        .create(CreateSystem {
+            timezone: Some("Atlantic/Madeira".to_owned()),
+            ..located.clone()
+        })
+        .await?;
+    assert_eq!(chosen.timezone, "Atlantic/Madeira");
+
+    // Coordinates without a country cannot be placed, so the client decides.
+    let unplaced = service
+        .create(CreateSystem {
+            details: SystemDetails {
+                country_code: None,
+                ..located.details
+            },
+            ..located
+        })
+        .await?;
+    assert_eq!(unplaced.timezone, "Europe/Vienna");
+    Ok(())
+}
+
+#[tokio::test]
+async fn each_invalid_field_is_named() -> Result<(), Box<dyn Error>> {
+    let (service, account_id, actor) = service();
+    let base = name_only(account_id, actor);
+    let with = |details: SystemDetails| CreateSystem {
+        details,
+        ..base.clone()
+    };
+    let cases = [
+        (
+            CreateSystem {
+                name: "  ".to_owned(),
+                ..base.clone()
+            },
+            "name_required",
+        ),
+        (
+            CreateSystem {
+                client_timezone: None,
+                ..base.clone()
+            },
+            "timezone_required",
+        ),
+        (
+            CreateSystem {
+                timezone: Some("Mars/Olympus".to_owned()),
+                ..base.clone()
+            },
+            "timezone_unknown",
+        ),
+        (
+            with(SystemDetails {
+                latitude_microdegrees: Some(1),
+                ..SystemDetails::default()
+            }),
+            "coordinates_incomplete",
+        ),
+        (
+            with(SystemDetails {
+                latitude_microdegrees: Some(90_000_001),
+                longitude_microdegrees: Some(0),
+                ..SystemDetails::default()
+            }),
+            "latitude_out_of_range",
+        ),
+        (
+            with(SystemDetails {
+                latitude_microdegrees: Some(0),
+                longitude_microdegrees: Some(-180_000_001),
+                ..SystemDetails::default()
+            }),
+            "longitude_out_of_range",
+        ),
+        (
+            with(SystemDetails {
+                country_code: Some("DEU".to_owned()),
+                ..SystemDetails::default()
+            }),
+            "country_code_invalid",
+        ),
+        (
+            with(SystemDetails {
+                status_interval_seconds: Some(29),
+                ..SystemDetails::default()
+            }),
+            "status_interval_out_of_range",
+        ),
+        (
+            with(SystemDetails {
+                declared_capacity_watts: Some(0),
+                ..SystemDetails::default()
+            }),
+            "declared_capacity_not_positive",
+        ),
+        (
+            with(SystemDetails {
+                commissioning_date: Some("15.04.2019".to_owned()),
+                ..SystemDetails::default()
+            }),
+            "commissioning_date_invalid",
+        ),
+    ];
+    for (request, expected) in cases {
+        match service.create(request).await {
+            Err(SystemLifecycleError::InvalidField(code)) => assert_eq!(code, expected),
+            other => return Err(format!("expected {expected}, got {other:?}").into()),
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_update_replaces_details_and_keeps_an_unstated_interval() -> Result<(), Box<dyn Error>> {
+    let (service, account_id, actor) = service();
+    let created = service
+        .create(CreateSystem {
+            details: SystemDetails {
+                status_interval_seconds: Some(60),
+                ..SystemDetails::default()
+            },
+            ..name_only(account_id, actor)
+        })
+        .await?;
+    let updated = service
+        .update(UpdateSystem {
+            id: created.id,
+            actor,
+            expected_version: created.version,
+            name: "Roof".to_owned(),
+            timezone: "Europe/Vienna".to_owned(),
+            visibility: Visibility::Private,
+            details: SystemDetails {
+                location_label: Some("Graz".to_owned()),
+                latitude_microdegrees: Some(47_070_000),
+                longitude_microdegrees: Some(15_440_000),
+                declared_capacity_watts: Some(9_900),
+                ..SystemDetails::default()
+            },
+        })
+        .await?;
+
+    assert_eq!(updated.status_interval_seconds, 60);
+    assert_eq!(updated.location_label.as_deref(), Some("Graz"));
+    assert_eq!(updated.latitude_microdegrees, Some(47_070_000));
+    assert_eq!(updated.declared_capacity_watts, Some(9_900));
     Ok(())
 }
 

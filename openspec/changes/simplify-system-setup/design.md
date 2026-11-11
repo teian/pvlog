@@ -35,11 +35,13 @@ See proposal.md for the motivation. The constraints that shape the approach:
 
 ### 1. The setup is three steps and only the name is required
 
-| Step          | Asks for                                   | Default when skipped                                                           |
-| ------------- | ------------------------------------------ | ------------------------------------------------------------------------------ |
-| 1 System      | Name (required), location, capacity in kWp | Timezone from the location, else from the browser; no coordinates; no capacity |
-| 2 Data source | Source profile                             | "Connect later"; the system is created without a source                        |
-| 3 Verify      | Nothing; waits for a reading               | "Finish without data"; the checklist keeps the step open                       |
+| Step          | Asks for                                   | Default when skipped                                                                     |
+| ------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| 1 System      | Name (required), location, capacity in kWp | Timezone from the location's country, else from the browser; no coordinates; no capacity |
+| 2 Data source | Source profile                             | "Connect later"; the system is created without a source                                  |
+| 3 Verify      | Nothing; waits for a reading               | "Finish without data"; the checklist keeps the step open                                 |
+
+The timezone comes from the country the location search reports, using the public-domain country table of the IANA timezone database: exact for countries with one timezone, nearest reference position for the others. Exact boundary data was not bundled because it is only available under ODbL; the timezone stays visible under "More options" for the rare wrong guess near an internal boundary.
 
 The system is created at the end of step 1, so steps 2 and 3 operate on a real system and can be resumed from the system's settings after an interruption. Advanced inputs (timezone override, status interval, commissioning date, description) sit behind one "More options" disclosure in step 1.
 
@@ -256,7 +258,7 @@ Imports run as jobs in the existing `import_jobs` table and are limited in size 
 
 ### 11. Fixes that ride along because the setup depends on them
 
-- System create and update accept and return location label, coordinates, timezone, status interval, commissioning date and declared capacity.
+- System create and update accept and return location label, country code, coordinates, timezone, status interval, commissioning date and declared capacity; the location search returns the country code.
 - Strings persist temperature coefficient and shading entries.
 - System creation with equipment becomes one server-side operation instead of a client-driven sequence, so a failure cannot leave a system without the inverters the user entered.
 - The dashboard response distinguishes "no observation" from "observation at time T"; status badges in the system list and equipment cards are derived from telemetry, not lifecycle.

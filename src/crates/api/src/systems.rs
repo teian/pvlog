@@ -6,8 +6,8 @@ use axum::{
     routing::{get, post},
 };
 use pvlog_application::{
-    CreateSystem, SystemLifecycleError, SystemLifecycleRecord, SystemLifecycleUseCases,
-    UpdateSystem,
+    CreateSystem, SystemDetails, SystemLifecycleError, SystemLifecycleRecord,
+    SystemLifecycleUseCases, UpdateSystem,
 };
 use pvlog_domain::{AccountId, ApiScope, Permission, SystemId, UserId, Visibility};
 use serde::Deserialize;
@@ -51,7 +51,14 @@ async fn read(
 #[serde(rename_all = "camelCase")]
 struct CreateBody {
     name: String,
-    timezone: String,
+    /// Timezone the owner chose; omitted to derive it from the coordinates.
+    #[serde(default)]
+    timezone: Option<String>,
+    /// Timezone of the client, used when nothing else decides it.
+    #[serde(default)]
+    client_timezone: Option<String>,
+    #[serde(flatten)]
+    details: DetailsBody,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -59,12 +66,48 @@ struct UpdateBody {
     name: String,
     timezone: String,
     visibility: Visibility,
+    #[serde(flatten)]
+    details: DetailsBody,
+}
+
+/// Optional system fields shared by creation and update.
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DetailsBody {
     /// Free-text placement shown beside the name.
     #[serde(default)]
     description: String,
     /// Local commissioning date as `YYYY-MM-DD`.
     #[serde(default)]
     commissioning_date: Option<String>,
+    #[serde(default)]
+    location_label: Option<String>,
+    /// ISO 3166-1 alpha-2 code of the country the location lies in.
+    #[serde(default)]
+    country_code: Option<String>,
+    #[serde(default)]
+    latitude_microdegrees: Option<i32>,
+    #[serde(default)]
+    longitude_microdegrees: Option<i32>,
+    #[serde(default)]
+    status_interval_seconds: Option<u32>,
+    #[serde(default)]
+    declared_capacity_watts: Option<i64>,
+}
+
+impl From<DetailsBody> for SystemDetails {
+    fn from(body: DetailsBody) -> Self {
+        Self {
+            description: body.description,
+            commissioning_date: body.commissioning_date.filter(|date| !date.is_empty()),
+            location_label: body.location_label,
+            country_code: body.country_code.filter(|code| !code.is_empty()),
+            latitude_microdegrees: body.latitude_microdegrees,
+            longitude_microdegrees: body.longitude_microdegrees,
+            status_interval_seconds: body.status_interval_seconds,
+            declared_capacity_watts: body.declared_capacity_watts,
+        }
+    }
 }
 
 async fn create(
@@ -79,7 +122,9 @@ async fn create(
             account_id,
             actor,
             name: body.name,
-            timezone: body.timezone,
+            timezone: body.timezone.filter(|timezone| !timezone.is_empty()),
+            client_timezone: body.client_timezone.filter(|timezone| !timezone.is_empty()),
+            details: body.details.into(),
         })
         .await?;
     Ok(with_etag(StatusCode::CREATED, record))
@@ -105,10 +150,9 @@ async fn update(
             .await?,
             expected_version: expected_version(&headers)?,
             name: body.name,
-            description: body.description,
-            commissioning_date: body.commissioning_date,
             timezone: body.timezone,
             visibility: body.visibility,
+            details: body.details.into(),
         })
         .await?;
     Ok(with_etag(StatusCode::OK, record))
@@ -302,6 +346,9 @@ impl IntoResponse for SystemApiError {
                 "version_conflict",
                 "system_version_is_stale",
             ),
+            Self::Domain(SystemLifecycleError::InvalidField(code)) => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "invalid_system", code)
+            }
             Self::Domain(
                 SystemLifecycleError::InvalidInput | SystemLifecycleError::ConfirmationRequired,
             ) => (
