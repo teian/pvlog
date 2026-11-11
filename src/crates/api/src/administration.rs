@@ -162,6 +162,7 @@ async fn weather_feed(
     Ok(Json(state.service.weather_feed().await?))
 }
 
+/// Handler that authorizes the caller and returns the list of accounts.
 async fn list_accounts(
     State(state): State<AdministrationState>,
     principal: Option<Extension<RequestPrincipal>>,

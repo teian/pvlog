@@ -29,6 +29,7 @@ pub struct StorageInsightApi {
 }
 
 impl StorageInsightApi {
+    /// Creates the insight API over the given database target, management repository, and clock.
     #[must_use]
     pub const fn new(
         target: DatabaseTarget,
@@ -42,6 +43,7 @@ impl StorageInsightApi {
         }
     }
 
+    /// Looks up the account owning a system; an unregistered system is `NotFound`.
     async fn account_for(&self, system_id: SystemId) -> Result<AccountId, InsightApiError> {
         self.management
             .system_registry(system_id)
@@ -51,6 +53,7 @@ impl StorageInsightApi {
             .ok_or(InsightApiError::NotFound)
     }
 
+    /// Routes to the SQLite account database that holds the system, failing as `Unavailable` for other targets.
     #[cfg(feature = "sqlite")]
     async fn account(
         &self,
@@ -75,6 +78,7 @@ impl StorageInsightApi {
         .map_err(|_| InsightApiError::Unavailable)
     }
 
+    /// Returns the clock's current time in epoch milliseconds.
     fn now(&self) -> i64 {
         i64::try_from(self.clock.now().epoch_millis()).unwrap_or_default()
     }
@@ -138,6 +142,7 @@ fn window(zone: Tz, now: i64, range: InsightRange) -> Option<RangeWindow> {
     })
 }
 
+/// Returns the first instant of a local date in epoch milliseconds, falling back to 01:00 when midnight does not exist.
 fn start_of_day(zone: Tz, date: NaiveDate) -> Option<i64> {
     let midnight = date.and_hms_opt(0, 0, 0)?;
     zone.from_local_datetime(&midnight)
@@ -151,6 +156,7 @@ fn start_of_day(zone: Tz, date: NaiveDate) -> Option<i64> {
 
 #[async_trait]
 impl InsightApiUseCases for StorageInsightApi {
+    /// Sums generation over the range window and the previous one, and reports best bucket, peak, and last values for the scope.
     async fn range_summary(
         &self,
         _actor: UserId,
@@ -248,6 +254,7 @@ impl InsightApiUseCases for StorageInsightApi {
         }
     }
 
+    /// Reports each PV string's rated power, generated energy, and operating status for the range window.
     async fn string_breakdown(
         &self,
         _actor: UserId,
@@ -318,6 +325,7 @@ impl InsightApiUseCases for StorageInsightApi {
         }
     }
 
+    /// Computes monthly generation and weather-class shares for the most recent months, skipping months with no valid window.
     async fn weather_composition(
         &self,
         _actor: UserId,
@@ -371,6 +379,7 @@ impl InsightApiUseCases for StorageInsightApi {
         }
     }
 
+    /// Lists the stored tariff periods as JSON values.
     async fn tariffs(
         &self,
         _actor: UserId,
@@ -400,6 +409,7 @@ impl InsightApiUseCases for StorageInsightApi {
         }
     }
 
+    /// Validates tariff input (direction and currency code) and inserts or updates the tariff period, answering `Conflict` when it overlaps an existing one.
     async fn upsert_tariff(
         &self,
         _actor: UserId,
@@ -470,6 +480,7 @@ impl InsightApiUseCases for StorageInsightApi {
         }
     }
 
+    /// Deletes a tariff period by identifier; a missing row is `NotFound`.
     async fn delete_tariff(
         &self,
         _actor: UserId,
@@ -578,6 +589,7 @@ struct SummaryBucket {
     last_watts: Option<i64>,
 }
 
+/// Maps a requested scope name and identifier to a rollup scope kind and UUID, or `None` when the combination is invalid.
 fn resolve_scope(
     kind: Option<&str>,
     scope_id: Option<Uuid>,
@@ -619,6 +631,7 @@ fn string_status(
     }
 }
 
+/// Reads the system's time zone and status interval (in milliseconds); an unknown system is `NotFound`.
 #[cfg(feature = "sqlite")]
 async fn system_settings(
     connection: &mut sqlx::SqliteConnection,
@@ -639,6 +652,7 @@ async fn system_settings(
     ))
 }
 
+/// Reads rollup buckets for a scope and resolution within a half-open time range, ordered by start.
 #[cfg(feature = "sqlite")]
 async fn read_buckets(
     connection: &mut sqlx::SqliteConnection,
@@ -689,6 +703,7 @@ async fn read_buckets(
         .collect())
 }
 
+/// Sums the rated power of all PV strings in watts, or `None` when no capacity is configured.
 #[cfg(feature = "sqlite")]
 async fn capacity_watts(
     connection: &mut sqlx::SqliteConnection,
@@ -705,11 +720,13 @@ async fn capacity_watts(
     Ok(total.filter(|value| *value > 0))
 }
 
+/// Reads a UUID blob column, failing as `Unavailable` when it is malformed.
 #[cfg(feature = "sqlite")]
 fn row_uuid(row: &sqlx::sqlite::SqliteRow, column: &str) -> Result<Uuid, InsightApiError> {
     Uuid::from_slice(&row.get::<Vec<u8>, _>(column)).map_err(|_| InsightApiError::Unavailable)
 }
 
+/// Encodes a system identifier as the blob bytes used in SQL bindings.
 #[cfg(feature = "sqlite")]
 fn id_blob(id: SystemId) -> Vec<u8> {
     id.as_uuid().as_bytes().to_vec()

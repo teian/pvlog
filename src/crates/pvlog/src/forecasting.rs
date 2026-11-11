@@ -39,6 +39,7 @@ pub struct StorageForecastApi {
 }
 
 impl StorageForecastApi {
+    /// Creates the forecast API over the given storage target, management registry and clock; results older than `stale_after_millis` are reported as stale.
     #[must_use]
     pub const fn new(
         target: DatabaseTarget,
@@ -54,6 +55,7 @@ impl StorageForecastApi {
         }
     }
 
+    /// Returns the current clock time as epoch milliseconds, or zero if it does not fit in an `i64`.
     fn now(&self) -> i64 {
         i64::try_from(self.clock.now().epoch_millis()).unwrap_or_default()
     }
@@ -68,6 +70,7 @@ impl StorageForecastApi {
         }
     }
 
+    /// Looks up the account that owns a system, failing with `NotFound` for unknown systems and `Unavailable` when the registry cannot be read.
     async fn account_for(&self, system_id: SystemId) -> Result<AccountId, ForecastApiError> {
         self.management
             .system_registry(system_id)
@@ -77,6 +80,7 @@ impl StorageForecastApi {
             .ok_or(ForecastApiError::NotFound)
     }
 
+    /// Opens the routed SQLite account database for a system, failing with `Unavailable` when the target is not SQLite or routing fails.
     #[cfg(feature = "sqlite")]
     async fn account(
         &self,
@@ -101,6 +105,7 @@ impl StorageForecastApi {
         .map_err(|_| ForecastApiError::Unavailable)
     }
 
+    /// Classifies a fetch timestamp as fresh or stale against the configured staleness window.
     fn freshness(&self, fetched_at: i64) -> ForecastFreshness {
         if self.now().saturating_sub(fetched_at) <= self.stale_after_millis {
             ForecastFreshness::Fresh
@@ -112,6 +117,7 @@ impl StorageForecastApi {
 
 #[async_trait]
 impl ForecastApiUseCases for StorageForecastApi {
+    /// Returns the newest forecast settings for the scope's strings, or `NotFound` when none are stored.
     async fn settings(
         &self,
         scope: ForecastResourceScope,
@@ -147,6 +153,7 @@ impl ForecastApiUseCases for StorageForecastApi {
         }
     }
 
+    /// Validates the input and writes it as a new settings period for every string in the scope, closing the open period and rejecting backdated periods, then returns the stored settings.
     async fn update_settings(
         &self,
         actor: UserId,
@@ -255,6 +262,7 @@ impl ForecastApiUseCases for StorageForecastApi {
         }
     }
 
+    /// Aggregates per-string readiness into the scope's included versus total effective capacity, with the de-duplicated reasons that block completeness.
     async fn input_completeness(
         &self,
         scope: ForecastResourceScope,
@@ -297,6 +305,7 @@ impl ForecastApiUseCases for StorageForecastApi {
         }
     }
 
+    /// Lists the weather data runs overlapping the query window for the scope's system.
     async fn forecast_runs(
         &self,
         scope: ForecastResourceScope,
@@ -350,6 +359,7 @@ impl ForecastApiUseCases for StorageForecastApi {
         }
     }
 
+    /// Returns the modeled yield series for the scope and query window, with run provenance and freshness.
     async fn yield_series(
         &self,
         scope: ForecastResourceScope,
@@ -439,6 +449,7 @@ impl ForecastApiUseCases for StorageForecastApi {
         }
     }
 
+    /// Compares measured rollup energy against the modeled series per interval, leaving the measured side empty where no bucket exists.
     async fn performance_series(
         &self,
         scope: ForecastResourceScope,
@@ -533,6 +544,7 @@ fn realization(measured: Option<i64>, modeled: Option<i64>) -> Option<u32> {
     }
 }
 
+/// Rejects settings with a blank model identifier, a zero revision or an effective range that ends before it starts.
 fn validate_settings(input: &ForecastSettingsInput) -> Result<(), ForecastApiError> {
     if input.model_identifier.trim().is_empty() || input.model_revision == 0 {
         return Err(ForecastApiError::InvalidPath);
@@ -563,6 +575,7 @@ fn configuration_digest(input: &ForecastSettingsInput) -> [u8; 32] {
     *blake3::hash(material.as_bytes()).as_bytes()
 }
 
+/// Returns the stored name of a calculation basis.
 const fn basis_name(basis: CalculationBasis) -> &'static str {
     match basis {
         CalculationBasis::Forecast => "forecast",
@@ -570,6 +583,7 @@ const fn basis_name(basis: CalculationBasis) -> &'static str {
     }
 }
 
+/// Returns the stored name of a weather data kind.
 const fn weather_kind_name(kind: WeatherDataKind) -> &'static str {
     match kind {
         WeatherDataKind::Forecast => "forecast",
@@ -578,6 +592,7 @@ const fn weather_kind_name(kind: WeatherDataKind) -> &'static str {
     }
 }
 
+/// Maps a scope to the projection scope kind and identifier; account and system scopes both project onto the system.
 fn projection_scope(scope: &ForecastResourceScope, system_id: SystemId) -> (&'static str, Uuid) {
     match scope {
         ForecastResourceScope::String { string_id, .. } => ("string", string_id.as_uuid()),
@@ -588,6 +603,7 @@ fn projection_scope(scope: &ForecastResourceScope, system_id: SystemId) -> (&'st
     }
 }
 
+/// Decodes a stored completeness label, treating unknown values as unavailable; partial and unavailable results carry no reasons yet.
 fn completeness_of(stored: &str) -> ForecastCompleteness {
     match stored {
         "complete" => ForecastCompleteness::Complete,
@@ -600,6 +616,7 @@ fn completeness_of(stored: &str) -> ForecastCompleteness {
     }
 }
 
+/// Encodes bytes as a lowercase hexadecimal string.
 fn hex(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     bytes.iter().fold(String::new(), |mut out, byte| {
@@ -608,6 +625,7 @@ fn hex(bytes: &[u8]) -> String {
     })
 }
 
+/// Computes the included-capacity share of the total in basis points, returning zero when the total is not positive.
 #[cfg(feature = "sqlite")]
 fn coverage_of(row: &sqlx::sqlite::SqliteRow) -> u16 {
     let included: i64 = row.try_get("included_capacity_watts").unwrap_or_default();
@@ -620,6 +638,7 @@ fn coverage_of(row: &sqlx::sqlite::SqliteRow) -> u16 {
     u16::try_from(included.saturating_mul(10_000) / total).unwrap_or(10_000)
 }
 
+/// Builds the provenance block from a weather run row, using empty values for missing columns.
 #[cfg(feature = "sqlite")]
 fn provenance(row: &sqlx::sqlite::SqliteRow, fetched_at: i64) -> ForecastProvenanceResponse {
     ForecastProvenanceResponse {
@@ -634,6 +653,7 @@ fn provenance(row: &sqlx::sqlite::SqliteRow, fetched_at: i64) -> ForecastProvena
     }
 }
 
+/// Reads a weather run identifier from a blob column, failing with `Unavailable` if it is not a valid identifier.
 #[cfg(feature = "sqlite")]
 fn run_id(
     row: &sqlx::sqlite::SqliteRow,
@@ -645,6 +665,7 @@ fn run_id(
         .ok_or(ForecastApiError::Unavailable)
 }
 
+/// Reads a yield calculation run identifier from a blob column, failing with `Unavailable` if it is not a valid identifier.
 #[cfg(feature = "sqlite")]
 fn calculation_run_id(
     row: &sqlx::sqlite::SqliteRow,
@@ -767,6 +788,7 @@ async fn newest_settings(
     Ok(None)
 }
 
+/// Reads a basis-point column as `u16`, defaulting to zero when missing or out of range.
 #[cfg(feature = "sqlite")]
 fn basis_points(row: &sqlx::sqlite::SqliteRow, column: &str) -> u16 {
     u16::try_from(row.try_get::<i64, _>(column).unwrap_or_default()).unwrap_or_default()
@@ -779,6 +801,7 @@ struct StringReadiness {
     reasons: Vec<ForecastCompletenessReason>,
 }
 
+/// Determines per string in the scope its capacity and the missing inputs that keep it from being modeled.
 #[cfg(feature = "sqlite")]
 async fn string_readiness(
     connection: &mut sqlx::SqliteConnection,

@@ -36,6 +36,7 @@ enum Resolution {
 }
 
 impl Resolution {
+    /// Returns the stored name of the resolution.
     const fn name(self) -> &'static str {
         match self {
             Self::FifteenMinutes => "fifteen_minute",
@@ -73,6 +74,7 @@ struct Bucket {
 }
 
 impl Bucket {
+    /// Folds one sample into the bucket's energy sums, quality flags and power extremes.
     fn accept(&mut self, sample: Sample) {
         self.points += 1;
         self.generation_energy_wh += sample.generation_energy_wh.unwrap_or_default();
@@ -91,6 +93,7 @@ impl Bucket {
         ((self.end - self.start) / interval_millis.max(1)).max(self.points)
     }
 
+    /// Returns the share of expected samples actually received in basis points, clamped to 0..=10000.
     fn coverage(&self, interval_millis: i64) -> i32 {
         let expected = self.expected(interval_millis);
         if expected <= 0 {
@@ -158,6 +161,7 @@ pub struct AggregationReport {
 }
 
 impl AggregationReport {
+    /// Adds another report's counters to this one.
     fn merge(&mut self, other: Self) {
         self.systems_rebuilt += other.systems_rebuilt;
         self.rollups_written += other.rollups_written;
@@ -177,6 +181,7 @@ pub async fn active_accounts(
     account_ids(management_path).await
 }
 
+/// Reads the identifiers of all accounts whose database is registered as active, ordered by identifier.
 #[cfg(feature = "sqlite")]
 async fn account_ids(
     management_path: &std::path::Path,
@@ -207,6 +212,7 @@ async fn account_ids(
         .collect()
 }
 
+/// Rebuilds the rollups and daily summaries of one system for local years touched by observations received since the last rebuild, or after a channel binding changed.
 #[cfg(feature = "sqlite")]
 async fn rebuild_system(
     account: &pvlog_storage::RoutedSqliteAccount,
@@ -468,6 +474,7 @@ async fn write_aggregates(
     Ok(report)
 }
 
+/// Inserts or updates the rollup row for a bucket at the given resolution and scope.
 #[cfg(feature = "sqlite")]
 async fn write_rollup(
     connection: &mut sqlx::SqliteConnection,
@@ -519,6 +526,7 @@ async fn write_rollup(
     Ok(())
 }
 
+/// Inserts or updates the system's daily summary for a local date.
 #[cfg(feature = "sqlite")]
 async fn write_daily_summary(
     connection: &mut sqlx::SqliteConnection,
@@ -633,6 +641,7 @@ fn bucket_samples(
     Ok(buckets)
 }
 
+/// Converts epoch milliseconds to local time in the zone, failing with `Timezone` when the value is out of range.
 fn local_time(zone: Tz, epoch_millis: i64) -> Result<DateTime<Tz>, AggregationError> {
     DateTime::from_timestamp_millis(epoch_millis)
         .map(|value| value.with_timezone(&zone))
@@ -726,12 +735,14 @@ fn start_of_day(zone: Tz, date: NaiveDate) -> Result<DateTime<Tz>, AggregationEr
         .ok_or(AggregationError::Timezone)
 }
 
+/// Returns the UTC epoch milliseconds of the start of the local year containing the timestamp.
 fn year_start(zone: Tz, epoch_millis: i64) -> Result<i64, AggregationError> {
     let local = local_time(zone, epoch_millis)?;
     let date = NaiveDate::from_ymd_opt(local.year(), 1, 1).ok_or(AggregationError::Timezone)?;
     Ok(start_of_day(zone, date)?.timestamp_millis())
 }
 
+/// Returns the UTC epoch milliseconds of the start of the local year after the one containing the timestamp.
 fn next_year_start(zone: Tz, epoch_millis: i64) -> Result<i64, AggregationError> {
     let local = local_time(zone, epoch_millis)?;
     let date = NaiveDate::from_ymd_opt(local.year() + 1, 1, 1).ok_or(AggregationError::Timezone)?;

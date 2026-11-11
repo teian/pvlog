@@ -316,6 +316,7 @@ fn sqlite_overview(system_id: SystemId, row: &sqlx::sqlite::SqliteRow) -> System
     }
 }
 
+/// Shapes one `PostgreSQL` overview row into a system overview response.
 #[cfg(feature = "postgres")]
 fn postgres_overview(system_id: SystemId, row: &sqlx::postgres::PgRow) -> SystemOverviewResponse {
     SystemOverviewResponse {
@@ -336,6 +337,7 @@ fn postgres_overview(system_id: SystemId, row: &sqlx::postgres::PgRow) -> System
     }
 }
 
+/// Narrows stored availability to basis points, dropping out-of-range values.
 fn overview_availability(stored: Option<i64>) -> Option<u16> {
     stored.and_then(|value| u16::try_from(value).ok())
 }

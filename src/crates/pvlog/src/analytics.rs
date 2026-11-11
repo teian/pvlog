@@ -37,6 +37,7 @@ pub struct StorageAnalyticsApi {
 }
 
 impl StorageAnalyticsApi {
+    /// Creates the analytics service over the given storage target, management repository and clock.
     #[must_use]
     pub const fn new(
         target: DatabaseTarget,
@@ -73,6 +74,7 @@ impl StorageAnalyticsApi {
 
 #[async_trait]
 impl ModernAnalyticsUseCases for StorageAnalyticsApi {
+    /// Authorizes the actor, resolves the requested scope and runs the series query; an unknown scope is invalid.
     async fn time_series(
         &self,
         actor: UserId,
@@ -95,6 +97,7 @@ impl ModernAnalyticsUseCases for StorageAnalyticsApi {
             .map_err(|error| series_error(&error))
     }
 
+    /// Computes energy statistics for the period from daily summaries, returning not found when none exist.
     async fn statistics(
         &self,
         actor: UserId,
@@ -111,6 +114,7 @@ impl ModernAnalyticsUseCases for StorageAnalyticsApi {
             .map_err(|_| ModernAnalyticsError::Unavailable)
     }
 
+    /// Detects data quality issues in the range from samples, rejected ingestions and the aggregate watermark.
     async fn data_quality(
         &self,
         actor: UserId,
@@ -145,6 +149,7 @@ impl ModernAnalyticsUseCases for StorageAnalyticsApi {
         .map_err(|_| ModernAnalyticsError::Invalid)
     }
 
+    /// Runs the series query and renders the result as CSV or JSON for download.
     async fn export(
         &self,
         request: AnalysisExportRequest,
@@ -190,6 +195,7 @@ fn csv_bytes(result: &pvlog_application::SeriesQueryResult) -> Vec<u8> {
     out.into_bytes()
 }
 
+/// Snake-case column name of a series field used in CSV exports.
 const fn field_name(field: SeriesField) -> &'static str {
     match field {
         SeriesField::GenerationPower => "generation_power",
@@ -210,6 +216,7 @@ const fn field_name(field: SeriesField) -> &'static str {
     }
 }
 
+/// Maps a series query failure to an API error; plan errors are invalid, everything else is unavailable.
 const fn series_error(error: &SeriesQueryError) -> ModernAnalyticsError {
     match error {
         SeriesQueryError::Plan(_) => ModernAnalyticsError::Invalid,
@@ -228,6 +235,7 @@ fn period_prefix(period: StatisticsPeriod, latest_date: &str) -> String {
     }
 }
 
+/// Converts a daily summary into a statistics bucket, clamping coverage to a share of the day and dropping negative energies.
 fn summary_bucket(
     generation_wh: Option<i64>,
     consumption_wh: Option<i64>,
@@ -246,6 +254,7 @@ fn summary_bucket(
 }
 
 impl StorageAnalyticsApi {
+    /// Routes to the `SQLite` database of the given account, mapping any routing failure to unavailable.
     #[cfg(feature = "sqlite")]
     async fn sqlite_account(
         &self,
@@ -264,6 +273,7 @@ impl StorageAnalyticsApi {
         .map_err(|_| ModernAnalyticsError::Unavailable)
     }
 
+    /// Returns the statistics buckets of the summaries that fall within the period ending at the latest summary date.
     async fn daily_summaries(
         &self,
         account_id: AccountId,
@@ -284,6 +294,7 @@ impl StorageAnalyticsApi {
             .collect())
     }
 
+    /// Loads the latest-generation daily summary rows (date, generation, consumption, coverage) ordered by date.
     async fn summary_rows(
         &self,
         account_id: AccountId,
@@ -376,6 +387,7 @@ impl StorageAnalyticsApi {
         }
     }
 
+    /// Sums the rated power of the system strings, returning `None` when unknown or zero.
     async fn capacity_watts(
         &self,
         account_id: AccountId,
@@ -446,6 +458,7 @@ impl StorageAnalyticsApi {
         }
     }
 
+    /// Loads hot samples in the range as quality samples; yields none for `PostgreSQL`.
     async fn quality_samples(
         &self,
         account_id: AccountId,
@@ -509,6 +522,7 @@ impl StorageAnalyticsApi {
         }
     }
 
+    /// Loads rejected-ingestion quality events in the range; yields none for `PostgreSQL`.
     async fn rejected_ingestions(
         &self,
         account_id: AccountId,
@@ -560,6 +574,7 @@ impl StorageAnalyticsApi {
         }
     }
 
+    /// Returns the latest rollup bucket end for the system, or `None` when unavailable for the backend.
     async fn aggregate_watermark(
         &self,
         account_id: AccountId,
@@ -598,6 +613,7 @@ impl StorageAnalyticsApi {
     }
 }
 
+/// Copies up to 32 bytes of a stored hash into a fixed-size fingerprint, zero-padding when shorter or absent.
 fn fingerprint(hash: Option<&[u8]>) -> [u8; 32] {
     let mut value = [0_u8; 32];
     if let Some(bytes) = hash {
@@ -607,6 +623,7 @@ fn fingerprint(hash: Option<&[u8]>) -> [u8; 32] {
     value
 }
 
+/// Encodes a system identifier as the 16-byte blob used by `SQLite` keys.
 #[cfg(feature = "sqlite")]
 fn id_blob(id: SystemId) -> Vec<u8> {
     id.as_uuid().as_bytes().to_vec()

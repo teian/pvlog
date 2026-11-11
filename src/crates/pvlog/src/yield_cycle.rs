@@ -27,6 +27,7 @@ pub struct YieldCycleReport {
 }
 
 impl YieldCycleReport {
+    /// Adds another report's counters to this one.
     fn merge(&mut self, other: Self) {
         self.runs_calculated += other.runs_calculated;
         self.intervals_written += other.intervals_written;
@@ -93,6 +94,7 @@ struct ConfiguredString {
     configuration_digest: Vec<u8>,
 }
 
+/// Models the system's most recent forecast runs that lack a completed calculation under the current configuration, oldest first, one transaction per run.
 #[cfg(feature = "sqlite")]
 async fn calculate_system(
     account: &pvlog_storage::RoutedSqliteAccount,
@@ -152,6 +154,7 @@ async fn calculate_system(
     Ok(report)
 }
 
+/// Calculates and stores yield for one weather run across all configured strings, returning the number of intervals written, or zero when the run has no points.
 #[cfg(feature = "sqlite")]
 async fn calculate_run(
     connection: &mut sqlx::SqliteConnection,
@@ -477,6 +480,7 @@ async fn configured_strings(
         .collect())
 }
 
+/// Reads a loss column as basis points, defaulting to zero when missing or out of range.
 #[cfg(feature = "sqlite")]
 fn loss(row: &sqlx::sqlite::SqliteRow, column: &str) -> u16 {
     u16::try_from(row.try_get::<i64, _>(column).unwrap_or_default()).unwrap_or_default()
@@ -489,6 +493,7 @@ pub enum YieldCycleError {
 }
 
 impl From<crate::aggregation::AggregationError> for YieldCycleError {
+    /// Collapses any aggregation error into the unavailable error.
     fn from(_: crate::aggregation::AggregationError) -> Self {
         Self::Unavailable
     }

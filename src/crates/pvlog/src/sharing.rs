@@ -30,11 +30,13 @@ pub struct StorageSharingApi {
 }
 
 impl StorageSharingApi {
+    /// Creates the sharing API over the given database target and clock.
     #[must_use]
     pub const fn new(target: DatabaseTarget, clock: Arc<dyn Clock>) -> Self {
         Self { target, clock }
     }
 
+    /// Returns the management and accounts paths of a SQLite target; PostgreSQL targets are `Unavailable`.
     #[cfg(feature = "sqlite")]
     fn paths(&self) -> Result<(&std::path::Path, &std::path::Path), SharingApiError> {
         match &self.target {
@@ -46,6 +48,7 @@ impl StorageSharingApi {
         }
     }
 
+    /// Opens a connection to the management database without creating it.
     #[cfg(feature = "sqlite")]
     async fn management(&self) -> Result<sqlx::SqliteConnection, SharingApiError> {
         let (management_path, _) = self.paths()?;
@@ -57,6 +60,7 @@ impl StorageSharingApi {
             .map_err(|_| SharingApiError::Unavailable)
     }
 
+    /// Routes to the SQLite account database for the given account.
     #[cfg(feature = "sqlite")]
     async fn account(
         &self,
@@ -77,6 +81,7 @@ impl StorageSharingApi {
 
 #[async_trait]
 impl SharingApiUseCases for StorageSharingApi {
+    /// Reads the sharing state, defaulting visibility to `private` when the system row is missing.
     async fn state(&self, system_id: SystemId) -> Result<SharingState, SharingApiError> {
         #[cfg(feature = "sqlite")]
         {
@@ -108,6 +113,7 @@ impl SharingApiUseCases for StorageSharingApi {
         }
     }
 
+    /// Applies a sharing update, issuing a token on first enable or rotation, and returns the new state.
     async fn update(
         &self,
         _actor: pvlog_domain::UserId,
@@ -164,6 +170,7 @@ impl SharingApiUseCases for StorageSharingApi {
         }
     }
 
+    /// Resolves an enabled sharing token to the public view of its system; unknown tokens are `NotFound`.
     async fn public_system(&self, token: &str) -> Result<PublicSystem, SharingApiError> {
         #[cfg(feature = "sqlite")]
         {
@@ -188,6 +195,7 @@ impl SharingApiUseCases for StorageSharingApi {
         }
     }
 
+    /// Lists enabled shared systems that their owners marked public, up to `limit`.
     async fn public_directory(
         &self,
         limit: u32,
@@ -231,6 +239,7 @@ impl SharingApiUseCases for StorageSharingApi {
 }
 
 impl StorageSharingApi {
+    /// Tells whether the system's visibility is `public`.
     #[cfg(feature = "sqlite")]
     async fn is_public(
         &self,
@@ -251,6 +260,7 @@ impl StorageSharingApi {
         Ok(visibility.as_deref() == Some("public"))
     }
 
+    /// Builds the public view of a system from its account database, including capacity, lifetime and daily totals.
     #[cfg(feature = "sqlite")]
     async fn public_view(
         &self,
@@ -316,6 +326,7 @@ pub fn public_location(
     }
 }
 
+/// Returns today's generation total in the system's local time zone, or `None` for an unparsable zone or missing summary.
 #[cfg(feature = "sqlite")]
 async fn daily_total(
     connection: &mut sqlx::SqliteConnection,
@@ -353,6 +364,7 @@ struct RegistryEntry {
     link_enabled: bool,
 }
 
+/// Reads the system's registry row from the management database; an unregistered system is `NotFound`.
 #[cfg(feature = "sqlite")]
 async fn read_registry(
     connection: &mut sqlx::SqliteConnection,
@@ -390,6 +402,7 @@ fn generate_token() -> String {
     )
 }
 
+/// Decodes a system identifier from a UUID blob column, failing as `Unavailable` when malformed.
 #[cfg(feature = "sqlite")]
 fn system_uuid(row: &sqlx::sqlite::SqliteRow, column: &str) -> Result<SystemId, SharingApiError> {
     uuid::Uuid::from_slice(&row.get::<Vec<u8>, _>(column))
@@ -398,6 +411,7 @@ fn system_uuid(row: &sqlx::sqlite::SqliteRow, column: &str) -> Result<SystemId, 
         .ok_or(SharingApiError::Unavailable)
 }
 
+/// Decodes an account identifier from a UUID blob column, failing as `Unavailable` when malformed.
 #[cfg(feature = "sqlite")]
 fn account_uuid(row: &sqlx::sqlite::SqliteRow, column: &str) -> Result<AccountId, SharingApiError> {
     uuid::Uuid::from_slice(&row.get::<Vec<u8>, _>(column))
@@ -406,6 +420,7 @@ fn account_uuid(row: &sqlx::sqlite::SqliteRow, column: &str) -> Result<AccountId
         .ok_or(SharingApiError::Unavailable)
 }
 
+/// Encodes a system identifier as the blob bytes used in SQL bindings.
 #[cfg(feature = "sqlite")]
 fn id_blob(id: SystemId) -> Vec<u8> {
     id.as_uuid().as_bytes().to_vec()

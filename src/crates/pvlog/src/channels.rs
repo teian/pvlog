@@ -24,6 +24,7 @@ pub struct StorageChannelApi {
 }
 
 impl StorageChannelApi {
+    /// Creates the channel API over the given database target, management repository, and clock.
     #[must_use]
     pub const fn new(
         target: DatabaseTarget,
@@ -37,6 +38,7 @@ impl StorageChannelApi {
         }
     }
 
+    /// Looks up the account owning a system; an unregistered system is `NotFound`.
     async fn account_for(&self, system_id: SystemId) -> Result<AccountId, ChannelApiError> {
         self.management
             .system_registry(system_id)
@@ -46,6 +48,7 @@ impl StorageChannelApi {
             .ok_or(ChannelApiError::NotFound)
     }
 
+    /// Routes to the SQLite account database that holds the system, failing as `Unavailable` for other targets.
     #[cfg(feature = "sqlite")]
     async fn account(
         &self,
@@ -73,6 +76,7 @@ impl StorageChannelApi {
 
 #[async_trait]
 impl ChannelApiUseCases for StorageChannelApi {
+    /// Lists the system's active channels, unassigned ones first.
     async fn list(&self, system_id: SystemId) -> Result<Vec<ChannelResponse>, ChannelApiError> {
         #[cfg(feature = "sqlite")]
         {
@@ -101,6 +105,7 @@ impl ChannelApiUseCases for StorageChannelApi {
         Err(ChannelApiError::Unavailable)
     }
 
+    /// Updates a channel's binding, drops dependent string and inverter rollups so they are rebuilt, and returns the refreshed channel.
     async fn bind(
         &self,
         _actor: UserId,
@@ -160,6 +165,7 @@ impl ChannelApiUseCases for StorageChannelApi {
         Err(ChannelApiError::Unavailable)
     }
 
+    /// Retires a channel while keeping its stored readings; an unknown channel is `NotFound`.
     async fn remove(&self, system_id: SystemId, channel_key: &str) -> Result<(), ChannelApiError> {
         #[cfg(feature = "sqlite")]
         {
@@ -194,6 +200,7 @@ impl ChannelApiUseCases for StorageChannelApi {
 }
 
 impl StorageChannelApi {
+    /// Returns the clock's current time in epoch milliseconds.
     fn now(&self) -> i64 {
         i64::try_from(self.clock.now().epoch_millis()).unwrap_or_default()
     }
@@ -237,6 +244,7 @@ async fn verify_target(
     Ok(())
 }
 
+/// Converts a `channel_definitions` row into a channel response, tolerating missing optional columns.
 #[cfg(feature = "sqlite")]
 fn channel_response(row: &sqlx::sqlite::SqliteRow) -> Result<ChannelResponse, ChannelApiError> {
     Ok(ChannelResponse {
@@ -264,11 +272,13 @@ fn channel_response(row: &sqlx::sqlite::SqliteRow) -> Result<ChannelResponse, Ch
     })
 }
 
+/// Reads a UUID blob column, failing as `Unavailable` when it is malformed.
 #[cfg(feature = "sqlite")]
 fn row_uuid(row: &sqlx::sqlite::SqliteRow, column: &str) -> Result<Uuid, ChannelApiError> {
     Uuid::from_slice(&row.get::<Vec<u8>, _>(column)).map_err(|_| ChannelApiError::Unavailable)
 }
 
+/// Encodes a system identifier as the blob bytes used in SQL bindings.
 #[cfg(feature = "sqlite")]
 fn id_blob(id: SystemId) -> Vec<u8> {
     id.as_uuid().as_bytes().to_vec()

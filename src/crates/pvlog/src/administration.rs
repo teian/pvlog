@@ -95,6 +95,7 @@ impl ManagementAdministrationApi {
 
 #[async_trait]
 impl AdministrationApiUseCases for ManagementAdministrationApi {
+    /// Lists all non-deleted accounts ordered by display name, with member and system counts; fails with `Unavailable` when the management database cannot be read.
     async fn accounts(&self) -> Result<Vec<AccountSummary>, AdministrationApiError> {
         #[cfg(feature = "sqlite")]
         {

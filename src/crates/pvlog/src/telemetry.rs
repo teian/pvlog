@@ -32,6 +32,7 @@ pub struct StorageTelemetryApi {
 }
 
 impl StorageTelemetryApi {
+    /// Creates the telemetry API over the given storage target, management registry and clock.
     #[must_use]
     pub const fn new(
         target: DatabaseTarget,
@@ -45,6 +46,7 @@ impl StorageTelemetryApi {
         }
     }
 
+    /// Looks up the account that owns a system, failing with `NotFound` for unknown systems and a repository error when the registry cannot be read.
     async fn account_for(&self, system_id: SystemId) -> Result<AccountId, ModernTelemetryError> {
         self.management
             .system_registry(system_id)
@@ -54,6 +56,7 @@ impl StorageTelemetryApi {
             .ok_or(ModernTelemetryError::NotFound)
     }
 
+    /// Opens the telemetry repository of the system's account for the configured storage target.
     async fn repository(
         &self,
         system_id: SystemId,
@@ -105,6 +108,7 @@ impl StorageTelemetryApi {
 
 #[async_trait]
 impl ModernTelemetryUseCases for StorageTelemetryApi {
+    /// Normalizes and stores one observation with its channel values; an idempotent duplicate stores nothing new and a storage failure is reported as a conflict.
     async fn ingest(
         &self,
         command: NormalizeObservation,
@@ -131,6 +135,7 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         }
     }
 
+    /// Ingests a single-system batch of up to the maximum item count, reporting a per-item status; in atomic mode any non-inserted item fails the batch as invalid.
     async fn ingest_batch(
         &self,
         commands: Vec<NormalizeObservation>,
@@ -188,6 +193,7 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         Ok(BatchIngestionResult { outcomes })
     }
 
+    /// Not supported by this storage-backed implementation; always fails with a repository `Unavailable` error.
     async fn correct(
         &self,
         _command: CorrectObservation,
@@ -195,6 +201,7 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         Err(ModernTelemetryError::Repository(PortError::Unavailable))
     }
 
+    /// Not supported by this storage-backed implementation; always fails with a repository `Unavailable` error.
     async fn delete(
         &self,
         _command: CorrectObservation,
@@ -294,6 +301,7 @@ impl StorageTelemetryApi {
         Ok(())
     }
 
+    /// Opens the routed SQLite account database for a system, failing when the target is not SQLite or routing fails.
     #[cfg(feature = "sqlite")]
     async fn sqlite_account(
         &self,
@@ -318,6 +326,7 @@ impl StorageTelemetryApi {
         .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))
     }
 
+    /// Returns the current clock time as epoch milliseconds, or zero if it does not fit in an `i64`.
     fn received_at(&self) -> i64 {
         i64::try_from(self.clock.now().epoch_millis()).unwrap_or_default()
     }
@@ -367,6 +376,7 @@ async fn ensure_channel(
     channel_id(generated.as_bytes())
 }
 
+/// Parses a channel identifier from blob bytes, failing with a repository `Unavailable` error if it is invalid.
 #[cfg(feature = "sqlite")]
 fn channel_id(bytes: &[u8]) -> Result<ChannelId, ModernTelemetryError> {
     uuid::Uuid::from_slice(bytes)
@@ -414,6 +424,7 @@ fn stored_observation(
     })
 }
 
+/// Returns the numeric value of an energy reading, whether interval or cumulative total.
 const fn energy_value(reading: EnergyReading) -> i64 {
     match reading {
         EnergyReading::Interval(value) | EnergyReading::Cumulative { total: value, .. } => {

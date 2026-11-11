@@ -54,7 +54,9 @@ pub struct ChannelBindingInput {
 
 #[async_trait::async_trait]
 pub trait ChannelApiUseCases: Send + Sync {
+    /// Lists the active channels of a system.
     async fn list(&self, system_id: SystemId) -> Result<Vec<ChannelResponse>, ChannelApiError>;
+    /// Binds a channel to a target (plant, inverter, string, or unassigned) and returns the updated channel.
     async fn bind(
         &self,
         actor: UserId,
@@ -62,6 +64,7 @@ pub trait ChannelApiUseCases: Send + Sync {
         channel_key: &str,
         input: ChannelBindingInput,
     ) -> Result<ChannelResponse, ChannelApiError>;
+    /// Retires a channel; unknown channels yield `NotFound`.
     async fn remove(&self, system_id: SystemId, channel_key: &str) -> Result<(), ChannelApiError>;
 }
 
@@ -88,6 +91,7 @@ pub fn channels_router(
         })
 }
 
+/// Handles the channel listing route after a read authorization check.
 async fn list(
     State(state): State<ChannelState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -97,6 +101,7 @@ async fn list(
     Ok(Json(state.service.list(system_id).await?))
 }
 
+/// Handles the channel binding route: authorizes the write, validates the target, then stores it.
 async fn bind(
     State(state): State<ChannelState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -113,6 +118,7 @@ async fn bind(
     ))
 }
 
+/// Handles the channel removal route and answers `204 No Content` on success.
 async fn remove(
     State(state): State<ChannelState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -137,6 +143,7 @@ fn validate(input: &ChannelBindingInput) -> Result<(), ChannelApiError> {
     }
 }
 
+/// Checks the principal's API scope and system permission, returning the acting user; a missing principal or scope is `Forbidden`.
 async fn authorize(
     state: &ChannelState,
     principal: Option<Extension<RequestPrincipal>>,
@@ -180,6 +187,7 @@ pub enum ChannelApiError {
 }
 
 impl From<RequestAuthorizationError> for ChannelApiError {
+    /// Maps authorization failures onto the channel API errors, hiding `NotFound` behind `Forbidden`.
     fn from(value: RequestAuthorizationError) -> Self {
         match value {
             RequestAuthorizationError::Forbidden | RequestAuthorizationError::NotFound => {
@@ -191,12 +199,14 @@ impl From<RequestAuthorizationError> for ChannelApiError {
 }
 
 impl From<PortError> for ChannelApiError {
+    /// Maps any port failure to `Unavailable`.
     fn from(_: PortError) -> Self {
         Self::Unavailable
     }
 }
 
 impl IntoResponse for ChannelApiError {
+    /// Renders the error as an RFC 9457 `application/problem+json` response with a matching status code.
     fn into_response(self) -> Response {
         let (status, title, detail) = match self {
             Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden", "system_access_denied"),

@@ -25,6 +25,7 @@ struct AnalyticsState {
     authorizer: Arc<dyn ModernRequestAuthorizer>,
 }
 
+/// Builds the router for the series, statistics, data-quality and analysis-export routes.
 pub fn analytics_router(
     service: Arc<dyn ModernAnalyticsUseCases>,
     authorizer: Arc<dyn ModernRequestAuthorizer>,
@@ -396,6 +397,7 @@ enum AnalyticsApiError {
 }
 
 impl From<RequestAuthorizationError> for AnalyticsApiError {
+    /// Maps any request authorization failure to a forbidden response.
     fn from(_: RequestAuthorizationError) -> Self {
         Self::Forbidden
     }

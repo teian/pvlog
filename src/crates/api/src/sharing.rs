@@ -72,14 +72,18 @@ pub struct PublicDirectoryEntry {
 
 #[async_trait::async_trait]
 pub trait SharingApiUseCases: Send + Sync {
+    /// Reads the current sharing state of a system.
     async fn state(&self, system_id: SystemId) -> Result<SharingState, SharingApiError>;
+    /// Applies a sharing update (link, token rotation, visibility) and returns the new state.
     async fn update(
         &self,
         actor: UserId,
         system_id: SystemId,
         input: SharingInput,
     ) -> Result<SharingState, SharingApiError>;
+    /// Resolves a sharing token to its public system view; unknown or revoked tokens yield `NotFound`.
     async fn public_system(&self, token: &str) -> Result<PublicSystem, SharingApiError>;
+    /// Lists up to `limit` systems whose owners made them public.
     async fn public_directory(
         &self,
         limit: u32,
@@ -115,6 +119,7 @@ pub fn sharing_router(
         })
 }
 
+/// Handles the sharing read route for owners.
 async fn read_sharing(
     State(state): State<SharingRouterState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -124,6 +129,7 @@ async fn read_sharing(
     Ok(Json(state.service.state(system_id).await?))
 }
 
+/// Handles the sharing update route, rejecting a visibility other than `private`, `unlisted`, or `public`.
 async fn update_sharing(
     State(state): State<SharingRouterState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -156,6 +162,7 @@ async fn public_directory(
     Ok(Json(state.service.public_directory(limit).await?))
 }
 
+/// Checks the principal's API scope and system permission, returning the acting user; a missing principal or scope is `Forbidden`.
 async fn authorize(
     state: &SharingRouterState,
     principal: Option<Extension<RequestPrincipal>>,
@@ -199,6 +206,7 @@ pub enum SharingApiError {
 }
 
 impl From<RequestAuthorizationError> for SharingApiError {
+    /// Maps authorization failures onto the sharing API errors, hiding `NotFound` behind `Forbidden`.
     fn from(value: RequestAuthorizationError) -> Self {
         match value {
             RequestAuthorizationError::Forbidden | RequestAuthorizationError::NotFound => {
@@ -210,6 +218,7 @@ impl From<RequestAuthorizationError> for SharingApiError {
 }
 
 impl IntoResponse for SharingApiError {
+    /// Renders the error as an RFC 9457 `application/problem+json` response with a matching status code.
     fn into_response(self) -> Response {
         let (status, title, detail) = match self {
             Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden", "system_access_denied"),

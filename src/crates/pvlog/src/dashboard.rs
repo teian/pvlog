@@ -41,6 +41,7 @@ pub struct StorageDashboardApi {
 }
 
 impl StorageDashboardApi {
+    /// Creates the dashboard service over the given storage target, management repository and clock.
     #[must_use]
     pub const fn new(
         target: DatabaseTarget,
@@ -54,6 +55,7 @@ impl StorageDashboardApi {
         }
     }
 
+    /// Lists the account and system pairs the actor may see, narrowed by the optional account and system restriction.
     async fn visible_systems(
         &self,
         actor: UserId,
@@ -94,6 +96,7 @@ impl StorageDashboardApi {
 
 #[async_trait]
 impl DashboardApiUseCases for StorageDashboardApi {
+    /// Aggregates the newest snapshot, today's accepted count and the most recent open alerts across the visible systems.
     async fn dashboard(
         &self,
         actor: UserId,
@@ -149,6 +152,7 @@ impl DashboardApiUseCases for StorageDashboardApi {
 }
 
 impl StorageDashboardApi {
+    /// Routes to the `SQLite` database of the given account, mapping any routing failure to unavailable.
     #[cfg(feature = "sqlite")]
     async fn sqlite_account(
         &self,
@@ -167,6 +171,7 @@ impl StorageDashboardApi {
         .map_err(|_| DashboardApiError::Unavailable)
     }
 
+    /// Reads the latest observation, accepted count over the last day and coverage for a system; empty for `PostgreSQL` or no data.
     async fn snapshot(
         &self,
         account_id: AccountId,
@@ -249,6 +254,7 @@ impl StorageDashboardApi {
         }
     }
 
+    /// Loads the system's most recent active alerts; yields none for `PostgreSQL`.
     async fn open_alerts(
         &self,
         account_id: AccountId,
@@ -299,6 +305,7 @@ impl StorageDashboardApi {
     }
 }
 
+/// Formats a 16-byte blob as a UUID string, or an empty string when absent or malformed.
 #[cfg(feature = "sqlite")]
 fn uuid_text(bytes: Option<&[u8]>) -> String {
     bytes
@@ -308,6 +315,7 @@ fn uuid_text(bytes: Option<&[u8]>) -> String {
         .unwrap_or_default()
 }
 
+/// Encodes a system identifier as the 16-byte blob used by `SQLite` keys.
 #[cfg(feature = "sqlite")]
 fn id_blob(id: SystemId) -> Vec<u8> {
     id.as_uuid().as_bytes().to_vec()

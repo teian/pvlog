@@ -34,6 +34,7 @@ pub enum InsightRange {
 }
 
 impl InsightRange {
+    /// Parses a range name (`live`, `day`, `week`, `month`, `year`), returning `None` for anything else.
     fn parse(value: &str) -> Option<Self> {
         match value {
             "live" => Some(Self::Live),
@@ -127,12 +128,14 @@ pub struct WeatherClassShare {
 
 #[async_trait::async_trait]
 pub trait InsightApiUseCases: Send + Sync {
+    /// Returns monthly weather-class generation shares for the last `months` months.
     async fn weather_composition(
         &self,
         actor: UserId,
         system_id: SystemId,
         months: u32,
     ) -> Result<Vec<WeatherMonth>, InsightApiError>;
+    /// Summarizes generation for a scope over the requested range, compared with the previous window.
     async fn range_summary(
         &self,
         actor: UserId,
@@ -141,17 +144,20 @@ pub trait InsightApiUseCases: Send + Sync {
         scope_id: Option<Uuid>,
         range: InsightRange,
     ) -> Result<RangeSummary, InsightApiError>;
+    /// Breaks the system's generation down per PV string for the requested range.
     async fn string_breakdown(
         &self,
         actor: UserId,
         system_id: SystemId,
         range: InsightRange,
     ) -> Result<Vec<StringContribution>, InsightApiError>;
+    /// Lists the system's tariff periods as JSON values.
     async fn tariffs(
         &self,
         actor: UserId,
         system_id: SystemId,
     ) -> Result<Vec<serde_json::Value>, InsightApiError>;
+    /// Creates a tariff period, or updates the one named by `tariff_id`, from JSON input.
     async fn upsert_tariff(
         &self,
         actor: UserId,
@@ -159,6 +165,7 @@ pub trait InsightApiUseCases: Send + Sync {
         tariff_id: Option<Uuid>,
         input: serde_json::Value,
     ) -> Result<serde_json::Value, InsightApiError>;
+    /// Deletes a tariff period; an unknown identifier yields `NotFound`.
     async fn delete_tariff(
         &self,
         actor: UserId,
@@ -216,6 +223,7 @@ pub fn insights_router(
         })
 }
 
+/// Handles the range-summary route; an unrecognized `range` is rejected as invalid input.
 async fn summary(
     State(state): State<InsightState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -239,6 +247,7 @@ async fn summary(
     ))
 }
 
+/// Handles the string-breakdown route; an unrecognized `range` is rejected as invalid input.
 async fn breakdown(
     State(state): State<InsightState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -268,6 +277,7 @@ struct CompositionParameters {
     months: Option<u32>,
 }
 
+/// Handles the weather-composition route, defaulting to 12 months and clamping the request to 1..=60.
 async fn weather_composition(
     State(state): State<InsightState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -291,6 +301,7 @@ async fn weather_composition(
     ))
 }
 
+/// Handles the tariff listing route.
 async fn list_tariffs(
     State(state): State<InsightState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -300,6 +311,7 @@ async fn list_tariffs(
     Ok(Json(state.service.tariffs(actor, system_id).await?))
 }
 
+/// Handles tariff creation and answers `201 Created` with the stored tariff.
 async fn create_tariff(
     State(state): State<InsightState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -314,6 +326,7 @@ async fn create_tariff(
     Ok((StatusCode::CREATED, Json(created)))
 }
 
+/// Handles tariff replacement for an existing tariff identifier.
 async fn update_tariff(
     State(state): State<InsightState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -329,6 +342,7 @@ async fn update_tariff(
     ))
 }
 
+/// Handles tariff deletion and answers `204 No Content` on success.
 async fn remove_tariff(
     State(state): State<InsightState>,
     principal: Option<Extension<RequestPrincipal>>,
@@ -342,6 +356,7 @@ async fn remove_tariff(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// Checks the principal's API scope and system permission, returning the acting user; a missing principal or scope is `Forbidden`.
 async fn authorize(
     state: &InsightState,
     principal: Option<Extension<RequestPrincipal>>,
@@ -386,6 +401,7 @@ pub enum InsightApiError {
 }
 
 impl From<RequestAuthorizationError> for InsightApiError {
+    /// Maps authorization failures onto the insight API errors, hiding `NotFound` behind `Forbidden`.
     fn from(value: RequestAuthorizationError) -> Self {
         match value {
             RequestAuthorizationError::Forbidden | RequestAuthorizationError::NotFound => {
@@ -397,6 +413,7 @@ impl From<RequestAuthorizationError> for InsightApiError {
 }
 
 impl IntoResponse for InsightApiError {
+    /// Renders the error as an RFC 9457 `application/problem+json` response with a matching status code.
     fn into_response(self) -> Response {
         let (status, title, detail) = match self {
             Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden", "system_access_denied"),

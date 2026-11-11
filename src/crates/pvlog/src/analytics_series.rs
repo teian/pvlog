@@ -48,6 +48,7 @@ impl SeriesScope {
         }
     }
 
+    /// Wire name of the scope kind as stored in the rollup `scope_kind` column.
     const fn name(self) -> &'static str {
         match self {
             Self::System => "system",
@@ -75,6 +76,7 @@ pub struct AccountSeriesRepository {
 }
 
 impl AccountSeriesRepository {
+    /// Creates a repository reading one account database for the given scope and half-open time range.
     #[must_use]
     pub const fn new(
         target: DatabaseTarget,
@@ -95,6 +97,7 @@ impl AccountSeriesRepository {
 
 #[async_trait]
 impl SeriesQueryRepository for AccountSeriesRepository {
+    /// Loads the rows the plan selects (raw or rollup) and builds one series per requested field.
     async fn execute_plan(
         &self,
         system_id: SystemId,
@@ -144,6 +147,7 @@ struct RollupValues {
 }
 
 impl AccountSeriesRepository {
+    /// Loads raw samples for the system from the configured backend.
     async fn raw_rows(
         &self,
         system_id: SystemId,
@@ -160,6 +164,7 @@ impl AccountSeriesRepository {
         }
     }
 
+    /// Loads rollup samples at the given resolution from the configured backend.
     async fn rollup_rows(
         &self,
         system_id: SystemId,
@@ -263,6 +268,7 @@ impl AccountSeriesRepository {
         ))
     }
 
+    /// Reads raw `SQLite` samples, preferring metered channel sums for inverter and string scopes and overlaying them onto plant rows for the system scope.
     #[cfg(feature = "sqlite")]
     async fn sqlite_raw(
         &self,
@@ -318,6 +324,7 @@ impl AccountSeriesRepository {
         })
     }
 
+    /// Fallback when `SQLite` support is compiled out; always reports storage as unavailable.
     #[cfg(not(feature = "sqlite"))]
     async fn sqlite_raw(
         &self,
@@ -328,6 +335,7 @@ impl AccountSeriesRepository {
         Err(SeriesQueryRepositoryError::Unavailable)
     }
 
+    /// Reads raw `PostgreSQL` hot observations for the system within the requested range.
     #[cfg(feature = "postgres")]
     async fn postgres_raw(
         &self,
@@ -371,6 +379,7 @@ impl AccountSeriesRepository {
             .collect())
     }
 
+    /// Fallback when `PostgreSQL` support is compiled out; always reports storage as unavailable.
     #[cfg(not(feature = "postgres"))]
     async fn postgres_raw(
         &self,
@@ -380,6 +389,7 @@ impl AccountSeriesRepository {
         Err(SeriesQueryRepositoryError::Unavailable)
     }
 
+    /// Reads the latest-generation `SQLite` rollup buckets for the scope and resolution.
     #[cfg(feature = "sqlite")]
     async fn sqlite_rollups(
         &self,
@@ -434,6 +444,7 @@ impl AccountSeriesRepository {
             .collect())
     }
 
+    /// Fallback when `SQLite` support is compiled out; always reports storage as unavailable.
     #[cfg(not(feature = "sqlite"))]
     async fn sqlite_rollups(
         &self,
@@ -445,6 +456,7 @@ impl AccountSeriesRepository {
         Err(SeriesQueryRepositoryError::Unavailable)
     }
 
+    /// Reads the latest-generation `PostgreSQL` rollup buckets for the scope and resolution.
     #[cfg(feature = "postgres")]
     async fn postgres_rollups(
         &self,
@@ -504,6 +516,7 @@ impl AccountSeriesRepository {
             .collect())
     }
 
+    /// Fallback when `PostgreSQL` support is compiled out; always reports storage as unavailable.
     #[cfg(not(feature = "postgres"))]
     async fn postgres_rollups(
         &self,
@@ -514,6 +527,7 @@ impl AccountSeriesRepository {
         Err(SeriesQueryRepositoryError::Unavailable)
     }
 
+    /// Routes to the `SQLite` database of the owning account, mapping any routing failure to unavailable.
     #[cfg(feature = "sqlite")]
     async fn sqlite_account(
         &self,
@@ -532,6 +546,7 @@ impl AccountSeriesRepository {
     }
 }
 
+/// Converts a rollup bucket into a canonical sample, deriving mean power from energy over the bucket width.
 fn rollup_sample(values: &RollupValues) -> SampleRow {
     let width = (values.bucket_end - values.bucket_start).max(1);
     let grid = match (values.grid_import_energy_wh, values.grid_export_energy_wh) {
@@ -570,6 +585,7 @@ fn optional<E>(decoded: Result<Option<i64>, E>) -> Option<i64> {
     decoded.ok().flatten()
 }
 
+/// Narrows stored quality flags to `u32`, treating missing or out-of-range values as no flags.
 fn narrow_flags(stored: Option<i64>) -> u32 {
     stored
         .and_then(|flags| u32::try_from(flags).ok())
@@ -583,6 +599,7 @@ fn mean_watts(energy_wh: i64, width_millis: i64) -> i64 {
         .map_or(0, |scaled| scaled / width_millis)
 }
 
+/// Storage name of a query resolution; raw falls back to the fifteen-minute rollup.
 const fn resolution_name(resolution: QueryResolution) -> &'static str {
     match resolution {
         QueryResolution::Raw | QueryResolution::FifteenMinutes => "fifteen_minute",
@@ -593,6 +610,7 @@ const fn resolution_name(resolution: QueryResolution) -> &'static str {
     }
 }
 
+/// Unit in which a series field is reported.
 const fn unit_for(field: SeriesField) -> SeriesUnit {
     match field {
         SeriesField::GenerationPower
@@ -612,6 +630,7 @@ const fn unit_for(field: SeriesField) -> SeriesUnit {
     }
 }
 
+/// Picks the sample value backing a field, or `None` when the field has no stored series.
 fn value_for(field: SeriesField, row: &SampleRow) -> Option<i64> {
     match field {
         SeriesField::GenerationPower => row.generation_power_watts,
@@ -633,6 +652,7 @@ fn value_for(field: SeriesField, row: &SampleRow) -> Option<i64> {
     }
 }
 
+/// Builds the planned series for one field from the samples, skipping samples without a value.
 fn series_for(field: SeriesField, rows: &[SampleRow]) -> PlannedSeries {
     let points = rows
         .iter()
@@ -674,6 +694,7 @@ fn gaps_for(rows: &[SampleRow]) -> Vec<SeriesGap> {
         .collect()
 }
 
+/// Encodes a system identifier as the 16-byte blob used by `SQLite` keys.
 #[cfg(feature = "sqlite")]
 fn id_blob(id: SystemId) -> Vec<u8> {
     id.as_uuid().as_bytes().to_vec()

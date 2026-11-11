@@ -23,6 +23,7 @@ pub struct HttpWeatherTransport {
 }
 
 impl HttpWeatherTransport {
+    /// Creates a transport that resolves credential secrets through the given resolver.
     #[must_use]
     pub fn new(secrets: Arc<dyn pvlog_application::SecretResolver>) -> Self {
         Self {
@@ -34,6 +35,7 @@ impl HttpWeatherTransport {
 
 #[async_trait]
 impl WeatherJsonTransport for HttpWeatherTransport {
+    /// Performs a GET with the given timeout, sending a bearer token resolved from the secret reference when one is supplied.
     async fn get(
         &self,
         url: Url,
@@ -150,11 +152,13 @@ pub async fn store_run(
     Ok(())
 }
 
+/// Converts a timestamp to epoch milliseconds, or zero if it does not fit in an `i64`.
 #[cfg(feature = "sqlite")]
 fn epoch(value: pvlog_domain::UtcTimestamp) -> i64 {
     i64::try_from(value.epoch_millis()).unwrap_or_default()
 }
 
+/// Returns the stored name of the run's weather data kind.
 #[cfg(feature = "sqlite")]
 const fn kind_name(run: &NormalizedWeatherRun) -> &'static str {
     match run.kind {
