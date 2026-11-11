@@ -49,6 +49,10 @@ fn a_warm_cell_reduces_output_and_a_missing_reading_does_not() {
         "a hot cell must produce less than the rating point"
     );
     assert_eq!(
+        warm_output, 4_335,
+        "a 60 C cell loses 35 C x 0.38 %/C of the rated output"
+    );
+    assert_eq!(
         unknown_output, 5_000,
         "a missing ambient reading must not derate"
     );

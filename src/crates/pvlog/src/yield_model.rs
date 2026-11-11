@@ -90,7 +90,7 @@ fn apply_temperature(power_watts: i64, weather: IntervalWeather) -> i64 {
     let Some(ambient) = weather.ambient_temperature_milli_c else {
         return power_watts;
     };
-    let cell = ambient + weather.plane_of_array_wm2 * CELL_RISE_MILLI_C_PER_WM2 / 100;
+    let cell = ambient + weather.plane_of_array_wm2 * CELL_RISE_MILLI_C_PER_WM2;
     let excess = cell - RATING_TEMPERATURE_MILLI_C;
     if excess <= 0 {
         return power_watts;
