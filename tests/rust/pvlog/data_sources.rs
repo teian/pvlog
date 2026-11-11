@@ -237,6 +237,47 @@ async fn verify_lifecycle(
     assert_eq!(garage.readings_last_day, 1);
     assert_eq!(garage.last_reading_at_epoch_millis, Some(START + 61_000));
 
+    // A test reading proves the connection without becoming telemetry.
+    let sent = api
+        .send_test_reading(owner, account_id, system_id, source.id)
+        .await
+        .map_err(failure)?;
+    assert!(sent.test);
+    assert_eq!(sent.data_source_id, Some(source.id));
+    let mut from_logger = reading(system_id, Some(second_credential), START + 62_000);
+    from_logger.test = true;
+    telemetry.ingest(from_logger).await?;
+    let after_tests = api.list(account_id, system_id).await.map_err(failure)?;
+    let counts = |entries: &[pvlog_api::DataSourceResponse]| -> Vec<u64> {
+        entries
+            .iter()
+            .map(|entry| entry.readings_last_day)
+            .collect()
+    };
+    assert_eq!(
+        counts(&after_tests),
+        counts(&listed),
+        "test readings are not counted as delivered data"
+    );
+    assert_eq!(
+        after_tests
+            .iter()
+            .map(|entry| entry.last_reading_at_epoch_millis)
+            .collect::<Vec<_>>(),
+        listed
+            .iter()
+            .map(|entry| entry.last_reading_at_epoch_millis)
+            .collect::<Vec<_>>()
+    );
+    api.delete_test_readings(owner, account_id, system_id)
+        .await
+        .map_err(failure)?;
+    assert_eq!(
+        counts(&api.list(account_id, system_id).await.map_err(failure)?),
+        counts(&listed),
+        "removing test readings removes no real reading"
+    );
+
     // Exactly three status intervals of silence are still tolerated.
     clock.set(START + 60_000 + 3 * STATUS_INTERVAL_SECONDS * 1_000);
     assert_eq!(
@@ -344,6 +385,7 @@ async fn verify_lifecycle(
             "system.data_source.credential.regenerated",
             "system.data_source.deleted",
             "system.data_source.renamed",
+            "system.data_source.test_reading.sent",
         ])
     );
     for event in &audit {
@@ -382,6 +424,7 @@ fn reading(
     NormalizeObservation {
         system_id,
         credential_id,
+        test: false,
         observed_at,
         received_at: observed_at,
         generation_power: Some((1_200, PowerUnit::Watts)),

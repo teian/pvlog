@@ -5,26 +5,29 @@ use std::{collections::BTreeSet, sync::Arc};
 use async_trait::async_trait;
 use pvlog_api::{
     CreateDataSourceInput, DataSourceApiError, DataSourceApiUseCases, DataSourceConfiguration,
-    DataSourceResponse, IssuedDataSource, RenameDataSourceInput,
+    DataSourceResponse, IssuedDataSource, RenameDataSourceInput, TestReadingResponse,
 };
 use pvlog_application::{
     ApiTokenRecord, ApiTokenService, Clock, SOURCE_PROFILES, SourceProfile, connection_state,
     render_configuration, source_profile,
 };
 use pvlog_domain::{
-    AccountId, ApiCredentialId, ApiScope, AuditEventId, DataSourceId, SystemId, UserId,
+    AccountId, ApiCredentialId, ApiScope, AuditEventId, DataSourceId, MeasurementValues, SystemId,
+    UserId, Watts,
 };
 use pvlog_storage::{
     AccountConfigurationRepository, AuditRecord, DataSourceActivity, DataSourceRecord,
     DataSourceRepository, DatabaseTarget, ManagementRepository,
     PostgresAccountConfigurationRepository, PostgresDataSourceRepository,
     SqliteAccountConfigurationRepository, SqliteAccountPoolConfig, SqliteAccountPoolRouter,
-    SqliteDataSourceRepository,
+    SqliteDataSourceRepository, TestReadingRecord,
 };
 use secrecy::{ExposeSecret as _, SecretString};
 
 /// Window over which a source's recent readings are counted.
 const RECENT_WINDOW_MILLIS: i64 = 24 * 60 * 60 * 1_000;
+/// Power a user-triggered test reading reports; small enough to be obviously artificial.
+const TEST_READING_POWER_WATTS: i64 = 100;
 /// Longest data source name accepted.
 const MAXIMUM_NAME_LENGTH: usize = 80;
 
@@ -544,5 +547,66 @@ impl DataSourceApiUseCases for StorageDataSourceApi {
             "system.data_source.deleted",
         )
         .await
+    }
+    async fn send_test_reading(
+        &self,
+        actor: UserId,
+        account_id: AccountId,
+        system_id: SystemId,
+        id: DataSourceId,
+    ) -> Result<TestReadingResponse, DataSourceApiError> {
+        let repositories = self.repositories(account_id).await?;
+        let record = self.load(&repositories, system_id, id).await?;
+        let now = self.now()?;
+        let values = serde_json::to_value(MeasurementValues {
+            generation_power: Some(Watts::new(TEST_READING_POWER_WATTS)),
+            ..MeasurementValues::default()
+        })
+        .map_err(|_| DataSourceApiError::Unavailable)?;
+        let reading = TestReadingRecord {
+            id: uuid::Uuid::now_v7(),
+            system_id,
+            data_source_id: Some(record.id),
+            measured_at: now,
+            received_at: now,
+            values,
+        };
+        repositories
+            .sources
+            .save_test_reading(&reading)
+            .await
+            .map_err(|_| DataSourceApiError::Unavailable)?;
+        self.audit(
+            actor,
+            account_id,
+            system_id,
+            id,
+            "system.data_source.test_reading.sent",
+        )
+        .await?;
+        Ok(TestReadingResponse {
+            id: reading.id,
+            system_id,
+            data_source_id: reading.data_source_id,
+            measured_at_epoch_millis: reading.measured_at,
+            received_at_epoch_millis: reading.received_at,
+            values: reading.values,
+            test: true,
+        })
+    }
+
+    async fn delete_test_readings(
+        &self,
+        _actor: UserId,
+        account_id: AccountId,
+        system_id: SystemId,
+    ) -> Result<(), DataSourceApiError> {
+        self.repositories(account_id)
+            .await?
+            .sources
+            .delete_test_readings(system_id)
+            .await
+            .map(|_| ())
+            .map_err(|_| DataSourceApiError::Unavailable)
     }
 }

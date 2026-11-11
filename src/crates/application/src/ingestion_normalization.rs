@@ -42,6 +42,9 @@ pub struct NormalizeObservation {
     pub system_id: SystemId,
     /// API credential that delivered the reading; identifies its data source.
     pub credential_id: Option<ApiCredentialId>,
+    /// Marks a reading sent only to prove the connection; it is validated like
+    /// any other but kept out of the system's telemetry.
+    pub test: bool,
     pub observed_at: UtcTimestamp,
     pub received_at: UtcTimestamp,
     pub generation_power: Option<(i64, PowerUnit)>,

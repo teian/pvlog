@@ -46,6 +46,21 @@ pub struct DataSourceActivity {
     pub recent_readings: u64,
 }
 
+/// A reading sent to prove that a data source can deliver.
+///
+/// It is stored apart from real telemetry and never enters a total.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TestReadingRecord {
+    pub id: Uuid,
+    pub system_id: SystemId,
+    /// Data source the test was sent through, when it is known.
+    pub data_source_id: Option<DataSourceId>,
+    pub measured_at: i64,
+    pub received_at: i64,
+    /// Normalized values of the reading, as an API response would show them.
+    pub values: serde_json::Value,
+}
+
 /// Persistence of data sources within one account.
 #[async_trait]
 pub trait DataSourceRepository: Send + Sync {
@@ -70,6 +85,21 @@ pub trait DataSourceRepository: Send + Sync {
         &self,
         credential_id: ApiCredentialId,
     ) -> Result<Option<DataSourceRecord>, AccountRepositoryError>;
+    /// Stores one test reading.
+    async fn save_test_reading(
+        &self,
+        record: &TestReadingRecord,
+    ) -> Result<(), AccountRepositoryError>;
+    /// Returns the most recently received test reading of a system.
+    async fn latest_test_reading(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Option<TestReadingRecord>, AccountRepositoryError>;
+    /// Removes every test reading of a system and reports how many there were.
+    async fn delete_test_readings(
+        &self,
+        system_id: SystemId,
+    ) -> Result<u64, AccountRepositoryError>;
     /// Summarizes the readings each data source of a system delivered, counting
     /// those received at or after `recent_since`.
     async fn data_source_activity(
@@ -219,6 +249,76 @@ impl DataSourceRepository for SqliteDataSourceRepository {
         .as_ref()
         .map(sqlite_record)
         .transpose()
+    }
+
+    async fn save_test_reading(
+        &self,
+        record: &TestReadingRecord,
+    ) -> Result<(), AccountRepositoryError> {
+        let mut writer = self.account.acquire_writer().await?;
+        sqlx::query(
+            "INSERT INTO telemetry_test_readings \
+             (id,system_id,data_source_id,measured_at,received_at,values_json) \
+             VALUES (?,?,?,?,?,?)",
+        )
+        .bind(blob(record.id))
+        .bind(blob(record.system_id.as_uuid()))
+        .bind(record.data_source_id.map(|id| blob(id.as_uuid())))
+        .bind(record.measured_at)
+        .bind(record.received_at)
+        .bind(serde_json::to_string(&record.values)?)
+        .execute(writer.connection())
+        .await?;
+        Ok(())
+    }
+
+    async fn latest_test_reading(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Option<TestReadingRecord>, AccountRepositoryError> {
+        let mut connection = self.account.acquire().await?;
+        let row = sqlx::query(
+            "SELECT id,data_source_id,measured_at,received_at,values_json \
+             FROM telemetry_test_readings WHERE system_id=? \
+             ORDER BY received_at DESC,id DESC LIMIT 1",
+        )
+        .bind(blob(system_id.as_uuid()))
+        .fetch_optional(&mut *connection)
+        .await?;
+        row.map(|row| {
+            Ok(TestReadingRecord {
+                id: Uuid::from_slice(&row.get::<Vec<u8>, _>("id"))
+                    .map_err(|_| AccountRepositoryError::InvalidStoredValue)?,
+                system_id,
+                data_source_id: row
+                    .get::<Option<Vec<u8>>, _>("data_source_id")
+                    .map(|bytes| {
+                        Uuid::from_slice(&bytes)
+                            .ok()
+                            .and_then(|uuid| DataSourceId::from_uuid(uuid).ok())
+                            .ok_or(AccountRepositoryError::InvalidStoredValue)
+                    })
+                    .transpose()?,
+                measured_at: row.get("measured_at"),
+                received_at: row.get("received_at"),
+                values: serde_json::from_str(&row.get::<String, _>("values_json"))?,
+            })
+        })
+        .transpose()
+    }
+
+    async fn delete_test_readings(
+        &self,
+        system_id: SystemId,
+    ) -> Result<u64, AccountRepositoryError> {
+        let mut writer = self.account.acquire_writer().await?;
+        Ok(
+            sqlx::query("DELETE FROM telemetry_test_readings WHERE system_id=?")
+                .bind(blob(system_id.as_uuid()))
+                .execute(writer.connection())
+                .await?
+                .rows_affected(),
+        )
     }
 
     async fn data_source_activity(
@@ -390,6 +490,79 @@ impl DataSourceRepository for PostgresDataSourceRepository {
         .await?;
         connection.close().await?;
         row.as_ref().map(postgres_record).transpose()
+    }
+
+    async fn save_test_reading(
+        &self,
+        record: &TestReadingRecord,
+    ) -> Result<(), AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        sqlx::query(
+            "INSERT INTO telemetry.test_readings \
+             (account_id,id,system_id,data_source_id,measured_at,received_at,reading_values) \
+             VALUES ($1,$2,$3,$4,$5,$6,$7)",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(record.id)
+        .bind(record.system_id.as_uuid())
+        .bind(record.data_source_id.map(|id| id.as_uuid()))
+        .bind(record.measured_at)
+        .bind(record.received_at)
+        .bind(sqlx::types::Json(&record.values))
+        .execute(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(())
+    }
+
+    async fn latest_test_reading(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Option<TestReadingRecord>, AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        let row = sqlx::query(
+            "SELECT id,data_source_id,measured_at,received_at,reading_values \
+             FROM telemetry.test_readings WHERE account_id=$1 AND system_id=$2 \
+             ORDER BY received_at DESC,id DESC LIMIT 1",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .fetch_optional(&mut connection)
+        .await?;
+        connection.close().await?;
+        row.map(|row| {
+            Ok(TestReadingRecord {
+                id: row.get("id"),
+                system_id,
+                data_source_id: row
+                    .get::<Option<Uuid>, _>("data_source_id")
+                    .map(DataSourceId::from_uuid)
+                    .transpose()
+                    .map_err(|_| AccountRepositoryError::InvalidStoredValue)?,
+                measured_at: row.get("measured_at"),
+                received_at: row.get("received_at"),
+                values: row
+                    .get::<sqlx::types::Json<serde_json::Value>, _>("reading_values")
+                    .0,
+            })
+        })
+        .transpose()
+    }
+
+    async fn delete_test_readings(
+        &self,
+        system_id: SystemId,
+    ) -> Result<u64, AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        let removed =
+            sqlx::query("DELETE FROM telemetry.test_readings WHERE account_id=$1 AND system_id=$2")
+                .bind(self.account_id.as_uuid())
+                .bind(system_id.as_uuid())
+                .execute(&mut connection)
+                .await?
+                .rows_affected();
+        connection.close().await?;
+        Ok(removed)
     }
 
     async fn data_source_activity(

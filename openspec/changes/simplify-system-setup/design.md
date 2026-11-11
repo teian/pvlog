@@ -84,7 +84,7 @@ _Alternative considered:_ reintroduce system keys with a custom header or push U
 
 The data-source creation response includes `serverUrl`, `systemId`, `apiKey`, and `snippets[]` (`{id, title, language, content}`) for the chosen profile: a `[pvlog]` export section for smalog's `config.toml` (decision 7a) with the key referenced as `${PVLOG_API_KEY}` plus the matching environment line, an environment file for `sbfspot-push`, a `curl` test call and a JSON body for the generic profile. The server knows its public base URL and the exact field names; the client only displays and copies. Snippets containing the secret exist only in that one response.
 
-A "Send test reading" button in step 3 posts one clearly flagged test observation through the new credential, so a user can verify the path before the logger is configured. Test readings carry a quality flag and are excluded from energy totals.
+A "Send test reading" button in step 3 stores one clearly marked test reading for the data source, so a user can verify the path before the logger is configured; a logger can do the same by sending a reading with `test: true` through its credential. Test readings are validated like real ones but kept in their own table, so no total, statistic or forecast can include them and removing them cannot touch telemetry.
 
 ### 5. Setup status is derived on the server and drives every hint
 

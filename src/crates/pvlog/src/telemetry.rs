@@ -105,6 +105,67 @@ impl StorageTelemetryApi {
         }
     }
 
+    /// Opens the data source repository of the system's account.
+    async fn data_source_repository(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Box<dyn DataSourceRepository>, ModernTelemetryError> {
+        let unavailable = || ModernTelemetryError::Repository(PortError::Unavailable);
+        match &self.target {
+            DatabaseTarget::Sqlite { .. } => {
+                #[cfg(feature = "sqlite")]
+                {
+                    Ok(Box::new(pvlog_storage::SqliteDataSourceRepository::new(
+                        self.sqlite_account(system_id).await?,
+                    )))
+                }
+                #[cfg(not(feature = "sqlite"))]
+                {
+                    Err(unavailable())
+                }
+            }
+            DatabaseTarget::Postgres { url } => {
+                #[cfg(feature = "postgres")]
+                {
+                    let _ = unavailable;
+                    Ok(Box::new(pvlog_storage::PostgresDataSourceRepository::new(
+                        url.clone(),
+                        self.account_for(system_id).await?,
+                    )))
+                }
+                #[cfg(not(feature = "postgres"))]
+                {
+                    let _ = url;
+                    Err(unavailable())
+                }
+            }
+        }
+    }
+
+    /// Keeps a test reading where it cannot be mistaken for telemetry.
+    async fn store_test_reading(
+        &self,
+        system_id: SystemId,
+        data_source_id: Option<DataSourceId>,
+        observation: &CanonicalObservation,
+        received_at: i64,
+    ) -> Result<(), ModernTelemetryError> {
+        let unavailable = || ModernTelemetryError::Repository(PortError::Unavailable);
+        self.data_source_repository(system_id)
+            .await?
+            .save_test_reading(&pvlog_storage::TestReadingRecord {
+                id: observation.id.as_uuid(),
+                system_id,
+                data_source_id,
+                measured_at: i64::try_from(observation.observed_at.epoch_millis())
+                    .map_err(|_| ModernTelemetryError::Invalid)?,
+                received_at,
+                values: serde_json::to_value(&observation.values).map_err(|_| unavailable())?,
+            })
+            .await
+            .map_err(|_| unavailable())
+    }
+
     /// Finds the data source a credential belongs to, so its readings are
     /// attributed to it. A reading from a signed-in user or from a credential
     /// that belongs to no data source has none.
@@ -117,34 +178,7 @@ impl StorageTelemetryApi {
             return Ok(None);
         };
         let unavailable = || ModernTelemetryError::Repository(PortError::Unavailable);
-        let repository: Box<dyn DataSourceRepository> = match &self.target {
-            DatabaseTarget::Sqlite { .. } => {
-                #[cfg(feature = "sqlite")]
-                {
-                    Box::new(pvlog_storage::SqliteDataSourceRepository::new(
-                        self.sqlite_account(system_id).await?,
-                    ))
-                }
-                #[cfg(not(feature = "sqlite"))]
-                {
-                    return Err(unavailable());
-                }
-            }
-            DatabaseTarget::Postgres { url } => {
-                #[cfg(feature = "postgres")]
-                {
-                    Box::new(pvlog_storage::PostgresDataSourceRepository::new(
-                        url.clone(),
-                        self.account_for(system_id).await?,
-                    ))
-                }
-                #[cfg(not(feature = "postgres"))]
-                {
-                    let _ = url;
-                    return Err(unavailable());
-                }
-            }
-        };
+        let repository = self.data_source_repository(system_id).await?;
         Ok(repository
             .data_source_by_credential(credential_id)
             .await
@@ -168,6 +202,15 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         let data_source = self
             .data_source_for(system_id, command.credential_id)
             .await?;
+        if command.test {
+            // Checked like a real reading, but kept apart: it registers no
+            // channel and enters no total.
+            let observation =
+                normalize_observation(command).map_err(|_| ModernTelemetryError::Invalid)?;
+            self.store_test_reading(system_id, data_source, &observation, received_at)
+                .await?;
+            return Ok(observation);
+        }
         let command = self
             .resolve_channels(system_id, command, received_at)
             .await?;

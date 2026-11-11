@@ -78,6 +78,21 @@ struct IssuedBody {
     configuration: Option<ConfigurationBody>,
 }
 
+/// A reading that only proves a data source can deliver.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TestReadingResponse {
+    pub id: uuid::Uuid,
+    pub system_id: SystemId,
+    pub data_source_id: Option<DataSourceId>,
+    pub measured_at_epoch_millis: i64,
+    pub received_at_epoch_millis: i64,
+    /// Normalized values of the reading.
+    pub values: serde_json::Value,
+    /// Always true; states in the payload that this is not telemetry.
+    pub test: bool,
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDataSourceInput {
@@ -136,6 +151,21 @@ pub trait DataSourceApiUseCases: Send + Sync {
         system_id: SystemId,
         id: DataSourceId,
     ) -> Result<(), DataSourceApiError>;
+    /// Stores one marked test reading attributed to the data source.
+    async fn send_test_reading(
+        &self,
+        actor: UserId,
+        account_id: AccountId,
+        system_id: SystemId,
+        id: DataSourceId,
+    ) -> Result<TestReadingResponse, DataSourceApiError>;
+    /// Removes the test readings of a system and nothing else.
+    async fn delete_test_readings(
+        &self,
+        actor: UserId,
+        account_id: AccountId,
+        system_id: SystemId,
+    ) -> Result<(), DataSourceApiError>;
 }
 
 #[derive(Clone)]
@@ -162,6 +192,14 @@ pub fn data_sources_router(
         .route(
             "/api/v1/systems/{system_id}/data-sources/{data_source_id}/credential",
             post(regenerate),
+        )
+        .route(
+            "/api/v1/systems/{system_id}/data-sources/{data_source_id}/test-reading",
+            post(send_test_reading),
+        )
+        .route(
+            "/api/v1/systems/{system_id}/test-readings",
+            axum::routing::delete(delete_test_readings),
         )
         .with_state(DataSourceState {
             service,
@@ -317,6 +355,55 @@ async fn remove(
             system_id,
             id,
         )
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn send_test_reading(
+    State(state): State<DataSourceState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path((system_id, id)): Path<(SystemId, DataSourceId)>,
+) -> Result<(StatusCode, Json<TestReadingResponse>), DataSourceApiError> {
+    let authorized = authorize(
+        &state,
+        principal,
+        system_id,
+        true,
+        "system.data_source.test_reading.send",
+    )
+    .await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(
+            state
+                .service
+                .send_test_reading(
+                    authorized.actor_user_id,
+                    authorized.account_id,
+                    system_id,
+                    id,
+                )
+                .await?,
+        ),
+    ))
+}
+
+async fn delete_test_readings(
+    State(state): State<DataSourceState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path(system_id): Path<SystemId>,
+) -> Result<StatusCode, DataSourceApiError> {
+    let authorized = authorize(
+        &state,
+        principal,
+        system_id,
+        true,
+        "system.test_readings.delete",
+    )
+    .await?;
+    state
+        .service
+        .delete_test_readings(authorized.actor_user_id, authorized.account_id, system_id)
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }

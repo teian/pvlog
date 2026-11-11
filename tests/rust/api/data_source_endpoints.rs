@@ -11,7 +11,8 @@ use axum::{
 use pvlog_api::{
     AuthorizedRequest, CreateDataSourceInput, DataSourceApiError, DataSourceApiUseCases,
     DataSourceConfiguration, DataSourceResponse, IssuedDataSource, ModernRequestAuthorizer,
-    RenameDataSourceInput, RequestAuthorizationError, RequestPrincipal, data_sources_router,
+    RenameDataSourceInput, RequestAuthorizationError, RequestPrincipal, TestReadingResponse,
+    data_sources_router,
 };
 use pvlog_application::{
     ConnectionState, SOURCE_PROFILES, SourceProfile, render_configuration, source_profile,
@@ -154,6 +155,12 @@ async fn only_principals_that_manage_the_system_change_data_sources() -> Result<
             (Method::POST, format!("{one}/credential"), None),
             (Method::PUT, one.clone(), Some(r#"{"name":"Other"}"#)),
             (Method::DELETE, one.clone(), None),
+            (Method::POST, format!("{one}/test-reading"), None),
+            (
+                Method::DELETE,
+                format!("/api/v1/systems/{system}/test-readings"),
+                None,
+            ),
         ] {
             let (status, _, _) = send(
                 app(principal.clone(), may_manage),
@@ -193,6 +200,32 @@ async fn only_principals_that_manage_the_system_change_data_sources() -> Result<
     )
     .await?;
     assert_eq!(status, StatusCode::OK);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_test_reading_is_marked_as_one() -> Result<(), Box<dyn Error>> {
+    let system = SystemId::new();
+    let source = DataSourceId::new();
+    let (status, _, body) = send(
+        app(user(), true),
+        Method::POST,
+        format!("/api/v1/systems/{system}/data-sources/{source}/test-reading"),
+        None,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["test"], true);
+    assert_eq!(body["dataSourceId"], source.to_string());
+
+    let (status, _, _) = send(
+        app(user(), true),
+        Method::DELETE,
+        format!("/api/v1/systems/{system}/test-readings"),
+        None,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::NO_CONTENT);
     Ok(())
 }
 
@@ -375,6 +408,33 @@ impl DataSourceApiUseCases for Stub {
         _account_id: AccountId,
         _system_id: SystemId,
         _id: DataSourceId,
+    ) -> Result<(), DataSourceApiError> {
+        Ok(())
+    }
+
+    async fn send_test_reading(
+        &self,
+        _actor: UserId,
+        _account_id: AccountId,
+        system_id: SystemId,
+        id: DataSourceId,
+    ) -> Result<TestReadingResponse, DataSourceApiError> {
+        Ok(TestReadingResponse {
+            id: uuid::Uuid::now_v7(),
+            system_id,
+            data_source_id: Some(id),
+            measured_at_epoch_millis: 1,
+            received_at_epoch_millis: 1,
+            values: serde_json::json!({ "generation_power": 100 }),
+            test: true,
+        })
+    }
+
+    async fn delete_test_readings(
+        &self,
+        _actor: UserId,
+        _account_id: AccountId,
+        _system_id: SystemId,
     ) -> Result<(), DataSourceApiError> {
         Ok(())
     }

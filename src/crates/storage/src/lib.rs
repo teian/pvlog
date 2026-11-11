@@ -66,7 +66,9 @@ pub use compaction::{
 pub use data_source_repository::PostgresDataSourceRepository;
 #[cfg(feature = "sqlite")]
 pub use data_source_repository::SqliteDataSourceRepository;
-pub use data_source_repository::{DataSourceActivity, DataSourceRecord, DataSourceRepository};
+pub use data_source_repository::{
+    DataSourceActivity, DataSourceRecord, DataSourceRepository, TestReadingRecord,
+};
 #[cfg(feature = "postgres")]
 pub use external_identity_repository::PostgresExternalIdentityRepository;
 #[cfg(feature = "sqlite")]

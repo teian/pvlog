@@ -59,6 +59,10 @@ struct ObservationBody {
     /// Per-meter readings keyed by the source's own channel names.
     #[serde(default)]
     channels: BTreeMap<String, ChannelReadingBody>,
+    /// Marks a reading sent only to prove the connection. It is validated but
+    /// stored apart from the system's telemetry.
+    #[serde(default)]
+    test: bool,
 }
 
 #[derive(Clone, Deserialize)]
@@ -123,6 +127,10 @@ async fn batch(
 ) -> Result<Response, TelemetryApiError> {
     let writer =
         authorize_telemetry_write(&state, principal, system_id, "telemetry.ingest_batch").await?;
+    // A test reading proves one connection; it has no place in a batch of data.
+    if body.items.iter().any(|item| item.observation.test) {
+        return Err(TelemetryApiError::Invalid);
+    }
     let commands = body
         .items
         .into_iter()
@@ -271,6 +279,7 @@ fn command(
     Ok(NormalizeObservation {
         system_id,
         credential_id,
+        test: body.test,
         observed_at,
         received_at: observed_at,
         generation_power: body
