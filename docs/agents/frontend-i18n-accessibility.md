@@ -23,7 +23,7 @@ Use these rules for frontend internationalization and accessibility.
   1. Add the key + English value to `src/shared/lib/i18n/locales/en.json`.
   2. Add the key + German value to `src/shared/lib/i18n/locales/de.json`.
   3. Use `t('key')` in the component via the `useTranslation` hook.
-- **ESLint Enforcement**: The rule `react/jsx-no-literals` warns on hardcoded string literals in JSX children. Fix violations by extracting the string to the translation files and using `t()`.
+- **Lint enforcement**: The rule `react/jsx-no-literals` warns on hardcoded string literals in JSX children. Fix violations by extracting the string to the translation files and using `t()`.
 - **Navigation Data**: Navigation labels are stored as i18n keys, `labelKey`, in `src/widgets/Layout/navigationData.ts` and resolved with `t()` at render time.
 
 ## Accessibility (a11y)
@@ -36,9 +36,9 @@ The application must conform to **WCAG 2.1 Level AA**, the standard mandated by 
 - **BITV 2.0** — German federal regulation, Barrierefreie-Informationstechnik-Verordnung, requires WCAG 2.1 AA for public-sector web applications. Private-sector digital products fall under the **Barrierefreiheitsstärkungsgesetz (BFSG)**, effective June 2025.
 - **European Accessibility Act (EAA)** — Directive 2019/882, transposed into German law via BFSG.
 
-### ESLint Enforcement
+### Lint enforcement
 
-`eslint-plugin-jsx-a11y` is configured with the strict preset in `eslint.config.js`. Key rules enforced as errors:
+oxlint's `jsx-a11y` plugin is enabled in `.oxlintrc.json`. Key rules enforced as errors:
 
 - `jsx-a11y/alt-text` — every `<img>`, `<area>`, `<input type="image">`, and `<object>` must have `alt` text.
 - `jsx-a11y/anchor-has-content` — anchors must have accessible content.
@@ -74,7 +74,7 @@ The application must conform to **WCAG 2.1 Level AA**, the standard mandated by 
 
 ### Testing
 
-- **Automated**: `eslint-plugin-jsx-a11y` catches about 30% of WCAG issues at lint time.
+- **Automated**: oxlint `jsx-a11y` catches about 30% of WCAG issues at lint time.
 - **Semi-automated**: Use browser DevTools, Lighthouse, or axe DevTools for runtime audits. Target 0 violations.
 - **Manual**: Keyboard-only navigation testing and screen reader verification with NVDA or VoiceOver before major releases.
 - **E2E**: Consider adding axe-core integration to Playwright tests, `@axe-core/playwright`, for automated accessibility regression testing.

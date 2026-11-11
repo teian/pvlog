@@ -14,7 +14,6 @@ const IGNORED_DIRECTORIES = new Set([
   "target",
 ]);
 const ROOT_UI_TOOLING = new Set([
-  "eslint.config.js",
   "playwright.config.ts",
   "vite.config.ts",
   "vitest.config.ts",

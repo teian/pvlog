@@ -1,0 +1,186 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "jsx-a11y", "unicorn", "import", "oxc"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "options": {
+    "typeAware": true,
+    "typeCheck": false
+  },
+  "env": {
+    "browser": true,
+    "es2024": true
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "node_modules/**",
+    "tests/**",
+    "coverage/**",
+    "embedded-ui/**"
+  ],
+  "rules": {
+    "react/no-multi-comp": "error",
+    "react/jsx-no-literals": "warn",
+    "unicorn/filename-case": [
+      "error",
+      {
+        "cases": {
+          "camelCase": true,
+          "pascalCase": true
+        }
+      }
+    ],
+    "complexity": [
+      "warn",
+      {
+        "max": 10
+      }
+    ],
+    "max-lines": [
+      "warn",
+      {
+        "max": 300,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
+    "max-lines-per-function": [
+      "warn",
+      {
+        "max": 100,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
+    "typescript/consistent-type-imports": "error",
+    "react/react-in-jsx-scope": "off",
+    "typescript/no-unsafe-type-assertion": "off",
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "react/purity": "off",
+    "typescript/no-useless-empty-export": "off"
+  },
+  "overrides": [
+    {
+      "files": ["src/ui/pages/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/app", "@/app/*"],
+                "message": "FSD: 'pages' must not import from the higher layer 'app'."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/ui/widgets/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/app", "@/app/*"],
+                "message": "FSD: 'widgets' must not import from the higher layer 'app'."
+              },
+              {
+                "group": ["@/pages", "@/pages/*"],
+                "message": "FSD: 'widgets' must not import from the higher layer 'pages'."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/ui/features/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/app", "@/app/*"],
+                "message": "FSD: 'features' must not import from the higher layer 'app'."
+              },
+              {
+                "group": ["@/pages", "@/pages/*"],
+                "message": "FSD: 'features' must not import from the higher layer 'pages'."
+              },
+              {
+                "group": ["@/widgets", "@/widgets/*"],
+                "message": "FSD: 'features' must not import from the higher layer 'widgets'."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/ui/entities/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/app", "@/app/*"],
+                "message": "FSD: 'entities' must not import from the higher layer 'app'."
+              },
+              {
+                "group": ["@/pages", "@/pages/*"],
+                "message": "FSD: 'entities' must not import from the higher layer 'pages'."
+              },
+              {
+                "group": ["@/widgets", "@/widgets/*"],
+                "message": "FSD: 'entities' must not import from the higher layer 'widgets'."
+              },
+              {
+                "group": ["@/features", "@/features/*"],
+                "message": "FSD: 'entities' must not import from the higher layer 'features'."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["src/ui/shared/**/*.{ts,tsx}"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["@/app", "@/app/*"],
+                "message": "FSD: 'shared' must not import from the higher layer 'app'."
+              },
+              {
+                "group": ["@/pages", "@/pages/*"],
+                "message": "FSD: 'shared' must not import from the higher layer 'pages'."
+              },
+              {
+                "group": ["@/widgets", "@/widgets/*"],
+                "message": "FSD: 'shared' must not import from the higher layer 'widgets'."
+              },
+              {
+                "group": ["@/features", "@/features/*"],
+                "message": "FSD: 'shared' must not import from the higher layer 'features'."
+              },
+              {
+                "group": ["@/entities", "@/entities/*"],
+                "message": "FSD: 'shared' must not import from the higher layer 'entities'."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
