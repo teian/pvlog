@@ -438,7 +438,8 @@ impl InsightApiUseCases for StorageInsightApi {
                  currency_code=excluded.currency_code,\
                  minor_units_per_kwh=excluded.minor_units_per_kwh,\
                  effective_from=excluded.effective_from,effective_to=excluded.effective_to,\
-                 updated_at=excluded.updated_at,version=version+1",
+                 updated_at=excluded.updated_at,version=version+1 \
+                 WHERE tariffs.system_id=excluded.system_id",
             )
             .bind(id.as_bytes().to_vec())
             .bind(id_blob(system_id))

@@ -169,7 +169,26 @@ impl ForecastApiUseCases for StorageForecastApi {
             }
             let now = self.now();
             let digest = configuration_digest(&input);
+            let mut transaction = sqlx::Connection::begin(&mut *connection)
+                .await
+                .map_err(|_| ForecastApiError::Unavailable)?;
             for string_id in &strings {
+                // A backdated period would leave two open rows for the string.
+                let later: Option<i64> = sqlx::query_scalar(
+                    "SELECT 1 FROM pv_string_forecast_settings \
+                     WHERE string_id=? AND effective_from>? LIMIT 1",
+                )
+                .bind(string_id.as_bytes().to_vec())
+                .bind(input.effective_from)
+                .fetch_optional(&mut *transaction)
+                .await
+                .map_err(|_| ForecastApiError::Unavailable)?;
+                if later.is_some() {
+                    return Err(ForecastApiError::Validation(
+                        "effective_from",
+                        "must not be earlier than an existing settings period",
+                    ));
+                }
                 // Settings are versioned by effective range, so a change closes
                 // the open period rather than rewriting recorded history.
                 sqlx::query(
@@ -179,7 +198,7 @@ impl ForecastApiUseCases for StorageForecastApi {
                 .bind(input.effective_from)
                 .bind(string_id.as_bytes().to_vec())
                 .bind(input.effective_from)
-                .execute(&mut *connection)
+                .execute(&mut *transaction)
                 .await
                 .map_err(|_| ForecastApiError::Unavailable)?;
                 sqlx::query(
@@ -218,10 +237,14 @@ impl ForecastApiUseCases for StorageForecastApi {
                 .bind(digest.to_vec())
                 .bind(now)
                 .bind(actor.as_uuid().as_bytes().to_vec())
-                .execute(&mut *connection)
+                .execute(&mut *transaction)
                 .await
                 .map_err(|_| ForecastApiError::Conflict)?;
             }
+            transaction
+                .commit()
+                .await
+                .map_err(|_| ForecastApiError::Unavailable)?;
             drop(connection);
             return self.settings(scope).await;
         }
@@ -451,6 +474,7 @@ impl ForecastApiUseCases for StorageForecastApi {
                 let measured: Option<i64> = sqlx::query_scalar(
                     "SELECT SUM(generation_energy_sum_wh) FROM telemetry_rollups \
                      WHERE system_id=? AND scope_kind=? AND scope_id=? \
+                     AND resolution='fifteen_minute' \
                      AND bucket_start>=? AND bucket_start<?",
                 )
                 .bind(system_id.as_uuid().as_bytes().to_vec())
@@ -650,12 +674,35 @@ async fn scope_strings(
     scope: &ForecastResourceScope,
 ) -> Result<Vec<Uuid>, ForecastApiError> {
     let rows = match scope {
-        ForecastResourceScope::String { string_id, .. } => return Ok(vec![string_id.as_uuid()]),
-        ForecastResourceScope::Inverter { inverter_id, .. } => {
-            sqlx::query("SELECT id FROM pv_strings WHERE inverter_id=?")
-                .bind(inverter_id.as_uuid().as_bytes().to_vec())
-                .fetch_all(&mut *connection)
-                .await
+        ForecastResourceScope::String {
+            system_id,
+            inverter_id,
+            string_id,
+            ..
+        } => {
+            sqlx::query(
+                "SELECT p.id FROM pv_strings p JOIN inverters i ON i.id=p.inverter_id \
+                 WHERE p.id=? AND i.id=? AND i.system_id=?",
+            )
+            .bind(string_id.as_uuid().as_bytes().to_vec())
+            .bind(inverter_id.as_uuid().as_bytes().to_vec())
+            .bind(system_id.as_uuid().as_bytes().to_vec())
+            .fetch_all(&mut *connection)
+            .await
+        }
+        ForecastResourceScope::Inverter {
+            system_id,
+            inverter_id,
+            ..
+        } => {
+            sqlx::query(
+                "SELECT p.id FROM pv_strings p JOIN inverters i ON i.id=p.inverter_id \
+                 WHERE i.id=? AND i.system_id=?",
+            )
+            .bind(inverter_id.as_uuid().as_bytes().to_vec())
+            .bind(system_id.as_uuid().as_bytes().to_vec())
+            .fetch_all(&mut *connection)
+            .await
         }
         ForecastResourceScope::System { system_id, .. } => {
             sqlx::query(
