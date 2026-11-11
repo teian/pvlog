@@ -490,7 +490,7 @@ function main() {
 
   const calculatedAt = Date.now();
   const insertRollup = database.prepare(
-    "INSERT OR REPLACE INTO telemetry_rollups (system_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at) VALUES (?,?,?,?,?,1,1,?,?,?,?,?,?,?,?,0,?,?)",
+    "INSERT OR REPLACE INTO telemetry_rollups (system_id,scope_kind,scope_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at) VALUES (?,'system',?,?,?,?,?,1,1,?,?,?,?,?,?,?,?,0,?,?)",
   );
   const insertDaily = database.prepare(
     "INSERT OR REPLACE INTO system_daily_summaries (system_id,local_date,timezone,generation,generation_energy_wh,consumption_energy_wh,peak_generation_power_watts,peak_generation_at,coverage_basis_points,quality_flags,calculated_at) VALUES (?,?,?,1,?,?,?,?,?,0,?)",
@@ -516,6 +516,7 @@ function main() {
           nextStart ??
           bucket.bucketStart + bucket.expected * cadenceMillis;
         insertRollup.run(
+          systemBlob,
           systemBlob,
           resolution,
           bucket.bucketStart,
