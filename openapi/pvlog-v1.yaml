@@ -919,6 +919,7 @@ paths:
       description: Points a channel key at the plant, an inverter or a string, or leaves it unassigned.
       tags: [Systems]
       security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
       requestBody:
         required: true
         content:
@@ -938,6 +939,7 @@ paths:
       description: Removes the channel definition so the key is reported as unassigned again.
       tags: [Systems]
       security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
       responses:
         "204": { description: Channel removed }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
@@ -1036,6 +1038,7 @@ paths:
       description: Adds an effective-dated tariff to one system.
       tags: [Systems]
       security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
       requestBody:
         required: true
         content:
@@ -1062,6 +1065,7 @@ paths:
       description: Replaces one tariff of the system.
       tags: [Systems]
       security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
       requestBody:
         required: true
         content:
@@ -1081,6 +1085,7 @@ paths:
       description: Removes one tariff of the system.
       tags: [Systems]
       security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
       responses:
         "204": { description: Tariff deleted }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
@@ -1105,6 +1110,7 @@ paths:
       description: Enables or disables the public link, optionally rotating its token or changing the listing visibility.
       tags: [Systems]
       security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
       requestBody:
         required: true
         content:
@@ -1144,6 +1150,11 @@ paths:
       description: Lists systems whose owners marked them public.
       tags: [Systems]
       security: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum entries, clamped to 1 through 200.
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
       responses:
         "200":
           description: Public directory
@@ -2982,6 +2993,12 @@ components:
         required: true,
         schema: { $ref: "#/components/schemas/UuidV7" },
       }
+    OptionalCsrfToken:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      description: Required when authenticating with the session cookie; ignored for bearer API keys.
+      schema: { type: string, minLength: 1 }
     CsrfToken:
       {
         name: X-CSRF-Token,

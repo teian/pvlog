@@ -89,8 +89,8 @@ pub async fn store_run(
     sqlx::query(
         "INSERT INTO weather_data_runs (id,system_id,provider_configuration_id,source_run_key,\
          data_kind,issued_at,fetched_at,valid_from,valid_to,resolution_seconds,spatial_kind,\
-         latitude_e6,longitude_e6,provider_region,adapter,source_url,license_identifier,attribution) \
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING",
+         latitude_e6,longitude_e6,provider_region,adapter,source_url,license_identifier,attribution,created_at) \
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING",
     )
     .bind(run_id.clone())
     .bind(system_id.as_uuid().as_bytes().to_vec())
@@ -110,6 +110,7 @@ pub async fn store_run(
     .bind(run.provenance.source_url.to_string())
     .bind(&run.provenance.license_identifier)
     .bind(&run.provenance.attribution)
+    .bind(epoch(run.provenance.fetched_at))
     .execute(&mut *connection)
     .await
     .map_err(|_| PortError::Unavailable)?;
