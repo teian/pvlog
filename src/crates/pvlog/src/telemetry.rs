@@ -19,7 +19,7 @@ use pvlog_domain::{
 };
 use pvlog_storage::{
     DatabaseTarget, ManagementRepository, ObservationInsertOutcome, StoredObservation,
-    TelemetryRepository,
+    TelemetryRepository, TelemetryRepositoryError,
 };
 
 const MAXIMUM_BATCH_ITEMS: usize = 1_000;
@@ -135,7 +135,7 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         }
     }
 
-    /// Ingests a single-system batch of up to the maximum item count, reporting a per-item status; in atomic mode any non-inserted item fails the batch as invalid.
+    /// Ingests a single-system batch of up to the maximum item count, reporting a per-item status; in atomic mode any rejected or non-inserted item fails the batch as invalid and nothing is stored.
     async fn ingest_batch(
         &self,
         commands: Vec<NormalizeObservation>,
@@ -156,8 +156,13 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         let repository = self.repository(system_id).await?;
         let received_at = self.received_at();
 
+        if mode == BatchIngestionMode::Atomic {
+            return self
+                .ingest_atomic(system_id, commands, received_at, repository.as_ref())
+                .await;
+        }
+
         let mut outcomes = Vec::with_capacity(commands.len());
-        let mut rollback = false;
         for (index, command) in commands.into_iter().enumerate() {
             let command = self
                 .resolve_channels(system_id, command, received_at)
@@ -177,18 +182,11 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
                     },
                 },
             };
-            if mode == BatchIngestionMode::Atomic && status != BatchItemStatus::Inserted {
-                rollback = true;
-            }
             outcomes.push(BatchItemOutcome {
                 index,
                 status,
                 code: None,
             });
-        }
-        if rollback {
-            // Atomic batches report the first rejection rather than a partial write.
-            return Err(ModernTelemetryError::Invalid);
         }
         Ok(BatchIngestionResult { outcomes })
     }
@@ -207,6 +205,61 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         _command: CorrectObservation,
     ) -> Result<ObservationId, ModernTelemetryError> {
         Err(ModernTelemetryError::Repository(PortError::Unavailable))
+    }
+}
+
+impl StorageTelemetryApi {
+    /// Validates every item first, then stores them in one transaction so an atomic
+    /// batch is either written completely or not at all.
+    async fn ingest_atomic(
+        &self,
+        system_id: SystemId,
+        commands: Vec<NormalizeObservation>,
+        received_at: i64,
+        repository: &dyn TelemetryRepository,
+    ) -> Result<BatchIngestionResult, ModernTelemetryError> {
+        let mut observations = Vec::with_capacity(commands.len());
+        let mut stored = Vec::with_capacity(commands.len());
+        for command in commands {
+            let command = self
+                .resolve_channels(system_id, command, received_at)
+                .await?;
+            let observation =
+                normalize_observation(command).map_err(|_| ModernTelemetryError::Invalid)?;
+            stored.push(
+                stored_observation(&observation, received_at)
+                    .map_err(|_| ModernTelemetryError::Invalid)?,
+            );
+            observations.push(observation);
+        }
+        let outcomes = repository
+            .insert_observations_atomic(&stored)
+            .await
+            .map_err(|error| match error {
+                TelemetryRepositoryError::InvalidRecord(_)
+                | TelemetryRepositoryError::UniquenessConflict
+                | TelemetryRepositoryError::ConstraintConflict => ModernTelemetryError::Invalid,
+                _ => ModernTelemetryError::Repository(PortError::Unavailable),
+            })?;
+        if outcomes
+            .iter()
+            .any(|outcome| *outcome != ObservationInsertOutcome::Inserted)
+        {
+            return Err(ModernTelemetryError::Invalid);
+        }
+        for observation in &observations {
+            self.write_channel_values(system_id, observation, received_at)
+                .await?;
+        }
+        Ok(BatchIngestionResult {
+            outcomes: (0..observations.len())
+                .map(|index| BatchItemOutcome {
+                    index,
+                    status: BatchItemStatus::Inserted,
+                    code: None,
+                })
+                .collect(),
+        })
     }
 }
 

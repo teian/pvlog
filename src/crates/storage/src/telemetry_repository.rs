@@ -94,6 +94,13 @@ pub trait TelemetryRepository: Send + Sync {
         &self,
         observation: &StoredObservation,
     ) -> Result<ObservationInsertOutcome, TelemetryRepositoryError>;
+    /// Stores every observation in one transaction. When any observation is not
+    /// newly inserted (a duplicate), nothing is kept and the per-item outcomes are
+    /// returned so the caller can report them; a conflicting record is an error.
+    async fn insert_observations_atomic(
+        &self,
+        observations: &[StoredObservation],
+    ) -> Result<Vec<ObservationInsertOutcome>, TelemetryRepositoryError>;
     async fn insert_observation_transactional(
         &self,
         commit: &TransactionalObservation,
@@ -174,7 +181,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
     ) -> Result<ObservationInsertOutcome, TelemetryRepositoryError> {
         validate_observation(o)?;
         let mut writer = self.account.acquire_writer().await?;
-        let result=sqlx::query("INSERT OR IGNORE INTO telemetry_hot (observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(blob(o.id.as_uuid())).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(serde_json::to_string(&o.provenance)?).bind(o.canonical_hash.as_slice()).bind(o.version).execute(writer.connection()).await?;
+        let result = sqlite_insert_hot(writer.connection(), o).await?;
         if result.rows_affected() == 1 {
             return Ok(ObservationInsertOutcome::Inserted);
         }
@@ -184,6 +191,37 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             Some(_) => Err(TelemetryRepositoryError::UniquenessConflict),
             None => Err(TelemetryRepositoryError::ConstraintConflict),
         }
+    }
+    async fn insert_observations_atomic(
+        &self,
+        observations: &[StoredObservation],
+    ) -> Result<Vec<ObservationInsertOutcome>, TelemetryRepositoryError> {
+        for o in observations {
+            validate_observation(o)?;
+        }
+        let mut writer = self.account.acquire_writer().await?;
+        let mut transaction = writer.connection().begin().await?;
+        let mut outcomes = Vec::with_capacity(observations.len());
+        for o in observations {
+            let result = sqlite_insert_hot(&mut transaction, o).await?;
+            if result.rows_affected() == 1 {
+                outcomes.push(ObservationInsertOutcome::Inserted);
+                continue;
+            }
+            match sqlite_existing_observation(&mut transaction, o).await? {
+                Some(hash) if hash == o.canonical_hash => {
+                    outcomes.push(ObservationInsertOutcome::Duplicate);
+                }
+                Some(_) => return Err(TelemetryRepositoryError::UniquenessConflict),
+                None => return Err(TelemetryRepositoryError::ConstraintConflict),
+            }
+        }
+        if outcomes.contains(&ObservationInsertOutcome::Duplicate) {
+            transaction.rollback().await?;
+        } else {
+            transaction.commit().await?;
+        }
+        Ok(outcomes)
     }
     async fn insert_observation_transactional(
         &self,
@@ -277,7 +315,7 @@ impl TelemetryRepository for PostgresTelemetryRepository {
     ) -> Result<ObservationInsertOutcome, TelemetryRepositoryError> {
         validate_observation(o)?;
         let mut c = self.connection().await?;
-        let result=sqlx::query("INSERT INTO telemetry.hot_observations (account_id,observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING").bind(self.account_id.as_uuid()).bind(o.id.as_uuid()).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(&o.provenance).bind(o.canonical_hash.as_slice()).bind(o.version).execute(&mut c).await?;
+        let result = pg_insert_hot(&mut c, self.account_id, o).await?;
         if result.rows_affected() == 1 {
             c.close().await?;
             return Ok(ObservationInsertOutcome::Inserted);
@@ -289,6 +327,37 @@ impl TelemetryRepository for PostgresTelemetryRepository {
             Some(_) => Err(TelemetryRepositoryError::UniquenessConflict),
             None => Err(TelemetryRepositoryError::ConstraintConflict),
         }
+    }
+    async fn insert_observations_atomic(
+        &self,
+        observations: &[StoredObservation],
+    ) -> Result<Vec<ObservationInsertOutcome>, TelemetryRepositoryError> {
+        for o in observations {
+            validate_observation(o)?;
+        }
+        let mut c = self.connection().await?;
+        let mut transaction = c.begin().await?;
+        let mut outcomes = Vec::with_capacity(observations.len());
+        for o in observations {
+            let result = pg_insert_hot(&mut transaction, self.account_id, o).await?;
+            if result.rows_affected() == 1 {
+                outcomes.push(ObservationInsertOutcome::Inserted);
+                continue;
+            }
+            match pg_existing_observation(&mut transaction, self.account_id, o).await? {
+                Some(hash) if hash == o.canonical_hash => {
+                    outcomes.push(ObservationInsertOutcome::Duplicate);
+                }
+                Some(_) => return Err(TelemetryRepositoryError::UniquenessConflict),
+                None => return Err(TelemetryRepositoryError::ConstraintConflict),
+            }
+        }
+        if outcomes.contains(&ObservationInsertOutcome::Duplicate) {
+            transaction.rollback().await?;
+        } else {
+            transaction.commit().await?;
+        }
+        Ok(outcomes)
     }
     async fn insert_observation_transactional(
         &self,
@@ -382,6 +451,23 @@ impl TelemetryRepository for PostgresTelemetryRepository {
         c.close().await?;
         rows.iter().map(pg_correction).collect()
     }
+}
+
+#[cfg(feature = "sqlite")]
+async fn sqlite_insert_hot(
+    c: &mut sqlx::SqliteConnection,
+    o: &StoredObservation,
+) -> Result<sqlx::sqlite::SqliteQueryResult, TelemetryRepositoryError> {
+    Ok(sqlx::query("INSERT OR IGNORE INTO telemetry_hot (observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(blob(o.id.as_uuid())).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(serde_json::to_string(&o.provenance)?).bind(o.canonical_hash.as_slice()).bind(o.version).execute(c).await?)
+}
+
+#[cfg(feature = "postgres")]
+async fn pg_insert_hot(
+    c: &mut PgConnection,
+    account_id: AccountId,
+    o: &StoredObservation,
+) -> Result<sqlx::postgres::PgQueryResult, TelemetryRepositoryError> {
+    Ok(sqlx::query("INSERT INTO telemetry.hot_observations (account_id,observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT DO NOTHING").bind(account_id.as_uuid()).bind(o.id.as_uuid()).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(&o.provenance).bind(o.canonical_hash.as_slice()).bind(o.version).execute(&mut *c).await?)
 }
 
 fn validate_range(start: i64, end: i64) -> Result<(), TelemetryRepositoryError> {

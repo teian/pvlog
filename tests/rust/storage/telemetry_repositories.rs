@@ -197,6 +197,45 @@ async fn verify_contract(
         repository.corrections(system_id, base, base + 1).await?,
         vec![correction]
     );
+    let kept = observation(system_id, base + 30, "source-atomic-1", [9_u8; 32]);
+    let rejected_batch = [
+        kept.clone(),
+        observation(system_id, base + 31, "source-atomic-2", [10_u8; 32]),
+        first.clone(),
+    ];
+    let outcomes = repository
+        .insert_observations_atomic(&rejected_batch)
+        .await?;
+    assert_eq!(
+        outcomes,
+        [
+            ObservationInsertOutcome::Inserted,
+            ObservationInsertOutcome::Inserted,
+            ObservationInsertOutcome::Duplicate
+        ]
+    );
+    assert!(
+        repository
+            .observations(system_id, base + 30, base + 32)
+            .await?
+            .is_empty(),
+        "an atomic batch with a duplicate must leave nothing behind"
+    );
+    let accepted = repository
+        .insert_observations_atomic(&rejected_batch[..2])
+        .await?;
+    assert!(
+        accepted
+            .iter()
+            .all(|outcome| *outcome == ObservationInsertOutcome::Inserted)
+    );
+    assert_eq!(
+        repository
+            .observations(system_id, base + 30, base + 32)
+            .await?
+            .len(),
+        2
+    );
     assert!(matches!(
         repository.observations(system_id, base, base).await,
         Err(TelemetryRepositoryError::InvalidRange)
