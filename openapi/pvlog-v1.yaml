@@ -180,6 +180,22 @@ paths:
               },
           }
         "400": { $ref: "#/components/responses/Problem" }
+  /api/v1/admin/accounts:
+    get:
+      operationId: listAdministrationAccounts
+      summary: List accounts
+      description: Returns every tenant with its status and member and system counts for instance administrators.
+      tags: [Administration]
+      security: [{ sessionCookie: [] }]
+      responses:
+        "200":
+          description: Accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdministrationAccount" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
   /api/v1/admin/weather-feed:
     get:
       operationId: getWeatherFeedSettings
@@ -873,6 +889,270 @@ paths:
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
         "404": { $ref: "#/components/responses/NotFoundProblem" }
 
+  /api/v1/systems/{system_id}/channels:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: listMeasurementChannels
+      summary: List measurement channels
+      description: Lists every measurement channel seen for the system, including unassigned ones, with the equipment each is bound to.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      responses:
+        "200":
+          description: Measurement channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/MeasurementChannel" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/systems/{system_id}/channels/{channel_key}:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - name: channel_key
+        in: path
+        required: true
+        schema: { type: string }
+    put:
+      operationId: bindMeasurementChannel
+      summary: Bind a measurement channel
+      description: Points a channel key at the plant, an inverter or a string, or leaves it unassigned.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MeasurementChannelBinding" }
+      responses:
+        "200":
+          description: Bound channel
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MeasurementChannel" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+    delete:
+      operationId: removeMeasurementChannel
+      summary: Remove a measurement channel
+      description: Removes the channel definition so the key is reported as unassigned again.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      responses:
+        "204": { description: Channel removed }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/systems/{system_id}/range-summary:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: getSystemRangeSummary
+      summary: Summarize a range
+      description: Returns generation, consumption, peak, best bucket, previous-period change and revenue for one dashboard range.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [telemetry:read] }]
+      parameters:
+        - name: range
+          in: query
+          required: true
+          schema: { type: string, enum: [live, day, week, month, year] }
+        - name: scope
+          in: query
+          schema: { type: string }
+        - name: scopeId
+          in: query
+          schema: { $ref: "#/components/schemas/UuidV7" }
+      responses:
+        "200":
+          description: Range summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RangeSummary" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/systems/{system_id}/string-breakdown:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: getSystemStringBreakdown
+      summary: Break a range down by string
+      description: Returns each string's generation and status for one dashboard range.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [telemetry:read] }]
+      parameters:
+        - name: range
+          in: query
+          required: true
+          schema: { type: string, enum: [live, day, week, month, year] }
+      responses:
+        "200":
+          description: String contributions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/StringContribution" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/systems/{system_id}/weather-composition:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: getSystemWeatherComposition
+      summary: Split production by sky condition
+      description: Returns, per month, how production divided across sky conditions.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [telemetry:read] }]
+      parameters:
+        - name: months
+          in: query
+          description: Number of months, clamped to 1 through 60; defaults to 12.
+          schema: { type: integer, minimum: 1, maximum: 60, default: 12 }
+      responses:
+        "200":
+          description: Monthly weather composition
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WeatherMonth" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/systems/{system_id}/tariffs:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: listSystemTariffs
+      summary: List system tariffs
+      description: Lists the effective-dated tariffs of one system.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      responses:
+        "200":
+          description: Tariffs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/FreeFormObject" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+    post:
+      operationId: createSystemTariff
+      summary: Create a system tariff
+      description: Adds an effective-dated tariff to one system.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FreeFormObject" }
+      responses:
+        "201":
+          description: Tariff created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FreeFormObject" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/systems/{system_id}/tariffs/{tariff_id}:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - name: tariff_id
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UuidV7" }
+    put:
+      operationId: updateSystemTariff
+      summary: Update a system tariff
+      description: Replaces one tariff of the system.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FreeFormObject" }
+      responses:
+        "200":
+          description: Tariff updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/FreeFormObject" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+    delete:
+      operationId: deleteSystemTariff
+      summary: Delete a system tariff
+      description: Removes one tariff of the system.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      responses:
+        "204": { description: Tariff deleted }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/systems/{system_id}/sharing:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: getSystemSharing
+      summary: Read sharing settings
+      description: Returns the public link and listing visibility of one system for its owner.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      responses:
+        "200":
+          description: Sharing state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SharingState" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+    put:
+      operationId: updateSystemSharing
+      summary: Change sharing settings
+      description: Enables or disables the public link, optionally rotating its token or changing the listing visibility.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/SharingInput" }
+      responses:
+        "200":
+          description: Updated sharing state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SharingState" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/public/systems/{token}:
+    get:
+      operationId: getPublicSystem
+      summary: Read a publicly shared system
+      description: Resolves a sharing token to the reduced system view an anonymous visitor may see.
+      tags: [Systems]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Public system
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicSystem" }
+        "404": { $ref: "#/components/responses/Problem" }
+  /api/v1/public/directory:
+    get:
+      operationId: listPublicDirectory
+      summary: List public systems
+      description: Lists systems whose owners marked them public.
+      tags: [Systems]
+      security: []
+      responses:
+        "200":
+          description: Public directory
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PublicDirectoryEntry" }
+        "429": { $ref: "#/components/responses/RateLimitProblem" }
   /api/v1/systems/{system_id}/inverters:
     parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     get:
@@ -3642,6 +3922,182 @@ components:
         lockedUntil: { type: [integer, "null"], format: int64 }
         createdAt: { type: integer, format: int64 }
         updatedAt: { type: integer, format: int64 }
+    MeasurementChannel:
+      type: object
+      required:
+        [
+          id,
+          channelKey,
+          displayName,
+          unit,
+          targetKind,
+          tracksPower,
+          tracksEnergy,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        channelKey: { type: string }
+        displayName: { type: string }
+        unit: { type: string }
+        targetKind:
+          type: string
+          enum: [unassigned, plant, inverter, string]
+        targetId:
+          oneOf:
+            - $ref: "#/components/schemas/UuidV7"
+            - type: "null"
+        tracksPower: { type: boolean }
+        tracksEnergy: { type: boolean }
+        discoveredAtEpochMillis: { type: [integer, "null"], format: int64 }
+        lastValueAtEpochMillis: { type: [integer, "null"], format: int64 }
+        lastValue: { type: [integer, "null"], format: int64 }
+    MeasurementChannelBinding:
+      type: object
+      required: [targetKind, tracksPower, tracksEnergy]
+      properties:
+        targetKind:
+          type: string
+          enum: [unassigned, plant, inverter, string]
+        targetId:
+          oneOf:
+            - $ref: "#/components/schemas/UuidV7"
+            - type: "null"
+        tracksPower: { type: boolean }
+        tracksEnergy: { type: boolean }
+        displayName: { type: [string, "null"] }
+    RangeSummary:
+      type: object
+      required:
+        [range, startEpochMillis, endEpochMillis, generationEnergyWh, revenue]
+      properties:
+        range: { type: string, enum: [live, day, week, month, year] }
+        startEpochMillis: { type: integer, format: int64 }
+        endEpochMillis: { type: integer, format: int64 }
+        generationEnergyWh: { type: integer, format: int64 }
+        consumptionEnergyWh: { type: [integer, "null"], format: int64 }
+        peakPowerWatts: { type: [integer, "null"], format: int64 }
+        currentPowerWatts: { type: [integer, "null"], format: int64 }
+        averageBucketEnergyWh: { type: [integer, "null"], format: int64 }
+        bestBucket:
+          type: [object, "null"]
+          required: [startEpochMillis, energyWh]
+          properties:
+            startEpochMillis: { type: integer, format: int64 }
+            energyWh: { type: integer, format: int64 }
+        previousPeriod:
+          type: [object, "null"]
+          required: [generationEnergyWh, changeBasisPoints]
+          properties:
+            generationEnergyWh: { type: integer, format: int64 }
+            changeBasisPoints: { type: integer, format: int64 }
+        revenue:
+          type: object
+          required: [minorUnits, periodsApplied, unpricedEnergyWh]
+          properties:
+            minorUnits: { type: integer, format: int64 }
+            currencyCode: { type: [string, "null"] }
+            periodsApplied: { type: integer, minimum: 0 }
+            unpricedEnergyWh: { type: integer, format: int64 }
+        capacityWatts: { type: [integer, "null"], format: int64 }
+    StringContribution:
+      type: object
+      required:
+        [
+          stringId,
+          name,
+          inverterId,
+          inverterName,
+          ratedPowerWatts,
+          generationEnergyWh,
+          status,
+          metered,
+        ]
+      properties:
+        stringId: { $ref: "#/components/schemas/UuidV7" }
+        name: { type: string }
+        inverterId: { $ref: "#/components/schemas/UuidV7" }
+        inverterName: { type: string }
+        ratedPowerWatts: { type: integer, format: int64 }
+        generationEnergyWh: { type: integer, format: int64 }
+        status: { type: string, enum: [online, idle, fault, offline] }
+        metered: { type: boolean }
+    WeatherMonth:
+      type: object
+      required: [monthStartEpochMillis, generationEnergyWh, classes]
+      properties:
+        monthStartEpochMillis: { type: integer, format: int64 }
+        generationEnergyWh: { type: integer, format: int64 }
+        classes:
+          type: array
+          items:
+            type: object
+            required: [class, shareBasisPoints, generationEnergyWh]
+            properties:
+              class:
+                type: string
+                enum: [clear, partly_cloudy, mostly_cloudy, overcast]
+              shareBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+              generationEnergyWh: { type: integer, format: int64 }
+    SharingState:
+      type: object
+      required: [systemId, linkEnabled, visibility]
+      properties:
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        linkEnabled: { type: boolean }
+        publicToken: { type: [string, "null"] }
+        visibility: { type: string, enum: [private, unlisted, public] }
+    SharingInput:
+      type: object
+      required: [linkEnabled]
+      properties:
+        linkEnabled: { type: boolean }
+        rotateToken: { type: boolean, default: false }
+        visibility:
+          type: [string, "null"]
+          enum: [private, unlisted, public, null]
+    PublicSystem:
+      type: object
+      required: [name, timezone]
+      properties:
+        name: { type: string }
+        location: { type: [string, "null"] }
+        commissioningDate: { type: [string, "null"] }
+        capacityWatts: { type: [integer, "null"], format: int64 }
+        timezone: { type: string }
+        generationTodayWh: { type: [integer, "null"], format: int64 }
+        generationTotalWh: { type: [integer, "null"], format: int64 }
+        lastSeenEpochMillis: { type: [integer, "null"], format: int64 }
+    PublicDirectoryEntry:
+      type: object
+      required: [name, publicToken]
+      properties:
+        name: { type: string }
+        location: { type: [string, "null"] }
+        capacityWatts: { type: [integer, "null"], format: int64 }
+        publicToken: { type: string }
+    AdministrationAccount:
+      type: object
+      required:
+        [
+          id,
+          slug,
+          displayName,
+          status,
+          memberCount,
+          systemCount,
+          createdAtEpochMillis,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        slug: { type: string }
+        displayName: { type: string }
+        status:
+          type: string
+          enum:
+            [provisioning, active, suspended, quarantined, deleting, deleted]
+        memberCount: { type: integer, format: int64, minimum: 0 }
+        systemCount: { type: integer, format: int64, minimum: 0 }
+        createdAtEpochMillis: { type: integer, format: int64 }
     WeatherFeedSettings:
       type: object
       required: [enabled, endpoint]
