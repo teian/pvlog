@@ -6,11 +6,11 @@ use axum::{
     routing::{get, post},
 };
 use pvlog_application::{
-    CreateSystem, SystemDetails, SystemLifecycleError, SystemLifecycleRecord,
+    CapacitySource, CreateSystem, SystemDetails, SystemLifecycleError, SystemLifecycleRecord,
     SystemLifecycleUseCases, UpdateSystem,
 };
 use pvlog_domain::{AccountId, ApiScope, Permission, SystemId, UserId, Visibility};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::{
@@ -349,9 +349,27 @@ fn expected_version(headers: &HeaderMap) -> Result<u64, SystemApiError> {
         .and_then(|value| value.trim_matches('"').parse().ok())
         .ok_or(SystemApiError::PreconditionRequired)
 }
+/// A system as the API returns it: the stored record plus the capacity to use.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SystemResponse {
+    #[serde(flatten)]
+    record: SystemLifecycleRecord,
+    /// Capacity derived from strings, else the declared one.
+    capacity_watts: Option<i64>,
+    /// `derived` or `declared`; absent while the system has no capacity.
+    capacity_source: Option<CapacitySource>,
+}
+
 fn with_etag(status: StatusCode, record: SystemLifecycleRecord) -> Response {
     let version = record.version;
-    let mut response = (status, Json(record)).into_response();
+    let capacity = record.effective_capacity();
+    let body = SystemResponse {
+        capacity_watts: capacity.map(|(watts, _)| watts),
+        capacity_source: capacity.map(|(_, source)| source),
+        record,
+    };
+    let mut response = (status, Json(body)).into_response();
     if let Ok(value) = HeaderValue::from_str(&format!("\"{version}\"")) {
         response.headers_mut().insert(header::ETAG, value);
     }

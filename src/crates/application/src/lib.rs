@@ -158,9 +158,9 @@ pub use system_configuration::{
     SystemConfigurationError, SystemConfigurationRepository, SystemConfigurationService,
 };
 pub use system_lifecycle::{
-    CreateSystem, DEFAULT_STATUS_INTERVAL_SECONDS, STATUS_INTERVAL_SECONDS_RANGE, SystemDetails,
-    SystemLifecycleError, SystemLifecycleRecord, SystemLifecycleRepository, SystemLifecycleService,
-    SystemLifecycleUseCases, UpdateSystem,
+    CapacitySource, CreateSystem, DEFAULT_STATUS_INTERVAL_SECONDS, STATUS_INTERVAL_SECONDS_RANGE,
+    SystemDetails, SystemLifecycleError, SystemLifecycleRecord, SystemLifecycleRepository,
+    SystemLifecycleService, SystemLifecycleUseCases, UpdateSystem,
 };
 pub use timezone_by_country::timezone_for_country;
 pub use user_lifecycle::{

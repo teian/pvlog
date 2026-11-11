@@ -1,19 +1,21 @@
 use std::{error::Error, sync::Arc};
 
 use pvlog_application::{
-    Clock, CreateSystem, RbacRepository, SystemDetails, SystemLifecycleRecord,
+    CapacitySource, Clock, CreateSystem, RbacRepository, SystemDetails, SystemLifecycleRecord,
     SystemLifecycleRepository as _, SystemLifecycleService, SystemLifecycleUseCases, UpdateSystem,
     built_in_account_roles,
 };
 use pvlog_domain::{
-    AccountId, BuiltInRole, MembershipId, PrincipalId, RoleKind, RoleScope, SystemId,
-    SystemLifecycle, UserId, UtcTimestamp, Visibility,
+    AccountId, BuiltInRole, EquipmentValueProvenance, InverterId, MembershipId, PrincipalId,
+    RoleKind, RoleScope, StringId, SystemId, SystemLifecycle, UserId, UtcTimestamp, Visibility,
 };
 use pvlog_storage::{
-    AccountRecord, DatabaseTarget, ManagementRepository, MembershipRecord,
-    PostgresManagementRepository, PostgresSystemLifecycleRepository, SqliteAccountPoolConfig,
-    SqliteAccountPoolRouter, SqliteAccountProvisioner, SqliteManagementRepository,
-    SqliteRbacRepository, SqliteSystemLifecycleRepository, UserRecord, apply_migrations,
+    AccountConfigurationRepository as _, AccountRecord, DatabaseTarget, InverterRecord,
+    ManagementRepository, MembershipRecord, PostgresAccountConfigurationRepository,
+    PostgresManagementRepository, PostgresSystemLifecycleRepository, PvStringRecord,
+    SqliteAccountConfigurationRepository, SqliteAccountPoolConfig, SqliteAccountPoolRouter,
+    SqliteAccountProvisioner, SqliteManagementRepository, SqliteRbacRepository,
+    SqliteSystemLifecycleRepository, UserRecord, apply_migrations,
 };
 use sqlx::{Connection as _, PgConnection};
 use tempfile::TempDir;
@@ -81,7 +83,7 @@ async fn sqlite_system_lifecycle_uses_registry_and_optimistic_concurrency()
     )?;
     let service = SystemLifecycleService::new(
         Arc::new(SqliteSystemLifecycleRepository::new(
-            router,
+            router.clone(),
             management.clone(),
         )),
         rbac.clone(),
@@ -111,6 +113,18 @@ async fn sqlite_system_lifecycle_uses_registry_and_optimistic_concurrency()
         service.system(created.id).await?,
         created,
         "every setup field is read back as it was stored"
+    );
+    assert_eq!(
+        created.effective_capacity(),
+        Some((9_900, CapacitySource::Declared))
+    );
+    SqliteAccountConfigurationRepository::new(router.route(account_id).await?)
+        .save_inverter_aggregate(&inverter(created.id))
+        .await?;
+    assert_eq!(
+        service.system(created.id).await?.effective_capacity(),
+        Some((8_000, CapacitySource::Derived)),
+        "strings define the capacity once they exist"
     );
     let assignments = rbac
         .active_assignments(PrincipalId::User(user_id), NOW + 1)
@@ -204,7 +218,7 @@ async fn postgres_system_lifecycle_keeps_setup_fields_when_configured() -> Resul
     connection.close().await?;
 
     let management = Arc::new(PostgresManagementRepository::new(url.clone()));
-    let repository = PostgresSystemLifecycleRepository::new(url, management);
+    let repository = PostgresSystemLifecycleRepository::new(url.clone(), management);
     let created = SystemLifecycleRecord {
         id: SystemId::new(),
         account_id,
@@ -218,6 +232,7 @@ async fn postgres_system_lifecycle_keeps_setup_fields_when_configured() -> Resul
         longitude_microdegrees: Some(12_370_000),
         status_interval_seconds: 600,
         declared_capacity_watts: Some(9_900),
+        derived_capacity_watts: None,
         visibility: Visibility::Private,
         lifecycle: SystemLifecycle::Active,
         version: 1,
@@ -226,6 +241,18 @@ async fn postgres_system_lifecycle_keeps_setup_fields_when_configured() -> Resul
     };
     repository.create(created.clone()).await?;
     assert_eq!(repository.system(created.id).await?, Some(created.clone()));
+    PostgresAccountConfigurationRepository::new(url.clone(), account_id)
+        .save_inverter_aggregate(&inverter(created.id))
+        .await?;
+    let with_strings = repository
+        .system(created.id)
+        .await?
+        .ok_or("system disappeared")?;
+    assert_eq!(
+        with_strings.effective_capacity(),
+        Some((8_000, CapacitySource::Derived))
+    );
+    let created = with_strings;
 
     let changed = SystemLifecycleRecord {
         location_label: None,
@@ -245,6 +272,51 @@ async fn postgres_system_lifecycle_keeps_setup_fields_when_configured() -> Resul
         "a stale version changes nothing"
     );
     Ok(())
+}
+
+/// One inverter with a single 8 kW string.
+fn inverter(system_id: SystemId) -> InverterRecord {
+    let inverter_id = InverterId::new();
+    InverterRecord {
+        id: inverter_id,
+        system_id,
+        name: "Inverter".to_owned(),
+        manufacturer: None,
+        model: None,
+        serial_reference: None,
+        rated_power_watts: None,
+        catalog_entry_id: None,
+        catalog_revision: None,
+        value_provenance: EquipmentValueProvenance::Manual,
+        specification_snapshot: None,
+        effective_from: 0,
+        effective_to: None,
+        created_at: 1,
+        updated_at: 1,
+        strings: vec![PvStringRecord {
+            id: StringId::new(),
+            inverter_id,
+            name: "South".to_owned(),
+            panel_count: 20,
+            panel_manufacturer: Some("Example".to_owned()),
+            panel_model: Some("P400".to_owned()),
+            rated_power_watts: 8_000,
+            module_catalog_entry_id: None,
+            module_catalog_revision: None,
+            value_provenance: EquipmentValueProvenance::Manual,
+            module_specification_snapshot: None,
+            module_peak_power_watts: Some(400),
+            total_peak_power_watts: Some(8_000),
+            orientation_degrees: None,
+            tilt_degrees: None,
+            temperature_coefficient_ppm_per_celsius: None,
+            shading: Vec::new(),
+            effective_from: 0,
+            effective_to: None,
+            created_at: 1,
+            updated_at: 1,
+        }],
+    }
 }
 
 struct FixedClock;

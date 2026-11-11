@@ -703,15 +703,17 @@ async fn read_buckets(
         .collect())
 }
 
-/// Sums the rated power of all PV strings in watts, or `None` when no capacity is configured.
+/// Sums the rated power of all PV strings in watts, falling back to the declared capacity
+/// while the system has no strings; `None` when neither is configured.
 #[cfg(feature = "sqlite")]
 async fn capacity_watts(
     connection: &mut sqlx::SqliteConnection,
     system_id: SystemId,
 ) -> Result<Option<i64>, InsightApiError> {
     let total: Option<i64> = sqlx::query_scalar(
-        "SELECT SUM(p.rated_power_watts) FROM pv_strings p \
-         JOIN inverters i ON i.id=p.inverter_id WHERE i.system_id=?",
+        "SELECT COALESCE((SELECT SUM(p.rated_power_watts) FROM pv_strings p \
+         JOIN inverters i ON i.id=p.inverter_id WHERE i.system_id=?1),\
+         (SELECT declared_capacity_watts FROM systems WHERE id=?1))",
     )
     .bind(id_blob(system_id))
     .fetch_one(&mut *connection)

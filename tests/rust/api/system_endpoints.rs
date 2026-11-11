@@ -121,6 +121,8 @@ async fn a_system_is_created_from_a_name_and_optional_setup_fields() -> Result<(
     assert_eq!(body["timezone"], "Europe/Vienna");
     assert_eq!(body["statusIntervalSeconds"], 300);
     assert!(body["declaredCapacityWatts"].is_null());
+    assert!(body["capacityWatts"].is_null());
+    assert!(body["capacitySource"].is_null());
 
     let (status, body) = post_system(
         app.clone(),
@@ -136,6 +138,8 @@ async fn a_system_is_created_from_a_name_and_optional_setup_fields() -> Result<(
     assert_eq!(body["longitudeMicrodegrees"], 12_370_000);
     assert_eq!(body["statusIntervalSeconds"], 600);
     assert_eq!(body["declaredCapacityWatts"], 9_900);
+    assert_eq!(body["capacityWatts"], 9_900);
+    assert_eq!(body["capacitySource"], "declared");
 
     let (status, body) = post_system(app, r#"{"name":" ","clientTimezone":"UTC"}"#).await?;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -364,6 +368,7 @@ fn record(
         longitude_microdegrees: None,
         status_interval_seconds: 300,
         declared_capacity_watts: None,
+        derived_capacity_watts: None,
         id,
         account_id,
         name,

@@ -46,7 +46,8 @@ impl ReportingApiUseCases for StorageReportingApi {
                     let row = sqlx::query(
                         "SELECT s.name,s.timezone,s.lifecycle,s.description,s.commissioning_date,s.visibility,\
                          COUNT(DISTINCT i.id) AS inverter_count,\
-                         COUNT(DISTINCT p.id) AS string_count,SUM(p.rated_power_watts) AS capacity_watts,\
+                         COUNT(DISTINCT p.id) AS string_count,\
+                         COALESCE(SUM(p.rated_power_watts),MAX(s.declared_capacity_watts)) AS capacity_watts,\
                          (SELECT coverage_basis_points FROM system_lifetime_summaries l \
                           WHERE l.system_id=s.id) AS availability,\
                          (SELECT MAX(measured_at) FROM telemetry_hot h WHERE h.system_id=s.id) AS last_seen \
@@ -72,7 +73,8 @@ impl ReportingApiUseCases for StorageReportingApi {
                     let row = sqlx::query(
                         "SELECT s.name,s.timezone,s.lifecycle,s.description,s.commissioning_date::TEXT AS commissioning_date,\
                          s.visibility,COUNT(DISTINCT i.id)::BIGINT AS inverter_count,\
-                         COUNT(DISTINCT p.id)::BIGINT AS string_count,SUM(p.rated_power_watts)::BIGINT AS capacity_watts,\
+                         COUNT(DISTINCT p.id)::BIGINT AS string_count,\
+                         COALESCE(SUM(p.rated_power_watts),MAX(s.declared_capacity_watts))::BIGINT AS capacity_watts,\
                          (SELECT coverage_basis_points::BIGINT FROM telemetry.lifetime_summaries l \
                           WHERE l.account_id=s.account_id AND l.system_id=s.id) AS availability,\
                          (SELECT MAX(measured_at) FROM telemetry.hot_observations h \

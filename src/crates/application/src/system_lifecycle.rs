@@ -31,6 +31,9 @@ pub struct SystemLifecycleRecord {
     pub status_interval_seconds: u32,
     /// Capacity the owner stated; used until strings define the capacity.
     pub declared_capacity_watts: Option<i64>,
+    /// Sum of the rated power of the system's strings; absent without strings.
+    /// Read from storage only, never written.
+    pub derived_capacity_watts: Option<i64>,
     pub visibility: Visibility,
     pub lifecycle: SystemLifecycle,
     pub version: u64,
@@ -51,6 +54,33 @@ pub struct SystemDetails {
     /// `None` keeps the current interval, or the default for a new system.
     pub status_interval_seconds: Option<u32>,
     pub declared_capacity_watts: Option<i64>,
+}
+
+impl SystemLifecycleRecord {
+    /// Capacity to show and validate against, with where it comes from.
+    ///
+    /// Strings define the capacity as soon as one exists; until then the
+    /// declared capacity stands in.
+    #[must_use]
+    pub fn effective_capacity(&self) -> Option<(i64, CapacitySource)> {
+        self.derived_capacity_watts
+            .filter(|watts| *watts > 0)
+            .map(|watts| (watts, CapacitySource::Derived))
+            .or_else(|| {
+                self.declared_capacity_watts
+                    .map(|watts| (watts, CapacitySource::Declared))
+            })
+    }
+}
+
+/// Where a system's reported capacity comes from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CapacitySource {
+    /// Stated by the owner; no string exists yet.
+    Declared,
+    /// Summed from the system's strings; a declared value is overridden.
+    Derived,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -181,6 +211,7 @@ impl SystemLifecycleService {
                 .status_interval_seconds
                 .unwrap_or(DEFAULT_STATUS_INTERVAL_SECONDS),
             declared_capacity_watts: request.details.declared_capacity_watts,
+            derived_capacity_watts: None,
             visibility: Visibility::Private,
             lifecycle: SystemLifecycle::Active,
             version: 1,

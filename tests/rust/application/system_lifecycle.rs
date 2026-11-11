@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use pvlog_application::{
-    Clock, CreateSystem, PortError, RbacRepository, RbacRoleRecord, SystemDetails,
+    CapacitySource, Clock, CreateSystem, PortError, RbacRepository, RbacRoleRecord, SystemDetails,
     SystemLifecycleError, SystemLifecycleRecord, SystemLifecycleRepository, SystemLifecycleService,
     UpdateSystem, built_in_account_roles,
 };
@@ -158,6 +158,36 @@ async fn the_timezone_follows_the_country_of_the_location_unless_chosen()
         })
         .await?;
     assert_eq!(unplaced.timezone, "Europe/Vienna");
+    Ok(())
+}
+
+#[tokio::test]
+async fn strings_override_a_declared_capacity() -> Result<(), Box<dyn Error>> {
+    let (service, account_id, actor) = service();
+    let mut system = service
+        .create(CreateSystem {
+            details: SystemDetails {
+                declared_capacity_watts: Some(9_900),
+                ..SystemDetails::default()
+            },
+            ..name_only(account_id, actor)
+        })
+        .await?;
+    assert_eq!(
+        system.effective_capacity(),
+        Some((9_900, CapacitySource::Declared))
+    );
+
+    system.derived_capacity_watts = Some(8_000);
+    assert_eq!(
+        system.effective_capacity(),
+        Some((8_000, CapacitySource::Derived)),
+        "the declared value is overridden once strings exist"
+    );
+
+    system.declared_capacity_watts = None;
+    system.derived_capacity_watts = None;
+    assert_eq!(system.effective_capacity(), None);
     Ok(())
 }
 

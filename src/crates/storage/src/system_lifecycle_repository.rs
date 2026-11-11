@@ -52,7 +52,10 @@ impl SystemLifecycleRepository for SqliteSystemLifecycleRepository {
         let row = sqlx::query(
             "SELECT id,name,description,commissioning_date,timezone,location_label,country_code,\
              latitude_e6,longitude_e6,status_interval_seconds,declared_capacity_watts,visibility,\
-             lifecycle,version,created_at,updated_at FROM systems WHERE id=?",
+             lifecycle,version,created_at,updated_at,\
+             (SELECT SUM(p.rated_power_watts) FROM pv_strings p \
+              JOIN inverters i ON i.id=p.inverter_id WHERE i.system_id=systems.id) \
+             AS derived_capacity_watts FROM systems WHERE id=?",
         )
         .bind(blob(id.as_uuid()))
         .fetch_optional(&mut *connection)
@@ -217,7 +220,7 @@ impl SystemLifecycleRepository for PostgresSystemLifecycleRepository {
         let mut connection = PgConnection::connect(&self.url)
             .await
             .map_err(|_| PortError::Unavailable)?;
-        let row = sqlx::query("SELECT id,name,description,commissioning_date::TEXT AS commissioning_date,timezone,location_label,country_code,latitude_e6,longitude_e6,status_interval_seconds,declared_capacity_watts,visibility,lifecycle,version,created_at,updated_at FROM account_data.systems WHERE account_id=$1 AND id=$2")
+        let row = sqlx::query("SELECT id,name,description,commissioning_date::TEXT AS commissioning_date,timezone,location_label,country_code,latitude_e6,longitude_e6,status_interval_seconds,declared_capacity_watts,visibility,lifecycle,version,created_at,updated_at,(SELECT SUM(p.rated_power_watts)::BIGINT FROM account_data.pv_strings p JOIN account_data.inverters i ON i.account_id=p.account_id AND i.id=p.inverter_id WHERE i.account_id=account_data.systems.account_id AND i.system_id=account_data.systems.id) AS derived_capacity_watts FROM account_data.systems WHERE account_id=$1 AND id=$2")
             .bind(account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut connection).await
             .map_err(|_| PortError::Unavailable)?;
         connection
@@ -423,6 +426,7 @@ fn sqlite_record(
         status_interval_seconds: u32::try_from(row.get::<i64, _>("status_interval_seconds"))
             .map_err(|_| PortError::Unavailable)?,
         declared_capacity_watts: row.get("declared_capacity_watts"),
+        derived_capacity_watts: row.get("derived_capacity_watts"),
         visibility: parse_visibility(&row.get::<String, _>("visibility"))?,
         lifecycle: parse_lifecycle(&row.get::<String, _>("lifecycle"))?,
         version: u64::try_from(row.get::<i64, _>("version")).map_err(|_| PortError::Unavailable)?,
@@ -450,6 +454,7 @@ fn postgres_record(
         status_interval_seconds: u32::try_from(row.get::<i32, _>("status_interval_seconds"))
             .map_err(|_| PortError::Unavailable)?,
         declared_capacity_watts: row.get("declared_capacity_watts"),
+        derived_capacity_watts: row.get("derived_capacity_watts"),
         visibility: parse_visibility(&row.get::<String, _>("visibility"))?,
         lifecycle: parse_lifecycle(&row.get::<String, _>("lifecycle"))?,
         version: u64::try_from(row.get::<i64, _>("version")).map_err(|_| PortError::Unavailable)?,
