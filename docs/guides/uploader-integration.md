@@ -1,8 +1,57 @@
 # Uploader integration
 
-PVLog uses the same account API keys for every non-interactive integration.
-Open **Account API keys**, create a named key with only `telemetry:write`, and
-copy the cleartext value when it is shown. It cannot be displayed again.
+## Connect an uploader with a data source
+
+The usual way to connect a logger is a **data source**. Open the system, go to
+**Settings → Data sources**, choose **Add data source**, name it and pick the
+profile of your logger. PVLog then shows, once, everything the logger needs:
+
+- the server URL and the system identifier,
+- an API key that can only upload readings for this one system,
+- a configuration for the chosen profile with every value filled in.
+
+Copy the configuration before closing the dialog. The key cannot be displayed
+again; **Regenerate** issues a new one and invalidates the old one at once.
+
+| Profile   | Configuration shown                                                                                                     |
+| --------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `smalog`  | A `[pvlog]` section for `config.toml`, which refers to the key as `${PVLOG_API_KEY}`, and the matching environment line |
+| `sbfspot` | An environment file for [`sbfspot-push`](sbfspot-push-service.md)                                                       |
+| `generic` | A complete `curl` call and the raw HTTP request                                                                         |
+| `import`  | None; this profile is for history imports and needs no key                                                              |
+
+The same can be done over the API:
+
+```sh
+curl --fail-with-body -X POST \
+  -H "Authorization: Bearer $PVLOG_MANAGEMENT_KEY" \
+  -H 'Content-Type: application/json' \
+  --data '{"name":"Roof logger","profile":"smalog"}' \
+  "$PVLOG_URL/api/v1/systems/$PVLOG_SYSTEM_ID/data-sources"
+```
+
+The response carries `configuration.apiKey` and `configuration.snippets` and is
+sent with `Cache-Control: no-store`. A key that is itself restricted to one
+system cannot create or change data sources.
+
+Each data source reports a state: `never_connected` until its first accepted
+reading, `receiving`, `stale` once the last reading is older than three status
+intervals of the system, and `disconnected` when its key was revoked.
+
+To check the connection before the logger runs, send a test reading from the
+data source's entry, or let the logger send one reading with `"test": true`.
+Test readings are validated like real ones but stored apart from telemetry, so
+they never appear in a total, statistic or forecast, and **Remove test
+readings** deletes only them.
+
+## Account API keys for other integrations
+
+Integrations that are not tied to one data source use an account API key. Open
+**Account API keys**, create a named key with only the permissions the
+integration needs, and copy the cleartext value when it is shown. It cannot be
+displayed again. An account key with `telemetry:write` can upload for every
+system of the account, which is why a data source key is the better choice for
+a logger.
 
 Store the key in a secret manager or a mode-`0600` environment file, never in
 source control, shell history, screenshots, logs, or automation exports. Use

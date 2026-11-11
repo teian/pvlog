@@ -19,6 +19,8 @@ tags:
     description: PV system lifecycle and account-owned configuration
   - name: Equipment Catalog
     description: Offline inverter and solar-module templates with normalized engineering units
+  - name: Data Sources
+    description: Uploaders and imports that feed a system, their upload credentials and connection health
   - name: Telemetry
     description: Canonical observation ingestion and correction
   - name: Analytics
@@ -901,6 +903,155 @@ paths:
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
         "404": { $ref: "#/components/responses/NotFoundProblem" }
 
+  /api/v1/data-source-profiles:
+    get:
+      operationId: listDataSourceProfiles
+      summary: List source profiles
+      description: Lists the kinds of uploaders and imports this instance can connect, with the configuration snippets each one offers.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      responses:
+        "200":
+          description: Source profiles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SourceProfile" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/systems/{system_id}/data-sources:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: listDataSources
+      summary: List data sources
+      description: Lists the uploaders and imports that feed the system, each with its derived connection state. The response never contains a credential.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      responses:
+        "200":
+          description: Data sources
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DataSource" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+    post:
+      operationId: createDataSource
+      summary: Create a data source
+      description: Creates a data source and, for profiles that upload, issues a credential that can only write telemetry for this system. The cleartext credential and the ready-to-use configuration are returned in this response only. An API key that is itself restricted to one system cannot manage data sources.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateDataSource" }
+            example: { name: Roof logger, profile: smalog }
+      responses:
+        "201": { $ref: "#/components/responses/IssuedDataSource" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "409": { $ref: "#/components/responses/ConflictProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/systems/{system_id}/data-sources/{data_source_id}:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - $ref: "#/components/parameters/DataSourceId"
+    get:
+      operationId: getDataSource
+      summary: Read a data source
+      description: Returns one data source with its connection state, the server address and the system identifier, and no credential.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      responses:
+        "200":
+          description: Data source
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataSource" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+    put:
+      operationId: renameDataSource
+      summary: Rename a data source
+      description: Changes the name of a data source. Its credential and readings are unaffected.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RenameDataSource" }
+      responses:
+        "200":
+          description: Renamed data source
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DataSource" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "409": { $ref: "#/components/responses/ConflictProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+    delete:
+      operationId: deleteDataSource
+      summary: Delete a data source
+      description: Removes the data source and revokes its credential. Readings it delivered are kept and stay attributed to it.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
+      responses:
+        "204": { description: Data source deleted }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+  /api/v1/systems/{system_id}/data-sources/{data_source_id}/credential:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - $ref: "#/components/parameters/DataSourceId"
+    post:
+      operationId: regenerateDataSourceCredential
+      summary: Regenerate the credential of a data source
+      description: Issues a new credential and invalidates the previous one immediately. The new cleartext credential and configuration are returned in this response only.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
+      responses:
+        "200": { $ref: "#/components/responses/IssuedDataSource" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/systems/{system_id}/data-sources/{data_source_id}/test-reading:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - $ref: "#/components/parameters/DataSourceId"
+    post:
+      operationId: sendDataSourceTestReading
+      summary: Send a test reading
+      description: Stores one clearly marked test reading for the data source. Test readings are kept apart from telemetry and never enter a total, statistic or forecast.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
+      responses:
+        "201":
+          description: Test reading stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TestReading" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+  /api/v1/systems/{system_id}/test-readings:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    delete:
+      operationId: deleteTestReadings
+      summary: Remove test readings
+      description: Removes every test reading of the system. Real readings are never affected.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
+      responses:
+        "204": { description: Test readings removed }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
   /api/v1/systems/{system_id}/channels:
     parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     get:
@@ -3025,6 +3176,11 @@ components:
         required: true,
         schema: { $ref: "#/components/schemas/UuidV7" },
       }
+    DataSourceId:
+      name: data_source_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UuidV7" }
     InverterId:
       name: inverter_id
       in: path
@@ -3168,6 +3324,13 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
+    IssuedDataSource:
+      description: Data source with its one-time uploader configuration. The response must not be cached.
+      headers:
+        Cache-Control: { schema: { type: string, const: no-store } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/IssuedDataSource" }
     SystemResponse:
       description: Versioned system representation
       headers: { ETag: { schema: { type: string } } }
@@ -3437,6 +3600,124 @@ components:
           writeOnly: true
           description: One-time cleartext bearer key. Copy it before dismissing the response.
         credential: { $ref: "#/components/schemas/AccountApiKey" }
+    SourceProfile:
+      type: object
+      required: [id, displayName, issuesCredential, snippetKinds]
+      properties:
+        id: { type: string, example: smalog }
+        displayName: { type: string }
+        issuesCredential:
+          type: boolean
+          description: Whether creating a data source of this profile issues an upload credential.
+        snippetKinds:
+          type: array
+          items: { type: string }
+          description: Identifiers of the configuration snippets rendered for this profile.
+    CreateDataSource:
+      type: object
+      additionalProperties: false
+      required: [name, profile]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        profile:
+          type: string
+          description: Identifier of a profile returned by the source profile catalog.
+    RenameDataSource:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+    DataSource:
+      type: object
+      required:
+        [
+          id,
+          systemId,
+          name,
+          profile,
+          state,
+          serverUrl,
+          readingsLastDay,
+          createdAtEpochMillis,
+          updatedAtEpochMillis,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        name: { type: string }
+        profile: { type: string }
+        state:
+          type: string
+          enum: [never_connected, receiving, stale, disconnected]
+          description: never_connected until the first accepted reading; stale when the last reading was received more than three status intervals ago; disconnected when the credential is revoked or expired.
+        serverUrl:
+          type: string
+          format: uri
+          description: Address uploaders send to.
+        credentialId:
+          anyOf: [{ $ref: "#/components/schemas/UuidV7" }, { type: "null" }]
+          description: Identifier of the credential issued for this source. The secret is never returned here.
+        lastReadingAtEpochMillis:
+          type: [integer, "null"]
+          format: int64
+          description: Measurement time of the newest accepted reading.
+        lastReceivedAtEpochMillis: { type: [integer, "null"], format: int64 }
+        readingsLastDay: { type: integer, minimum: 0 }
+        createdAtEpochMillis: { type: integer, format: int64 }
+        updatedAtEpochMillis: { type: integer, format: int64 }
+    DataSourceConfiguration:
+      type: object
+      description: Uploader configuration containing the cleartext credential. Returned once and never retrievable again.
+      required: [serverUrl, systemId, apiKey, snippets]
+      properties:
+        serverUrl: { type: string, format: uri }
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        apiKey:
+          type: string
+          description: Cleartext upload credential. It can only write telemetry for this system.
+        snippets:
+          type: array
+          items:
+            type: object
+            required: [id, title, language, content]
+            properties:
+              id: { type: string }
+              title: { type: string }
+              language: { type: string }
+              content:
+                type: string
+                description: Configuration with every value filled in, usable without editing.
+    IssuedDataSource:
+      type: object
+      required: [dataSource]
+      properties:
+        dataSource: { $ref: "#/components/schemas/DataSource" }
+        configuration:
+          anyOf:
+            - $ref: "#/components/schemas/DataSourceConfiguration"
+            - type: "null"
+          description: Absent for profiles that need no credential.
+    TestReading:
+      type: object
+      required:
+        [
+          id,
+          systemId,
+          measuredAtEpochMillis,
+          receivedAtEpochMillis,
+          values,
+          test,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        systemId: { $ref: "#/components/schemas/UuidV7" }
+        dataSourceId:
+          anyOf: [{ $ref: "#/components/schemas/UuidV7" }, { type: "null" }]
+        measuredAtEpochMillis: { type: integer, format: int64 }
+        receivedAtEpochMillis: { type: integer, format: int64 }
+        values: { type: object, additionalProperties: true }
+        test: { type: boolean, const: true }
     GeocodingResult:
       type: object
       additionalProperties: false
@@ -4411,6 +4692,27 @@ components:
           voltageMillivolts: { type: integer, minimum: 0 },
           temperatureMillidegreesCelsius: { type: integer },
           sourceReference: { type: string },
+          channels:
+            {
+              type: object,
+              description: Per-meter readings keyed by the source's own channel names. An unknown key is registered as an unassigned measurement channel.,
+              additionalProperties:
+                {
+                  type: object,
+                  properties:
+                    {
+                      powerWatts: { type: integer },
+                      energyWattHours: { type: integer },
+                      quality: { type: string, enum: [estimated] },
+                    },
+                },
+            },
+          test:
+            {
+              type: boolean,
+              default: false,
+              description: Marks a reading sent only to prove the connection. It is validated like any other but stored apart from telemetry. Not allowed in a batch.,
+            },
         }
     ObservationBatchInput:
       type: object
