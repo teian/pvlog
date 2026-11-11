@@ -50,8 +50,8 @@ impl SystemLifecycleRepository for SqliteSystemLifecycleRepository {
         let account = self.router.route(account_id).await.map_err(route_error)?;
         let mut connection = account.acquire().await.map_err(route_error)?;
         let row = sqlx::query(
-            "SELECT id,name,timezone,visibility,lifecycle,version,created_at,updated_at \
-             FROM systems WHERE id=?",
+            "SELECT id,name,description,commissioning_date,timezone,visibility,lifecycle,version,\
+             created_at,updated_at FROM systems WHERE id=?",
         )
         .bind(blob(id.as_uuid()))
         .fetch_optional(&mut *connection)
@@ -386,8 +386,8 @@ fn sqlite_record(
         id: SystemId::from_uuid(id).map_err(|_| PortError::Unavailable)?,
         account_id,
         name: row.get("name"),
-        description: row.try_get("description").unwrap_or_default(),
-        commissioning_date: row.try_get("commissioning_date").ok().flatten(),
+        description: row.get("description"),
+        commissioning_date: row.get("commissioning_date"),
         timezone: row.get("timezone"),
         visibility: parse_visibility(&row.get::<String, _>("visibility"))?,
         lifecycle: parse_lifecycle(&row.get::<String, _>("lifecycle"))?,
