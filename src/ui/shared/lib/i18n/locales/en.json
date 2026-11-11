@@ -1210,6 +1210,14 @@
       "channels": {
         "title": "Measurement channels",
         "description": "The individual values your data sources deliver, and which part of the system each one measures."
+      },
+      "tariffs": {
+        "title": "Tariffs",
+        "description": "Prices for exported and imported energy, used to show revenue and costs."
+      },
+      "sharing": {
+        "title": "Sharing",
+        "description": "Who can see this system, and the public link."
       }
     },
     "general": {
@@ -1304,6 +1312,73 @@
       "loadTitle": "Measurement channels could not be loaded",
       "loadDescription": "Reload the page, or try again in a moment.",
       "save": "The change could not be saved. Try again in a moment."
+    }
+  },
+  "tariffs": {
+    "name": "Name",
+    "direction": "Applies to",
+    "directions": {
+      "export": "Exported energy",
+      "import": "Imported energy"
+    },
+    "currency": "Currency (ISO code)",
+    "price": "Price per kWh",
+    "priceHint": "In the currency's minor unit as a whole number, for example 8 for 8 cents.",
+    "priceValue": "{{price}} minor units of {{currency}} per kWh",
+    "from": "Valid from",
+    "to": "Valid until (optional)",
+    "validity": "Validity",
+    "validFrom": "From {{from}}",
+    "validRange": "{{from}} to {{to}}",
+    "add": "Add tariff",
+    "save": "Save tariff",
+    "edit": "Edit",
+    "editOf": "Edit tariff {{name}}",
+    "delete": "Delete",
+    "deleteOf": "Delete tariff {{name}}",
+    "invalid": "Enter a name, a three-letter currency, a whole price of zero or more and a start date. An end date must be after the start.",
+    "empty": {
+      "title": "No tariff yet",
+      "description": "Without a tariff, PVLog shows energy but no revenue."
+    },
+    "errors": {
+      "loadTitle": "Tariffs could not be loaded",
+      "loadDescription": "Reload the page, or try again in a moment.",
+      "save": "The tariff could not be saved. Try again in a moment.",
+      "overlap": "This tariff overlaps another tariff for the same direction. Adjust the dates."
+    }
+  },
+  "sharing": {
+    "visibility": "Visibility",
+    "visibilities": {
+      "private": {
+        "name": "Private",
+        "description": "Only members of this account see the system."
+      },
+      "unlisted": {
+        "name": "Unlisted",
+        "description": "Not listed anywhere; whoever has the public link can view it."
+      },
+      "public": {
+        "name": "Public",
+        "description": "Listed in the public directory of this PVLog instance."
+      }
+    },
+    "link": "Public link enabled",
+    "linkValue": "Public link",
+    "copy": "Copy link",
+    "copied": "Link copied",
+    "rotate": {
+      "action": "Create a new link",
+      "title": "Replace the public link?",
+      "description": "The current link stops working immediately. Everyone you gave it to needs the new one.",
+      "confirm": "Replace link",
+      "done": "This is the new link. The previous link no longer works."
+    },
+    "errors": {
+      "loadTitle": "Sharing settings could not be loaded",
+      "loadDescription": "Reload the page, or try again in a moment.",
+      "save": "The sharing settings could not be changed. Try again in a moment."
     }
   }
 }

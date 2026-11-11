@@ -1,8 +1,10 @@
 import { useSession } from "@/features/auth";
 import { DataSourceManager } from "@/features/dataSources";
 import { ChannelManager } from "@/features/measurementChannels";
+import { SharingSettings } from "@/features/sharing";
 import { SystemEquipmentEditor } from "@/features/systemManagement";
 import { SystemGeneralSettings } from "@/features/systemSettings";
+import { TariffManager } from "@/features/tariffs";
 import { cn } from "@/shared/lib/utils";
 import type { ComponentType } from "react";
 import { useTranslation } from "react-i18next";
@@ -26,6 +28,8 @@ const SECTIONS: { key: string; component: ComponentType<SectionProps> }[] = [
   { key: "data-sources", component: DataSourceManager },
   { key: "equipment", component: SystemEquipmentEditor },
   { key: "channels", component: ChannelManager },
+  { key: "tariffs", component: TariffManager },
+  { key: "sharing", component: SharingSettings },
 ];
 
 const linkClass = ({ isActive }: { isActive: boolean }) =>

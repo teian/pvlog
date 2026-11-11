@@ -1210,6 +1210,14 @@
       "channels": {
         "title": "Messkanäle",
         "description": "Die einzelnen Werte, die deine Datenquellen liefern, und welchen Teil der Anlage sie jeweils messen."
+      },
+      "tariffs": {
+        "title": "Tarife",
+        "description": "Preise für eingespeiste und bezogene Energie, mit denen Erlös und Kosten angezeigt werden."
+      },
+      "sharing": {
+        "title": "Freigabe",
+        "description": "Wer diese Anlage sehen kann, und der öffentliche Link."
       }
     },
     "general": {
@@ -1304,6 +1312,73 @@
       "loadTitle": "Messkanäle konnten nicht geladen werden",
       "loadDescription": "Lade die Seite neu oder versuche es gleich noch einmal.",
       "save": "Die Änderung konnte nicht gespeichert werden. Versuche es gleich noch einmal."
+    }
+  },
+  "tariffs": {
+    "name": "Name",
+    "direction": "Gilt für",
+    "directions": {
+      "export": "Eingespeiste Energie",
+      "import": "Bezogene Energie"
+    },
+    "currency": "Währung (ISO-Code)",
+    "price": "Preis je kWh",
+    "priceHint": "In der kleinsten Einheit der Währung als ganze Zahl, zum Beispiel 8 für 8 Cent.",
+    "priceValue": "{{price}} kleinste Einheiten {{currency}} je kWh",
+    "from": "Gültig ab",
+    "to": "Gültig bis (optional)",
+    "validity": "Gültigkeit",
+    "validFrom": "Ab {{from}}",
+    "validRange": "{{from}} bis {{to}}",
+    "add": "Tarif hinzufügen",
+    "save": "Tarif speichern",
+    "edit": "Bearbeiten",
+    "editOf": "Tarif {{name}} bearbeiten",
+    "delete": "Löschen",
+    "deleteOf": "Tarif {{name}} löschen",
+    "invalid": "Gib einen Namen, eine Währung mit drei Buchstaben, einen ganzzahligen Preis ab null und ein Startdatum ein. Ein Enddatum muss nach dem Start liegen.",
+    "empty": {
+      "title": "Noch kein Tarif",
+      "description": "Ohne Tarif zeigt PVLog Energie, aber keinen Erlös."
+    },
+    "errors": {
+      "loadTitle": "Tarife konnten nicht geladen werden",
+      "loadDescription": "Lade die Seite neu oder versuche es gleich noch einmal.",
+      "save": "Der Tarif konnte nicht gespeichert werden. Versuche es gleich noch einmal.",
+      "overlap": "Dieser Tarif überschneidet sich mit einem anderen Tarif derselben Richtung. Passe die Daten an."
+    }
+  },
+  "sharing": {
+    "visibility": "Sichtbarkeit",
+    "visibilities": {
+      "private": {
+        "name": "Privat",
+        "description": "Nur Mitglieder dieses Kontos sehen die Anlage."
+      },
+      "unlisted": {
+        "name": "Nicht gelistet",
+        "description": "Nirgends aufgeführt; wer den öffentlichen Link hat, kann sie ansehen."
+      },
+      "public": {
+        "name": "Öffentlich",
+        "description": "Im öffentlichen Verzeichnis dieser PVLog-Instanz aufgeführt."
+      }
+    },
+    "link": "Öffentlicher Link aktiv",
+    "linkValue": "Öffentlicher Link",
+    "copy": "Link kopieren",
+    "copied": "Link kopiert",
+    "rotate": {
+      "action": "Neuen Link erzeugen",
+      "title": "Öffentlichen Link ersetzen?",
+      "description": "Der aktuelle Link funktioniert sofort nicht mehr. Alle, denen du ihn gegeben hast, brauchen den neuen.",
+      "confirm": "Link ersetzen",
+      "done": "Das ist der neue Link. Der bisherige Link funktioniert nicht mehr."
+    },
+    "errors": {
+      "loadTitle": "Freigabe-Einstellungen konnten nicht geladen werden",
+      "loadDescription": "Lade die Seite neu oder versuche es gleich noch einmal.",
+      "save": "Die Freigabe konnte nicht geändert werden. Versuche es gleich noch einmal."
     }
   }
 }
