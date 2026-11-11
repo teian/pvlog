@@ -119,11 +119,14 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         let repository = self.repository(system_id).await?;
         let stored = stored_observation(&observation, received_at)?;
         match repository.insert_observation(&stored).await {
-            Ok(ObservationInsertOutcome::Inserted | ObservationInsertOutcome::Duplicate) => {
+            Ok(ObservationInsertOutcome::Inserted) => {
                 self.write_channel_values(system_id, &observation, received_at)
                     .await?;
                 Ok(observation)
             }
+            // A retry carries a fresh observation id; writing values under it
+            // would orphan them, so an idempotent duplicate stores nothing new.
+            Ok(ObservationInsertOutcome::Duplicate) => Ok(observation),
             Err(_) => Err(ModernTelemetryError::Conflict),
         }
     }

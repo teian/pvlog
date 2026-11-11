@@ -136,6 +136,17 @@ impl ChannelApiUseCases for StorageChannelApi {
                 if updated.rows_affected() == 0 {
                     return Err(ChannelApiError::NotFound);
                 }
+                // Per-string and per-inverter rollups follow the binding they were
+                // built under. Drop them so the aggregation cycle, which notices the
+                // newer binding, rebuilds them against the current one.
+                sqlx::query(
+                    "DELETE FROM telemetry_rollups \
+                     WHERE system_id=? AND scope_kind IN ('string','inverter')",
+                )
+                .bind(id_blob(system_id))
+                .execute(&mut *connection)
+                .await
+                .map_err(|_| ChannelApiError::Unavailable)?;
                 drop(connection);
                 return self
                     .list(system_id)

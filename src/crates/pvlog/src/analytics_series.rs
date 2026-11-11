@@ -275,8 +275,11 @@ impl AccountSeriesRepository {
             .acquire()
             .await
             .map_err(|_| SeriesQueryRepositoryError::Unavailable)?;
-        if let Some(rows) = self.sqlite_channel_rows(&mut connection, system_id).await? {
-            return Ok(rows);
+        let channel_rows = self.sqlite_channel_rows(&mut connection, system_id).await?;
+        if let Some(rows) = channel_rows.as_ref()
+            && self.scope != SeriesScope::System
+        {
+            return Ok(rows.clone());
         }
         let rows = sqlx::query(
             "SELECT measured_at,generation_power_watts,generation_energy_wh,\
@@ -292,7 +295,7 @@ impl AccountSeriesRepository {
         .fetch_all(&mut *connection)
         .await
         .map_err(|_| SeriesQueryRepositoryError::Unavailable)?;
-        Ok(rows
+        let plant: Vec<SampleRow> = rows
             .iter()
             .map(|row| SampleRow {
                 timestamp_epoch_millis: row.get("measured_at"),
@@ -308,7 +311,11 @@ impl AccountSeriesRepository {
                 coverage_basis_points: FULL_COVERAGE,
                 provenance: row.try_get("source_identity").ok(),
             })
-            .collect())
+            .collect();
+        Ok(match channel_rows {
+            Some(channels) => merge_channel_generation(plant, channels),
+            None => plant,
+        })
     }
 
     #[cfg(not(feature = "sqlite"))]
@@ -670,4 +677,23 @@ fn gaps_for(rows: &[SampleRow]) -> Vec<SeriesGap> {
 #[cfg(feature = "sqlite")]
 fn id_blob(id: SystemId) -> Vec<u8> {
     id.as_uuid().as_bytes().to_vec()
+}
+
+/// Overlays metered per-string generation onto plant-wide raw samples.
+///
+/// Once a string is metered its channel sum is the system's generation power,
+/// but consumption, grid, battery, and temperature only exist on the plant row,
+/// so those fields must survive instead of being replaced by the channel rows.
+fn merge_channel_generation(plant: Vec<SampleRow>, channels: Vec<SampleRow>) -> Vec<SampleRow> {
+    let mut by_time: std::collections::BTreeMap<i64, SampleRow> = plant
+        .into_iter()
+        .map(|row| (row.timestamp_epoch_millis, row))
+        .collect();
+    for channel in channels {
+        by_time
+            .entry(channel.timestamp_epoch_millis)
+            .and_modify(|row| row.generation_power_watts = channel.generation_power_watts)
+            .or_insert(channel);
+    }
+    by_time.into_values().collect()
 }

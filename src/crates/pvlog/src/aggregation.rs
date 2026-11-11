@@ -241,6 +241,18 @@ async fn rebuild_system(
             .fetch_one(&mut *connection)
             .await
             .map_err(|_| AggregationError::Unavailable)?;
+    // A binding changed after the last rebuild re-attributes history, so every
+    // retained observation is pending again, not only the newly received ones.
+    let rebound: Option<i64> =
+        sqlx::query_scalar("SELECT MAX(updated_at) FROM channel_definitions WHERE system_id=?")
+            .bind(blob.clone())
+            .fetch_one(&mut *connection)
+            .await
+            .map_err(|_| AggregationError::Unavailable)?;
+    let watermark = match (watermark, rebound) {
+        (Some(built), Some(changed)) if changed > built => None,
+        (built, _) => built,
+    };
     let pending: Option<(Option<i64>, Option<i64>)> = sqlx::query(
         "SELECT MIN(measured_at) AS first, MAX(measured_at) AS last FROM telemetry_hot \
          WHERE system_id=? AND received_at>?",
