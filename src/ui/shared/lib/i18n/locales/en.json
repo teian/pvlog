@@ -1206,6 +1206,10 @@
       "equipment": {
         "title": "Equipment",
         "description": "Inverters and strings. Optional: a system works without them, and they unlock per-string analysis and the yield forecast."
+      },
+      "channels": {
+        "title": "Measurement channels",
+        "description": "The individual values your data sources deliver, and which part of the system each one measures."
       }
     },
     "general": {
@@ -1262,6 +1266,44 @@
       "save": "The equipment could not be saved completely. Check the entries and try again.",
       "loadTitle": "Equipment could not be loaded",
       "loadDescription": "Reload the page, or try again in a moment."
+    }
+  },
+  "channels": {
+    "nameOf": "Name of channel {{key}}",
+    "targetOf": "What {{name}} measures",
+    "saveName": "Save",
+    "noValue": "No value yet",
+    "unassignedBadge": "Not assigned",
+    "targets": {
+      "unassigned": "Not assigned",
+      "plant": "The whole system",
+      "inverter": "Inverter {{name}}",
+      "string": "String {{name}}"
+    },
+    "columns": {
+      "channel": "Measurement channel",
+      "lastValue": "Last value",
+      "target": "Measures"
+    },
+    "unassigned": {
+      "title_one": "{{count}} measurement channel is not assigned",
+      "title_other": "{{count}} measurement channels are not assigned",
+      "description": "Their values are stored, but they do not appear in any inverter or string view until you choose what they measure."
+    },
+    "empty": {
+      "title": "No measurement channels yet",
+      "description": "Channels appear here as soon as a data source delivers values per inverter or string."
+    },
+    "retire": {
+      "action": "Retire",
+      "title": "Retire this measurement channel?",
+      "description": "“{{name}}” is no longer listed or included in any view. Values already stored are kept.",
+      "confirm": "Retire channel"
+    },
+    "errors": {
+      "loadTitle": "Measurement channels could not be loaded",
+      "loadDescription": "Reload the page, or try again in a moment.",
+      "save": "The change could not be saved. Try again in a moment."
     }
   }
 }

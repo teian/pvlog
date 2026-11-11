@@ -35,7 +35,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 - [x] 4.2 Redirect a signed-in user who may manage systems and has none to `/setup`; verify with a browser test from first sign-in to a verified test reading.
 - [x] 4.3 Add the Settings tab to the system page with routed sections and build General (all system fields, with the location saved) and Data sources (list with state, add, rename, regenerate with confirmation, delete); verify with component tests that the sections are read-only without management permission and that regeneration warns before invalidating.
 - [x] 4.4 Move the equipment editor into the Equipment section with quick entry and detailed entry, and remove "Equipment templates" and "System resources" from Administration with redirects; verify that equipment is editable in exactly one place and that the former URLs redirect.
-- [ ] 4.5 Build the Measurement channels section with unassigned channels highlighted and bind, rename and retire actions; verify with component tests that binding moves the channel under its target and updates the checklist.
+- [x] 4.5 Build the Measurement channels section with unassigned channels highlighted and bind, rename and retire actions; verify with component tests that binding moves the channel under its target and updates the checklist.
 - [ ] 4.6 Build the Tariffs and Sharing sections on the existing endpoints, including link rotation with confirmation; verify create, edit and delete of a tariff and enable, copy and rotate of a link with component tests.
 - [ ] 4.7 Show managed data-source credentials on the account page as non-editable entries that link to their data source, and point the key creation form to data sources for uploaders; verify with a component test.
 

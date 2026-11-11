@@ -1206,6 +1206,10 @@
       "equipment": {
         "title": "Geräte",
         "description": "Wechselrichter und Strings. Optional: Eine Anlage funktioniert auch ohne sie; sie ermöglichen die Auswertung je String und die Ertragsprognose."
+      },
+      "channels": {
+        "title": "Messkanäle",
+        "description": "Die einzelnen Werte, die deine Datenquellen liefern, und welchen Teil der Anlage sie jeweils messen."
       }
     },
     "general": {
@@ -1262,6 +1266,44 @@
       "save": "Die Geräte konnten nicht vollständig gespeichert werden. Prüfe die Eingaben und versuche es erneut.",
       "loadTitle": "Geräte konnten nicht geladen werden",
       "loadDescription": "Lade die Seite neu oder versuche es gleich noch einmal."
+    }
+  },
+  "channels": {
+    "nameOf": "Name des Messkanals {{key}}",
+    "targetOf": "Was {{name}} misst",
+    "saveName": "Speichern",
+    "noValue": "Noch kein Wert",
+    "unassignedBadge": "Nicht zugeordnet",
+    "targets": {
+      "unassigned": "Nicht zugeordnet",
+      "plant": "Die gesamte Anlage",
+      "inverter": "Wechselrichter {{name}}",
+      "string": "String {{name}}"
+    },
+    "columns": {
+      "channel": "Messkanal",
+      "lastValue": "Letzter Wert",
+      "target": "Misst"
+    },
+    "unassigned": {
+      "title_one": "{{count}} Messkanal ist nicht zugeordnet",
+      "title_other": "{{count}} Messkanäle sind nicht zugeordnet",
+      "description": "Ihre Werte werden gespeichert, erscheinen aber in keiner Wechselrichter- oder String-Ansicht, bis du festlegst, was sie messen."
+    },
+    "empty": {
+      "title": "Noch keine Messkanäle",
+      "description": "Messkanäle erscheinen hier, sobald eine Datenquelle Werte je Wechselrichter oder String liefert."
+    },
+    "retire": {
+      "action": "Stilllegen",
+      "title": "Diesen Messkanal stilllegen?",
+      "description": "„{{name}}“ wird nicht mehr aufgeführt und in keiner Ansicht mehr berücksichtigt. Bereits gespeicherte Werte bleiben erhalten.",
+      "confirm": "Messkanal stilllegen"
+    },
+    "errors": {
+      "loadTitle": "Messkanäle konnten nicht geladen werden",
+      "loadDescription": "Lade die Seite neu oder versuche es gleich noch einmal.",
+      "save": "Die Änderung konnte nicht gespeichert werden. Versuche es gleich noch einmal."
     }
   }
 }
