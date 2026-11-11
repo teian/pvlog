@@ -4,7 +4,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 
 ## 1. System model and creation
 
-- [ ] 1.1 Add additive SQLite and PostgreSQL migrations for `declared_capacity_watts`, location label, commissioning date and string temperature coefficient and shading entries; verify the migration tests pass on both databases and the previous schema version still starts.
+- [x] 1.1 Add additive SQLite and PostgreSQL migrations for `declared_capacity_watts`, location label, commissioning date and string temperature coefficient and shading entries; verify the migration tests pass on both databases and the previous schema version still starts.
 - [ ] 1.2 Allow systems without inverters in the domain and storage layers and audit forecasting, per-string charts, capacity validation and aggregation for a "missing equipment" path; verify with tests that a system without inverters ingests and reports system-level readings and that each view reports equipment as the missing input.
 - [ ] 1.3 Extend system create and update to accept and return name, description, location label, coordinates, timezone, status interval, commissioning date and declared capacity, deriving the timezone from coordinates when omitted; verify with API tests for the name-only case, timezone derivation and each field-specific rejection.
 - [ ] 1.4 Make creation with inverters and strings one transactional server operation and persist string temperature coefficient and shading; verify that an invalid string leaves no system behind and that saved loss inputs are returned unchanged.
