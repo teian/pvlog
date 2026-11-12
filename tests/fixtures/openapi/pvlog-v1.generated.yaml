@@ -1621,7 +1621,7 @@ paths:
     post:
       operationId: createObservation
       summary: Ingest one observation
-      description: Normalizes and durably stores one idempotent canonical observation. Account API keys require the telemetry:write scope and standard bearer authentication. Query credentials are rejected before ingestion.
+      description: Normalizes and durably stores one idempotent canonical observation. Account API keys require the telemetry:write scope and standard bearer authentication. Query credentials are rejected before ingestion. An absent member means that the value is unknown and is never read as zero. A rejected member is named by its wire name in the detail of the validation problem.
       tags: [Telemetry]
       security: [{ bearerAuth: [telemetry:write] }]
       x-codeSamples:
@@ -1672,6 +1672,72 @@ paths:
           "429": { $ref: "#/components/responses/RateLimitProblem" },
           "503": { $ref: "#/components/responses/OverloadProblem" },
         }
+  /api/v1/systems/{system_id}/daily-summaries:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: listDailyValues
+      summary: List daily values
+      description: Lists the local days in the range that have a supplied summary or a value computed from interval readings, each with the value it reports and what that value is based on.
+      tags: [Telemetry]
+      security: [{ sessionCookie: [] }, { bearerAuth: [telemetry:read] }]
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          description: Last date of the range, inclusive.
+          schema: { type: string, format: date }
+      responses:
+        "200":
+          description: Daily values, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DailyValue" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/systems/{system_id}/daily-summaries/{date}:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - name: date
+        in: path
+        required: true
+        description: Local calendar date in the system's timezone.
+        schema: { type: string, format: date }
+    put:
+      operationId: supplyDailySummary
+      summary: Supply a daily summary
+      description: Stores the summary a source reports for one local date. Supplying a summary again for the same date replaces the earlier one of the same source, so a running day can be updated until it is marked complete. The summary is kept next to the value computed from interval readings; the response states which of the two the day reports.
+      tags: [Telemetry]
+      security: [{ bearerAuth: [telemetry:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DailySummaryInput" }
+            example:
+              generationEnergyWh: 23400
+              exportEnergyWh: 15200
+              consumptionEnergyWh: 9800
+              complete: true
+              peakPowerWatts: 7400
+              peakTime: "12:35"
+              weatherCondition: Fine
+      responses:
+        "200":
+          description: The day as it is now reported
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DailyValue" }
+        "401": { $ref: "#/components/responses/UnauthorizedProblem" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/systems/{system_id}/observations/batch:
     parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     post:
@@ -2099,7 +2165,7 @@ paths:
     get:
       operationId: getSystemReportingStatistics
       summary: Get lifetime and monthly production statistics
-      description: Returns the stored lifetime summary and available monthly rollups without fabricating missing measurements.
+      description: Returns the lifetime totals with the production per month and per local calendar year, without fabricating missing measurements. Days for which the source supplied a daily summary are included according to the daily value precedence, and each month and year states how many of its days rest on a supplied summary.
       tags: [Reporting]
       security: [{ bearerAuth: [analytics:read] }, { sessionCookie: [] }]
       responses:
@@ -3700,6 +3766,10 @@ components:
                 consumptionPowerWatts:
                   { type: [integer, "null"], format: int64 }
                 consumptionEnergyWh: { type: [integer, "null"], format: int64 }
+                message:
+                  type: [string, "null"]
+                  maxLength: 30
+                  description: Short text the source attached to the reading.
                 dataSourceId:
                   anyOf:
                     [{ $ref: "#/components/schemas/UuidV7" }, { type: "null" }]
@@ -4797,8 +4867,50 @@ components:
           generationEnergyWh: { type: integer },
           consumptionPowerWatts: { type: integer },
           consumptionEnergyWh: { type: integer },
+          generationLifetimeWh:
+            {
+              type: integer,
+              minimum: 0,
+              description: Lifetime generation counter. When generationEnergyWh is absent it is derived from the difference to the previous counter of the same source. A counter lower than its predecessor is a reset; nothing is derived for that reading and it is flagged. Nothing is derived without a predecessor.,
+            },
+          consumptionLifetimeWh:
+            {
+              type: integer,
+              minimum: 0,
+              description: "Lifetime consumption counter, treated like generationLifetimeWh.",
+            },
+          gridImportPowerWatts:
+            {
+              type: integer,
+              minimum: 0,
+              description: Power drawn from the grid.,
+            },
+          gridExportPowerWatts:
+            {
+              type: integer,
+              minimum: 0,
+              description: Power fed into the grid. A reading whose import and export power are both above zero is rejected.,
+            },
+          gridImportEnergyWh:
+            {
+              type: integer,
+              minimum: 0,
+              description: Energy drawn from the grid during the interval.,
+            },
+          gridExportEnergyWh:
+            {
+              type: integer,
+              minimum: 0,
+              description: Energy fed into the grid during the interval.,
+            },
           voltageMillivolts: { type: integer, minimum: 0 },
           temperatureMillidegreesCelsius: { type: integer },
+          message:
+            {
+              type: string,
+              maxLength: 30,
+              description: "Short text from the source, such as a status. Returned when the reading is inspected.",
+            },
           sourceReference: { type: string },
           channels:
             {
@@ -5402,6 +5514,7 @@ components:
           lastObservationAtEpochMillis,
           coverageBasisPoints,
           monthly,
+          yearly,
         ]
       properties:
         systemId: { $ref: "#/components/schemas/UuidV7" }
@@ -5415,6 +5528,10 @@ components:
         monthly:
           type: array
           items: { $ref: "#/components/schemas/MonthlyProduction" }
+        yearly:
+          type: array
+          description: The months summed per local calendar year.
+          items: { $ref: "#/components/schemas/YearlyProduction" }
     MonthlyProduction:
       type: object
       additionalProperties: false
@@ -5424,12 +5541,98 @@ components:
           generationEnergyWh,
           consumptionEnergyWh,
           coverageBasisPoints,
+          suppliedDays,
         ]
       properties:
         bucketStartEpochMillis: { type: integer, format: int64 }
         generationEnergyWh: { type: [integer, "null"], format: int64 }
         consumptionEnergyWh: { type: [integer, "null"], format: int64 }
         coverageBasisPoints: { type: integer, minimum: 0, maximum: 10000 }
+        suppliedDays:
+          type: integer
+          minimum: 0
+          description: Days of the month whose value is a daily summary the source supplied rather than computed from interval readings.
+    YearlyProduction:
+      type: object
+      additionalProperties: false
+      required: [year, generationEnergyWh, consumptionEnergyWh, suppliedDays]
+      properties:
+        year: { type: integer }
+        generationEnergyWh: { type: [integer, "null"], format: int64 }
+        consumptionEnergyWh: { type: [integer, "null"], format: int64 }
+        suppliedDays: { type: integer, minimum: 0 }
+    DailySummaryInput:
+      type: object
+      additionalProperties: false
+      description: A daily summary as a source reports it. Every member is optional; an absent member means that the value is unknown.
+      properties:
+        generationEnergyWh: { type: integer, format: int64, minimum: 0 }
+        exportEnergyWh: { type: integer, format: int64, minimum: 0 }
+        consumptionEnergyWh: { type: integer, format: int64, minimum: 0 }
+        generationLifetimeWh:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Lifetime generation counter at the end of the day.
+        complete:
+          type: boolean
+          default: false
+          description: True once the source states that the day will not change any more. A complete summary is reported in preference to values computed from interval readings.
+        peakPowerWatts: { type: integer, format: int64, minimum: 0 }
+        peakTime:
+          type: string
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+          description: Local time of the peak.
+        weatherCondition: { type: string, maxLength: 40 }
+        temperatureMinMillidegreesCelsius: { type: integer, format: int64 }
+        temperatureMaxMillidegreesCelsius: { type: integer, format: int64 }
+        importEnergyWhByBand:
+          type: object
+          additionalProperties: false
+          description: Imported energy by tariff band.
+          properties:
+            peak: { type: integer, format: int64, minimum: 0 }
+            offPeak: { type: integer, format: int64, minimum: 0 }
+            shoulder: { type: integer, format: int64, minimum: 0 }
+            highShoulder: { type: integer, format: int64, minimum: 0 }
+    DailyValue:
+      type: object
+      required:
+        [date, basis, generationEnergyWh, consumptionEnergyWh, exportEnergyWh]
+      properties:
+        date: { type: string, format: date }
+        basis:
+          type: string
+          enum: [supplied_complete, computed, supplied_incomplete]
+          description: What the reported value is based on. A complete supplied summary is used first, otherwise interval readings that cover at least 80 % of the day, otherwise an incomplete supplied summary.
+        generationEnergyWh: { type: [integer, "null"], format: int64 }
+        consumptionEnergyWh: { type: [integer, "null"], format: int64 }
+        exportEnergyWh: { type: [integer, "null"], format: int64 }
+        supplied:
+          description: The summary a source supplied for the day.
+          anyOf:
+            - allOf:
+                - $ref: "#/components/schemas/DailySummaryInput"
+                - type: object
+                  properties:
+                    dataSourceId:
+                      anyOf:
+                        - $ref: "#/components/schemas/UuidV7"
+                        - type: "null"
+                    receivedAtEpochMillis: { type: integer, format: int64 }
+            - type: "null"
+        computed:
+          description: The value computed from interval readings. It stays available while the supplied summary is the one reported.
+          anyOf:
+            - type: object
+              required: [coverageBasisPoints]
+              properties:
+                generationEnergyWh: { type: [integer, "null"], format: int64 }
+                consumptionEnergyWh: { type: [integer, "null"], format: int64 }
+                exportEnergyWh: { type: [integer, "null"], format: int64 }
+                coverageBasisPoints:
+                  { type: integer, minimum: 0, maximum: 10000 }
+            - type: "null"
     SeasonalProduction:
       type: object
       additionalProperties: false

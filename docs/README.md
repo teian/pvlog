@@ -12,6 +12,7 @@ Documentation version: 1.0
 - [Equipment catalog and custom equipment](guides/equipment-catalog.md)
 - [PV yield forecasting and performance](guides/pv-yield-forecasting.md)
 - [API and domain reference](reference/api-domain-reference.md)
+- [PVOutput field mapping](reference/pvoutput-field-mapping.md)
 - [Telemetry segment format](architecture/telemetry-segment-format.md)
 - [Certified capacity report](operations/capacity-report.md)
 - [Security policy and release review](../SECURITY.md)

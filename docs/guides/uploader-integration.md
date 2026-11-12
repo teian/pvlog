@@ -85,6 +85,42 @@ For a batch, post the canonical batch document to
 `/api/v1/systems/$PVLOG_SYSTEM_ID/observations/batch` with the same bearer
 header. Each item carries its own `idempotencyKey`.
 
+## What a reading can carry
+
+Besides generation and consumption power and interval energy, a reading may
+carry lifetime counters (`generationLifetimeWh`, `consumptionLifetimeWh`), grid
+import and export as power and energy, `voltageMillivolts`,
+`temperatureMillidegreesCelsius`, a `message` of at most 30 characters and
+per-meter values under `channels`. Leave out what the logger does not know: an
+absent member is unknown, never zero.
+
+When only a lifetime counter is sent, PVLog derives the interval energy from
+the difference to the previous counter of the same data source. A counter that
+is lower than its predecessor is taken as a reset: no energy is derived for
+that reading, and it is flagged.
+
+A rejected reading is answered with `422` and a problem document whose
+`detail` names the member, for example `gridExportPowerWatts` when import and
+export power are both above zero.
+
+## Daily summaries
+
+A logger that keeps its own daily totals can send them as well:
+
+```sh
+curl --fail-with-body -X PUT \
+  -H "Authorization: Bearer $PVLOG_API_KEY" \
+  -H 'Content-Type: application/json' \
+  --data '{"generationEnergyWh":23400,"exportEnergyWh":15200,"complete":true}' \
+  "$PVLOG_URL/api/v1/systems/$PVLOG_SYSTEM_ID/daily-summaries/2026-06-10"
+```
+
+Sending a summary again for the same date replaces the earlier one, so the
+running day can be updated and marked `complete` when it is over. The summary
+is kept next to the value PVLog computes from the readings; a complete summary
+is the one the statistics use. The fields are listed in the
+[PVOutput field mapping](../reference/pvoutput-field-mapping.md).
+
 ## Home Assistant example
 
 Keep the key in `secrets.yaml` as `pvlog_api_key`, then reference it from a REST
