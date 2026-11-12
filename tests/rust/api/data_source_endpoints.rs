@@ -242,6 +242,28 @@ async fn the_profile_catalog_needs_a_signed_in_client() -> Result<(), Box<dyn Er
     assert_eq!(body[0]["id"], "smalog");
     assert_eq!(body[0]["issuesCredential"], true);
     assert_eq!(body[0]["snippetKinds"][0], "smalog-config");
+    // Well-known keys travel with unit and target kind, status keys with labels.
+    let keys = body[0]["channelKeys"]
+        .as_array()
+        .cloned()
+        .unwrap_or_default();
+    let key = |pattern: &str| keys.iter().find(|key| key["key"] == pattern).cloned();
+    assert_eq!(
+        key("inv.{serial}.mppt.{tracker}.voltage"),
+        Some(serde_json::json!({
+            "key": "inv.{serial}.mppt.{tracker}.voltage",
+            "valueType": "integer",
+            "unit": "mV",
+            "scale": 0,
+            "targetKind": "string",
+            "aggregation": "mean"
+        }))
+    );
+    assert_eq!(
+        key("inv.{serial}.grid_relay").map(|key| key["statusLabels"][0].clone()),
+        Some(serde_json::json!({ "code": 51, "label": "Closed" }))
+    );
+    assert_eq!(body[3]["channelKeys"], serde_json::json!([]));
 
     let anonymous = data_sources_router(Arc::new(Stub), Arc::new(Authorizer { may_manage: true }));
     let (status, _, _) = send(

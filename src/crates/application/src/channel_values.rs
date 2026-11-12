@@ -208,6 +208,237 @@ pub struct DeviceChannel<'a> {
     /// Whether the key carries the DC power of a tracker.
     pub tracker_power: bool,
     pub typing: ChannelTyping,
+    /// The pattern of the scheme the key matched.
+    pub definition: &'static DeviceChannelKey,
+}
+
+/// Label of one numeric code a status channel reports.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusCodeLabel {
+    pub code: i64,
+    pub label: &'static str,
+}
+
+/// One key pattern of the device key scheme with its definition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceChannelKey {
+    /// Key with `{serial}`, `{phase}` and `{tracker}` standing for the
+    /// inverter serial, the AC phase 1 to 3 and the tracker number 1 to 255.
+    pub key: &'static str,
+    pub value_type: ChannelValueType,
+    pub unit: &'static str,
+    /// Decimal places of the stored integer.
+    pub scale: u8,
+    /// Equipment the channel is bound to once it is known: `inverter` or `string`.
+    pub target_kind: &'static str,
+    pub aggregation: ChannelAggregation,
+    /// Meaning of the codes a status channel reports; empty for measurements.
+    #[serde(skip_serializing_if = "<[StatusCodeLabel]>::is_empty")]
+    pub status_labels: &'static [StatusCodeLabel],
+}
+
+const fn device_key(
+    key: &'static str,
+    value_type: ChannelValueType,
+    unit: &'static str,
+    target_kind: &'static str,
+    aggregation: ChannelAggregation,
+) -> DeviceChannelKey {
+    DeviceChannelKey {
+        key,
+        value_type,
+        unit,
+        scale: 0,
+        target_kind,
+        aggregation,
+        status_labels: &[],
+    }
+}
+
+/// SMA's code for a status the device did not report.
+const STATUS_NOT_AVAILABLE: StatusCodeLabel = StatusCodeLabel {
+    code: 16_777_213,
+    label: "Information not available",
+};
+
+/// SMA codes of the device status.
+const DEVICE_STATUS_LABELS: &[StatusCodeLabel] = &[
+    StatusCodeLabel {
+        code: 35,
+        label: "Fault",
+    },
+    StatusCodeLabel {
+        code: 303,
+        label: "Off",
+    },
+    StatusCodeLabel {
+        code: 307,
+        label: "Ok",
+    },
+    StatusCodeLabel {
+        code: 455,
+        label: "Warning",
+    },
+    STATUS_NOT_AVAILABLE,
+];
+
+/// SMA codes of the grid relay state.
+const GRID_RELAY_LABELS: &[StatusCodeLabel] = &[
+    StatusCodeLabel {
+        code: 51,
+        label: "Closed",
+    },
+    StatusCodeLabel {
+        code: 311,
+        label: "Open",
+    },
+    STATUS_NOT_AVAILABLE,
+];
+
+/// Number of leading [`DEVICE_CHANNEL_KEYS`] that `SBFspot` records too.
+const SBFSPOT_KEY_COUNT: usize = 15;
+
+/// Every key of the device key scheme the source profiles share.
+///
+/// Values are integers in the unit the logger stores, so nothing is converted
+/// or rounded. The keys `SBFspot` does not record come last.
+pub const DEVICE_CHANNEL_KEYS: &[DeviceChannelKey] = {
+    use ChannelAggregation::{CounterDelta, Last, Max, Mean};
+    use ChannelValueType::{Counter, Integer};
+    &[
+        device_key(
+            "inv.{serial}.ac.l{phase}.power",
+            Integer,
+            "W",
+            "inverter",
+            Mean,
+        ),
+        device_key(
+            "inv.{serial}.ac.l{phase}.current",
+            Integer,
+            "mA",
+            "inverter",
+            Mean,
+        ),
+        device_key(
+            "inv.{serial}.ac.l{phase}.voltage",
+            Integer,
+            "mV",
+            "inverter",
+            Mean,
+        ),
+        device_key(
+            "inv.{serial}.grid.frequency",
+            Integer,
+            "mHz",
+            "inverter",
+            Mean,
+        ),
+        device_key("inv.{serial}.energy.today", Integer, "Wh", "inverter", Last),
+        device_key(
+            "inv.{serial}.energy.lifetime",
+            Counter,
+            "Wh",
+            "inverter",
+            CounterDelta,
+        ),
+        device_key(
+            "inv.{serial}.operating_time",
+            Integer,
+            "s",
+            "inverter",
+            Last,
+        ),
+        device_key("inv.{serial}.feed_in_time", Integer, "s", "inverter", Last),
+        DeviceChannelKey {
+            status_labels: DEVICE_STATUS_LABELS,
+            ..device_key("inv.{serial}.status", Integer, "code", "inverter", Last)
+        },
+        DeviceChannelKey {
+            status_labels: GRID_RELAY_LABELS,
+            ..device_key("inv.{serial}.grid_relay", Integer, "code", "inverter", Last)
+        },
+        device_key("inv.{serial}.temperature", Integer, "m°C", "inverter", Max),
+        device_key("inv.{serial}.signal", Integer, "‰", "inverter", Mean),
+        device_key(
+            "inv.{serial}.mppt.{tracker}.power",
+            Integer,
+            "W",
+            "string",
+            Mean,
+        ),
+        device_key(
+            "inv.{serial}.mppt.{tracker}.current",
+            Integer,
+            "mA",
+            "string",
+            Mean,
+        ),
+        device_key(
+            "inv.{serial}.mppt.{tracker}.voltage",
+            Integer,
+            "mV",
+            "string",
+            Mean,
+        ),
+        device_key(
+            "inv.{serial}.grid.import_power",
+            Integer,
+            "W",
+            "inverter",
+            Mean,
+        ),
+        device_key(
+            "inv.{serial}.grid.export_power",
+            Integer,
+            "W",
+            "inverter",
+            Mean,
+        ),
+        device_key("inv.{serial}.battery.soc", Integer, "‰", "inverter", Last),
+        device_key(
+            "inv.{serial}.battery.voltage",
+            Integer,
+            "mV",
+            "inverter",
+            Mean,
+        ),
+        device_key(
+            "inv.{serial}.battery.current",
+            Integer,
+            "mA",
+            "inverter",
+            Mean,
+        ),
+        device_key(
+            "inv.{serial}.battery.temperature",
+            Integer,
+            "m°C",
+            "inverter",
+            Mean,
+        ),
+    ]
+};
+
+/// The part of [`DEVICE_CHANNEL_KEYS`] `SBFspot` records: no grid import and
+/// export power and no battery.
+pub const SBFSPOT_CHANNEL_KEYS: &[DeviceChannelKey] =
+    DEVICE_CHANNEL_KEYS.split_at(SBFSPOT_KEY_COUNT).0;
+
+/// Label of a status code reported under a key of the device key scheme.
+///
+/// Returns `None` for a key that carries no status and for a code the scheme
+/// does not know, which is then shown as the number it is.
+#[must_use]
+pub fn status_code_label(key: &str, code: i64) -> Option<&'static str> {
+    device_channel(key)?
+        .definition
+        .status_labels
+        .iter()
+        .find(|label| label.code == code)
+        .map(|label| label.label)
 }
 
 /// Resolves a key of the device key scheme shared by the source profiles.
@@ -217,7 +448,6 @@ pub struct DeviceChannel<'a> {
 /// Returns `None` for any other key.
 #[must_use]
 pub fn device_channel(key: &str) -> Option<DeviceChannel<'_>> {
-    use ChannelAggregation::{CounterDelta, Last, Max, Mean};
     let rest = key.strip_prefix("inv.")?;
     let (serial, measurement) = rest.split_once('.')?;
     if serial.is_empty()
@@ -227,62 +457,43 @@ pub fn device_channel(key: &str) -> Option<DeviceChannel<'_>> {
     {
         return None;
     }
-    let electrical = |quantity: &str| match quantity {
-        "power" => Some(("W", Mean)),
-        "current" => Some(("mA", Mean)),
-        "voltage" => Some(("mV", Mean)),
-        _ => None,
-    };
-    let inverter = DeviceChannelTarget::Inverter { serial };
-    let mut tracker_power = false;
-    let (target, value_type, (unit, aggregation)) = if let Some(rest) =
-        measurement.strip_prefix("mppt.")
-    {
+    let (target, pattern) = if let Some(rest) = measurement.strip_prefix("mppt.") {
         let (number, quantity) = rest.split_once('.')?;
         let tracker = number.parse::<u8>().ok().filter(|number| *number > 0)?;
         // "01" would be a second key for tracker 1.
         if number != tracker.to_string() {
             return None;
         }
-        tracker_power = quantity == "power";
         (
             DeviceChannelTarget::Tracker { serial, tracker },
-            ChannelValueType::Integer,
-            electrical(quantity)?,
+            format!("inv.{{serial}}.mppt.{{tracker}}.{quantity}"),
         )
-    } else if let Some(rest) = measurement.strip_prefix("ac.l") {
-        let (phase, quantity) = rest.split_once('.')?;
-        if !matches!(phase, "1" | "2" | "3") {
-            return None;
-        }
-        (inverter, ChannelValueType::Integer, electrical(quantity)?)
     } else {
-        let (value_type, definition) = match measurement {
-            "grid.frequency" => (ChannelValueType::Integer, ("mHz", Mean)),
-            "grid.import_power" | "grid.export_power" => (ChannelValueType::Integer, ("W", Mean)),
-            "energy.today" => (ChannelValueType::Integer, ("Wh", Last)),
-            "energy.lifetime" => (ChannelValueType::Counter, ("Wh", CounterDelta)),
-            "operating_time" | "feed_in_time" => (ChannelValueType::Integer, ("s", Last)),
-            "status" | "grid_relay" => (ChannelValueType::Integer, ("code", Last)),
-            "temperature" => (ChannelValueType::Integer, ("m°C", Max)),
-            "signal" => (ChannelValueType::Integer, ("‰", Mean)),
-            "battery.soc" => (ChannelValueType::Integer, ("‰", Last)),
-            "battery.voltage" => (ChannelValueType::Integer, ("mV", Mean)),
-            "battery.current" => (ChannelValueType::Integer, ("mA", Mean)),
-            "battery.temperature" => (ChannelValueType::Integer, ("m°C", Mean)),
-            _ => return None,
+        let pattern = match measurement
+            .strip_prefix("ac.l")
+            .map(|rest| rest.split_once('.'))
+        {
+            Some(Some(("1" | "2" | "3", quantity))) => {
+                format!("inv.{{serial}}.ac.l{{phase}}.{quantity}")
+            }
+            Some(_) => return None,
+            None => format!("inv.{{serial}}.{measurement}"),
         };
-        (inverter, value_type, definition)
+        (DeviceChannelTarget::Inverter { serial }, pattern)
     };
+    let definition = DEVICE_CHANNEL_KEYS
+        .iter()
+        .find(|definition| definition.key == pattern)?;
     Some(DeviceChannel {
         target,
-        tracker_power,
+        tracker_power: definition.key == "inv.{serial}.mppt.{tracker}.power",
         typing: ChannelTyping {
-            value_type,
-            unit: unit.to_owned(),
-            scale: 0,
-            aggregation,
+            value_type: definition.value_type,
+            unit: definition.unit.to_owned(),
+            scale: definition.scale,
+            aggregation: definition.aggregation,
         },
+        definition,
     })
 }
 

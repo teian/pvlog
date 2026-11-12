@@ -4065,7 +4065,7 @@ components:
             - type: "null"
     SourceProfile:
       type: object
-      required: [id, displayName, issuesCredential, snippetKinds]
+      required: [id, displayName, issuesCredential, snippetKinds, channelKeys]
       properties:
         id: { type: string, example: smalog }
         displayName: { type: string }
@@ -4076,6 +4076,44 @@ components:
           type: array
           items: { type: string }
           description: Identifiers of the configuration snippets rendered for this profile.
+        channelKeys:
+          type: array
+          items: { $ref: "#/components/schemas/ProfileChannelKey" }
+          description: Measurement channel keys a source of this profile sends. A key that matches one of them is registered with the definition given here instead of a definition guessed from its first value. Empty for profiles without well-known keys.
+    ProfileChannelKey:
+      type: object
+      required: [key, valueType, unit, scale, targetKind, aggregation]
+      properties:
+        key:
+          type: string
+          description: Key pattern. `{serial}` stands for the inverter serial, `{phase}` for the AC phase 1 to 3 and `{tracker}` for the MPPT tracker number 1 to 255.
+          example: "inv.{serial}.mppt.{tracker}.power"
+        valueType:
+          type: string
+          enum: [integer, decimal, boolean, counter]
+        unit:
+          type: string
+          description: Unit of the stored integer, as the logger records it. `code` marks a numeric status code.
+          example: mV
+        scale:
+          type: integer
+          minimum: 0
+          maximum: 9
+          description: Decimal places of the stored integer.
+        targetKind:
+          type: string
+          enum: [inverter, string]
+          description: Equipment the channel belongs to once that equipment is known.
+        aggregation: { $ref: "#/components/schemas/ChannelAggregation" }
+        statusLabels:
+          type: array
+          description: Meaning of the codes a status channel reports. Absent for measurements. A code that is not listed is shown as its number.
+          items:
+            type: object
+            required: [code, label]
+            properties:
+              code: { type: integer, example: 307 }
+              label: { type: string, example: Ok }
     CreateDataSource:
       type: object
       additionalProperties: false

@@ -6,6 +6,8 @@
 
 use serde::Serialize;
 
+use crate::channel_values::{DEVICE_CHANNEL_KEYS, DeviceChannelKey, SBFSPOT_CHANNEL_KEYS};
+
 /// Kind of uploader a data source represents.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,6 +20,9 @@ pub struct SourceProfile {
     pub issues_credential: bool,
     /// Kinds of configuration snippets rendered for this profile.
     pub snippet_kinds: &'static [&'static str],
+    /// Channel keys a source of this profile sends, each registered with the
+    /// definition given here instead of being guessed from its first value.
+    pub channel_keys: &'static [DeviceChannelKey],
 }
 
 /// Profiles this instance provides, in the order they are offered.
@@ -27,24 +32,28 @@ pub const SOURCE_PROFILES: &[SourceProfile] = &[
         display_name: "smalog",
         issues_credential: true,
         snippet_kinds: &["smalog-config", "environment"],
+        channel_keys: DEVICE_CHANNEL_KEYS,
     },
     SourceProfile {
         id: "sbfspot",
         display_name: "SBFspot",
         issues_credential: true,
         snippet_kinds: &["sbfspot-environment"],
+        channel_keys: SBFSPOT_CHANNEL_KEYS,
     },
     SourceProfile {
         id: "generic",
         display_name: "Generic uploader",
         issues_credential: true,
         snippet_kinds: &["curl", "http"],
+        channel_keys: &[],
     },
     SourceProfile {
         id: "import",
         display_name: "Import",
         issues_credential: false,
         snippet_kinds: &[],
+        channel_keys: &[],
     },
 ];
 

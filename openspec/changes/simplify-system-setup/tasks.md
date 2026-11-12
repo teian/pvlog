@@ -68,7 +68,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 
 ## 8. smalog and SBFspot parity
 
-- [ ] 8.1 Define the smalog profile with the shared SMA key scheme, status-code labels and the `[pvlog]` configuration snippet; verify that each key registers with its documented unit, scale, target kind and aggregation and that the snippet contains no cleartext key outside the environment line.
+- [x] 8.1 Define the smalog profile with the shared SMA key scheme, status-code labels and the `[pvlog]` configuration snippet; verify that each key registers with its documented unit, scale, target kind and aggregation and that the snippet contains no cleartext key outside the environment line.
 - [ ] 8.2 Accept system and per-device battery measurements and device identity, write the existing battery columns, and update a matched inverter's model and firmware; verify the battery, out-of-range and firmware-change scenarios with tests.
 - [ ] 8.3 Accept per-device daily summaries with lifetime counter and completeness flag and apply the complete-supplied, computed, incomplete-supplied precedence; verify both daily-value-precedence scenarios with tests on both databases.
 - [ ] 8.4 Extend device events with source event identifier, type, category, group, message, old and new value and user group; verify idempotency per device and event identifier and that old and new values read back.
@@ -77,8 +77,8 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 - [ ] 8.7 Derive system power, lifetime and interval energy, grid and battery values from device values with explicit system values taking precedence, return the cursor marks in the response and through the ingestion-state resource, accept gzip, enforce the limits and publish them through the capabilities resource; verify the derived-values, cursor and bulk scenarios with tests.
 - [ ] 8.8 Document the ingestion, state and capabilities resources in OpenAPI and in `docs/guides/ingestion-api.md`, add the complete smalog-column mapping in `docs/guides/smalog-export.md`, generate a fixture payload from smalog schema v1 covering two inverters, three phases, sparse trackers, a battery, archive samples, daily yields and events, and add a contract test that submits it and reads every value back; verify the contract test passes on both databases, the OpenAPI contract checks pass, and every plant column of smalog schema v1 appears in the mapping.
 - [ ] 8.9 Make `sbfspot-push` read `SpotData`, `Inverters` and `EventData` per serial and send the shared keys while keeping system totals in the first-class fields; verify with the fixture database that two serials produce per-inverter and per-tracker values whose sum equals the system totals and that a second run uploads no duplicate event.
-- [ ] 8.10 Detect absent optional SBFspot tables and a replaced inverter, report unavailable groups, and derive no energy across a serial change; verify both scenarios with fixture tests.
-- [ ] 8.11 Document SBFspot backfill, the SBFspot column mapping and the move from SBFspot to smalog in the guides; verify `test:docs` passes and that the uploader runs in dry-run mode with a generated configuration.
+- [x] 8.10 Detect absent optional SBFspot tables and a replaced inverter, report unavailable groups, and derive no energy across a serial change; verify both scenarios with fixture tests.
+- [x] 8.11 Document SBFspot backfill, the SBFspot column mapping and the move from SBFspot to smalog in the guides; verify `test:docs` passes and that the uploader runs in dry-run mode with a generated configuration.
 
 ## 9. History import
 
