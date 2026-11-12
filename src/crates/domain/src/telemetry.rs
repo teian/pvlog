@@ -84,6 +84,9 @@ pub struct MeasurementValues {
     pub temperature: Option<MilliDegreesCelsius>,
     pub battery: Option<BatteryReading>,
     pub extended: BTreeMap<ChannelId, ExtendedValue>,
+    /// Short text the source attached to the reading, such as a status.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub message: Option<String>,
 }
 
 /// Whether energy is an interval quantity or a monotonically interpreted counter.

@@ -41,6 +41,8 @@ pub struct LatestReadingRecord {
     pub generation_energy_wh: Option<i64>,
     pub consumption_power_watts: Option<i64>,
     pub consumption_energy_wh: Option<i64>,
+    /// Short text the source attached to the reading.
+    pub message: Option<String>,
     pub data_source_id: Option<DataSourceId>,
     /// Name of the data source, also when it was removed since.
     pub data_source_name: Option<String>,
@@ -139,7 +141,7 @@ impl SetupRepository for SqliteSetupRepository {
         let mut connection = self.account.acquire().await?;
         let row = sqlx::query(
             "SELECT h.observation_id,h.measured_at,h.received_at,h.generation_power_watts,\
-             h.generation_energy_wh,h.consumption_power_watts,h.consumption_energy_wh,\
+             h.generation_energy_wh,h.consumption_power_watts,h.consumption_energy_wh,h.message,\
              h.data_source_id,d.name AS data_source_name FROM telemetry_hot h \
              LEFT JOIN data_sources d ON d.id=h.data_source_id WHERE h.system_id=? \
              ORDER BY h.received_at DESC,h.measured_at DESC LIMIT 1",
@@ -160,6 +162,7 @@ impl SetupRepository for SqliteSetupRepository {
                 generation_energy_wh: row.get("generation_energy_wh"),
                 consumption_power_watts: row.get("consumption_power_watts"),
                 consumption_energy_wh: row.get("consumption_energy_wh"),
+                message: row.get("message"),
                 data_source_id: row
                     .get::<Option<Vec<u8>>, _>("data_source_id")
                     .map(|bytes| {
@@ -260,7 +263,7 @@ impl SetupRepository for PostgresSetupRepository {
         let mut connection = PgConnection::connect(&self.url).await?;
         let row = sqlx::query(
             "SELECT h.observation_id,h.measured_at,h.received_at,h.generation_power_watts,\
-             h.generation_energy_wh,h.consumption_power_watts,h.consumption_energy_wh,\
+             h.generation_energy_wh,h.consumption_power_watts,h.consumption_energy_wh,h.message,\
              h.data_source_id,d.name AS data_source_name FROM telemetry.hot_observations h \
              LEFT JOIN account_data.data_sources d \
               ON d.account_id=h.account_id AND d.id=h.data_source_id \
@@ -283,6 +286,7 @@ impl SetupRepository for PostgresSetupRepository {
                 generation_energy_wh: row.get("generation_energy_wh"),
                 consumption_power_watts: row.get("consumption_power_watts"),
                 consumption_energy_wh: row.get("consumption_energy_wh"),
+                message: row.get("message"),
                 data_source_id: row
                     .get::<Option<Uuid>, _>("data_source_id")
                     .map(DataSourceId::from_uuid)

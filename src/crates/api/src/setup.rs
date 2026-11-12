@@ -75,6 +75,8 @@ pub struct VerifiedReading {
     pub generation_energy_wh: Option<i64>,
     pub consumption_power_watts: Option<i64>,
     pub consumption_energy_wh: Option<i64>,
+    /// Short text the source attached to the reading.
+    pub message: Option<String>,
     pub data_source_id: Option<DataSourceId>,
     pub data_source_name: Option<String>,
     /// True for a reading that only proves the connection.

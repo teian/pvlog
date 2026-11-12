@@ -63,6 +63,8 @@ struct ObservationBody {
     grid_export_energy_wh: Option<i64>,
     voltage_millivolts: Option<u32>,
     temperature_millidegrees_celsius: Option<i32>,
+    /// Short text from the source, at most 30 characters.
+    message: Option<String>,
     source_reference: Option<String>,
     /// Per-meter readings keyed by the source's own channel names.
     #[serde(default)]
@@ -337,6 +339,7 @@ fn command(
             grid_export_power_watts: body.grid_export_power_watts,
             grid_import_energy_wh: body.grid_import_energy_wh,
             grid_export_energy_wh: body.grid_export_energy_wh,
+            message: body.message,
         },
         source: ObservationSource {
             kind: ObservationSourceKind::ModernApi,

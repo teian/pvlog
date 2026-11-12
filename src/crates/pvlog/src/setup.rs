@@ -171,6 +171,7 @@ impl SetupApiUseCases for StorageSetupApi {
                     generation_energy_wh: reading.generation_energy_wh,
                     consumption_power_watts: reading.consumption_power_watts,
                     consumption_energy_wh: reading.consumption_energy_wh,
+                    message: reading.message,
                     data_source_id: reading.data_source_id,
                     data_source_name: reading.data_source_name,
                     test: false,
@@ -203,6 +204,11 @@ impl SetupApiUseCases for StorageSetupApi {
                     generation_energy_wh: None,
                     consumption_power_watts: value("consumption_power"),
                     consumption_energy_wh: None,
+                    message: test
+                        .values
+                        .get("message")
+                        .and_then(serde_json::Value::as_str)
+                        .map(ToOwned::to_owned),
                     data_source_id: test.data_source_id,
                     data_source_name: name,
                     test: true,

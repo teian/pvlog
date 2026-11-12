@@ -492,6 +492,48 @@ async fn postgres_stores_and_backfills_temperature_and_voltage_when_configured()
     temperature_and_voltage(Fixture::postgres(url).await?).await
 }
 
+async fn reading_message(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    // Thirty characters are accepted, also when they are not ASCII.
+    let longest = "Störung: Netzspannung zu hoch!";
+    assert_eq!(longest.chars().count(), 30);
+    let mut reading = fixture.reading(0);
+    reading.supplements.message = Some(longest.to_owned());
+    let accepted = fixture.telemetry.ingest(reading).await?;
+    assert_eq!(accepted.values.message.as_deref(), Some(longest));
+    assert_eq!(
+        fixture.at(0).await?.measurements.message.as_deref(),
+        Some(longest)
+    );
+
+    // One more is rejected, and the rejection names the field.
+    let mut reading = fixture.reading(1);
+    reading.supplements.message = Some(format!("{longest}!"));
+    assert!(matches!(
+        fixture.telemetry.ingest(reading).await,
+        Err(ModernTelemetryError::InvalidField("message"))
+    ));
+    assert!(fixture.at(1).await.is_err());
+
+    // A reading without a message has none.
+    fixture.telemetry.ingest(fixture.reading(2)).await?;
+    assert_eq!(fixture.at(2).await?.measurements.message, None);
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_accepts_and_returns_the_reading_message() -> Result<(), Box<dyn Error>> {
+    reading_message(Fixture::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_accepts_and_returns_the_reading_message_when_configured()
+-> Result<(), Box<dyn Error>> {
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    reading_message(Fixture::postgres(url).await?).await
+}
+
 fn clock() -> Arc<dyn Clock> {
     Arc::new(TestClock(AtomicI64::new(START)))
 }

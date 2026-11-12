@@ -55,7 +55,12 @@ pub struct ObservationSupplements {
     pub grid_import_energy_wh: Option<i64>,
     /// Energy fed into the grid during the interval, in watt-hours.
     pub grid_export_energy_wh: Option<i64>,
+    /// Short text from the source, at most [`MAXIMUM_MESSAGE_CHARACTERS`] long.
+    pub message: Option<String>,
 }
+
+/// Longest message a reading may carry, counted in characters.
+pub const MAXIMUM_MESSAGE_CHARACTERS: usize = 30;
 
 #[derive(Clone, Debug)]
 pub struct NormalizeObservation {
@@ -135,6 +140,13 @@ pub fn normalize_observation(
             "gridExportPowerWatts",
         ));
     }
+    if supplements
+        .message
+        .as_ref()
+        .is_some_and(|message| message.chars().count() > MAXIMUM_MESSAGE_CHARACTERS)
+    {
+        return Err(IngestionNormalizationError::InvalidField("message"));
+    }
     let values = MeasurementValues {
         generation_power: input.generation_power.map(power).transpose()?,
         generation_energy: input.generation_energy.map(energy).transpose()?,
@@ -158,6 +170,7 @@ pub fn normalize_observation(
             .map(|value| Watts::new(value.value())),
         grid_import_energy: counter(supplements.grid_import_energy_wh, "gridImportEnergyWh")?,
         grid_export_energy: counter(supplements.grid_export_energy_wh, "gridExportEnergyWh")?,
+        message: supplements.message.clone(),
         battery,
         extended: input.extended,
         ..MeasurementValues::default()

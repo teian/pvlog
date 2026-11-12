@@ -625,6 +625,7 @@ fn stored_observation(
                 .values
                 .voltage
                 .map(|value| i64::from(value.value())),
+            message: observation.values.message.clone(),
             ..StoredMeasurements::default()
         },
     })

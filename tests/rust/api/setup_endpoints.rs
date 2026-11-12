@@ -113,6 +113,7 @@ async fn first_data_shows_the_reading_and_its_source() -> Result<(), Box<dyn Err
     assert_eq!(body["reading"]["test"], true);
     assert_eq!(body["reading"]["dataSourceName"], "Roof logger");
     assert_eq!(body["reading"]["generationPowerWatts"], 100);
+    assert_eq!(body["reading"]["message"], "Self-test");
     Ok(())
 }
 
@@ -207,6 +208,7 @@ impl SetupApiUseCases for Stub {
                 generation_energy_wh: None,
                 consumption_power_watts: None,
                 consumption_energy_wh: None,
+                message: Some("Self-test".to_owned()),
                 data_source_id: Some(DataSourceId::new()),
                 data_source_name: Some("Roof logger".to_owned()),
                 test: true,

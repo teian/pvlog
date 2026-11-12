@@ -98,8 +98,9 @@ pub use ingestion_admission::{
 };
 pub use ingestion_counters::{CounterBaseline, CounterStep, counter_step, derive_counter_energy};
 pub use ingestion_normalization::{
-    ChannelReading, EnergyInput, EnergyUnit, IngestionNormalizationError, NormalizeObservation,
-    ObservationSupplements, PowerUnit, normalize_observation,
+    ChannelReading, EnergyInput, EnergyUnit, IngestionNormalizationError,
+    MAXIMUM_MESSAGE_CHARACTERS, NormalizeObservation, ObservationSupplements, PowerUnit,
+    normalize_observation,
 };
 pub use ingestion_validation::{
     IngestionValidationError, IngestionValidationPolicy, validate_observation,
