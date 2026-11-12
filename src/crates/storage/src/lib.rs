@@ -17,6 +17,7 @@ use thiserror::Error;
 mod account_repository;
 mod administration_repository;
 mod browser_session_repository;
+mod channel_repository;
 mod compaction;
 mod daily_summary_repository;
 mod data_source_repository;
@@ -60,6 +61,13 @@ pub use administration_repository::PostgresAdministrationRepository;
 pub use administration_repository::SqliteAdministrationRepository;
 pub use administration_repository::{
     AdministrationRepository, AdministrationRepositoryError, GlobalConfigurationRecord,
+};
+#[cfg(feature = "postgres")]
+pub use channel_repository::PostgresChannelRepository;
+#[cfg(feature = "sqlite")]
+pub use channel_repository::SqliteChannelRepository;
+pub use channel_repository::{
+    ChannelBindingRecord, ChannelRecord, ChannelRegistration, ChannelRepository, ChannelValueRecord,
 };
 pub use compaction::{
     CompactionError, CompactionKey, CompactionPhase, CompactionRepository, CompactionService,
