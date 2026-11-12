@@ -15,13 +15,14 @@ use pvlog_api::{
     YieldSeriesResponse, forecasting_router, telemetry_router,
 };
 use pvlog_application::{
-    BatchIngestionMode, BatchIngestionResult, CorrectObservation, ModernTelemetryError,
-    ModernTelemetryUseCases, NormalizeObservation, VersionedObservation, normalize_observation,
+    BatchIngestionMode, BatchIngestionResult, CorrectObservation, IngestedObservation,
+    ModernTelemetryError, ModernTelemetryUseCases, NormalizeObservation, VersionedObservation,
+    normalize_observation,
 };
 use pvlog_domain::{
-    AccountId, CanonicalObservation, ForecastCompleteness, ForecastCompletenessReason, InverterId,
-    ObservationId, Permission, PrincipalId, StringId, SystemId, UserId, WeatherDataKind,
-    WeatherDataRunId, YieldCalculationRunId,
+    AccountId, ForecastCompleteness, ForecastCompletenessReason, InverterId, ObservationId,
+    Permission, PrincipalId, StringId, SystemId, UserId, WeatherDataKind, WeatherDataRunId,
+    YieldCalculationRunId,
 };
 use tower::ServiceExt as _;
 
@@ -619,8 +620,10 @@ impl ModernTelemetryUseCases for TelemetryStub {
     async fn ingest(
         &self,
         command: NormalizeObservation,
-    ) -> Result<CanonicalObservation, ModernTelemetryError> {
-        normalize_observation(command).map_err(|_| ModernTelemetryError::Invalid)
+    ) -> Result<IngestedObservation, ModernTelemetryError> {
+        normalize_observation(command)
+            .map(Into::into)
+            .map_err(|_| ModernTelemetryError::Invalid)
     }
 
     async fn ingest_batch(

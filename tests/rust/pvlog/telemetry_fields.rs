@@ -14,9 +14,9 @@ use pvlog_api::{
     DailySummaryApiError, DailySummaryApiUseCases as _, ReportingApiUseCases as _, SummarySource,
 };
 use pvlog_application::{
-    BatchIngestionMode, Clock, ComputedDay, DayBasis, DayEnergy, EnergyInput, EnergyUnit,
-    ModernTelemetryError, ModernTelemetryUseCases as _, NormalizeObservation,
-    ObservationSupplements, SuppliedDailySummary, SuppliedDay, effective_day,
+    BatchIngestionMode, ChannelReading, Clock, ComputedDay, DayBasis, DayEnergy, DecimalValue,
+    EnergyInput, EnergyUnit, ModernTelemetryError, ModernTelemetryUseCases as _,
+    NormalizeObservation, ObservationSupplements, SuppliedDailySummary, SuppliedDay, effective_day,
 };
 use pvlog_domain::{
     AccountId, BatteryFlowState, MembershipId, ObservationSource, ObservationSourceKind,
@@ -508,7 +508,7 @@ async fn reading_message(fixture: Fixture) -> Result<(), Box<dyn Error>> {
     assert_eq!(longest.chars().count(), 30);
     let mut reading = fixture.reading(0);
     reading.supplements.message = Some(longest.to_owned());
-    let accepted = fixture.telemetry.ingest(reading).await?;
+    let accepted = fixture.telemetry.ingest(reading).await?.observation;
     assert_eq!(accepted.values.message.as_deref(), Some(longest));
     assert_eq!(
         fixture.at(0).await?.measurements.message.as_deref(),
@@ -542,6 +542,184 @@ async fn postgres_accepts_and_returns_the_reading_message_when_configured()
         return Ok(());
     };
     reading_message(Fixture::postgres(url).await?).await
+}
+
+fn channel_value(text: &str, unit: Option<&str>) -> ChannelReading {
+    ChannelReading {
+        value: DecimalValue::parse(text),
+        unit: unit.map(ToOwned::to_owned),
+        ..ChannelReading::default()
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+async fn typed_channels(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    const TRACKER_VOLTAGE: &str = "inv.2000123456.mppt.1.voltage";
+    let channels = pvlog::channels::channel_repository(
+        &fixture.target,
+        fixture.management.as_ref(),
+        fixture.system_id,
+    )
+    .await
+    .ok_or("channel storage is unavailable")?;
+    let channel = |key: &'static str| {
+        let channels = &channels;
+        async move {
+            channels
+                .channel(fixture.system_id, key)
+                .await?
+                .ok_or_else(|| Box::<dyn Error>::from(format!("channel {key} is missing")))
+        }
+    };
+
+    let mut first = fixture.reading(0);
+    first.channel_readings = BTreeMap::from([
+        // A key of the device key scheme.
+        (
+            TRACKER_VOLTAGE.to_owned(),
+            channel_value("384120", Some("mV")),
+        ),
+        // A decimal value under a key nobody defined.
+        ("pvoutput.v7".to_owned(), channel_value("12.34", Some("V"))),
+        // The earlier form.
+        (
+            "meter".to_owned(),
+            ChannelReading {
+                power_watts: Some(1_500),
+                ..ChannelReading::default()
+            },
+        ),
+    ]);
+    let accepted = fixture.telemetry.ingest(first).await?;
+    assert_eq!(accepted.rejected_channels, Vec::new());
+
+    // The scheme's definition wins over anything the reading could imply.
+    let voltage = channel(TRACKER_VOLTAGE).await?;
+    assert_eq!(
+        (
+            voltage.data_type.as_str(),
+            voltage.unit.as_str(),
+            voltage.scale,
+            voltage.aggregation.as_str(),
+            voltage.target_kind.as_str(),
+        ),
+        ("integer", "mV", 0, "mean", "unassigned")
+    );
+    assert_eq!(voltage.last_value, Some(384_120));
+
+    // The decimal keeps its precision: 12.34 at three decimal places.
+    let extended = channel("pvoutput.v7").await?;
+    assert_eq!(
+        (
+            extended.data_type.as_str(),
+            extended.unit.as_str(),
+            extended.scale
+        ),
+        ("decimal", "V", 3)
+    );
+    assert_eq!(extended.last_value, Some(12_340));
+    let meter = channel("meter").await?;
+    assert_eq!((meter.unit.as_str(), meter.scale), ("W", 0));
+    assert_eq!(meter.last_value, Some(1_500));
+
+    // Two values contradict their channel. They are left out and named; the
+    // rest of the reading is stored.
+    let mut second = fixture.reading(1);
+    second.generation_power = Some((1_600, pvlog_application::PowerUnit::Watts));
+    second.channel_readings = BTreeMap::from([
+        (TRACKER_VOLTAGE.to_owned(), channel_value("384", Some("V"))),
+        (
+            "pvoutput.v7".to_owned(),
+            channel_value("12.3456", Some("V")),
+        ),
+        (
+            "meter".to_owned(),
+            ChannelReading {
+                power_watts: Some(1_600),
+                ..ChannelReading::default()
+            },
+        ),
+    ]);
+    let accepted = fixture.telemetry.ingest(second).await?;
+    assert_eq!(
+        accepted
+            .rejected_channels
+            .iter()
+            .map(|rejected| (rejected.channel_key.as_str(), rejected.reason))
+            .collect::<Vec<_>>(),
+        vec![
+            (TRACKER_VOLTAGE, "unit_mismatch"),
+            ("pvoutput.v7", "type_mismatch"),
+        ]
+    );
+    assert_eq!(fixture.at(1).await?.generation_power_watts, Some(1_600));
+    let values = |id| {
+        let channels = &channels;
+        async move {
+            Ok::<_, Box<dyn Error>>(
+                channels
+                    .channel_values(id, START, START + 10 * STEP)
+                    .await?
+                    .into_iter()
+                    .map(|value| (value.measured_at, value.value))
+                    .collect::<Vec<_>>(),
+            )
+        }
+    };
+    assert_eq!(values(voltage.id).await?, vec![(START, 384_120)]);
+    assert_eq!(values(extended.id).await?, vec![(START, 12_340)]);
+    assert_eq!(
+        values(meter.id).await?,
+        vec![(START, 1_500), (START + STEP, 1_600)]
+    );
+
+    // In a batch the item is stored and reports what it could not keep.
+    let mut item = fixture.reading(2);
+    item.channel_readings = BTreeMap::from([
+        (TRACKER_VOLTAGE.to_owned(), channel_value("0.5", None)),
+        ("pvoutput.v7".to_owned(), channel_value("-0.001", None)),
+    ]);
+    for mode in [BatchIngestionMode::Partial, BatchIngestionMode::Atomic] {
+        let mut item = item.clone();
+        if mode == BatchIngestionMode::Atomic {
+            item.observed_at = UtcTimestamp::from_epoch_millis(START + 3 * STEP)?;
+            "atomic".clone_into(&mut item.idempotency_key);
+        }
+        let result = fixture.telemetry.ingest_batch(vec![item], mode).await?;
+        assert_eq!(result.outcomes.len(), 1);
+        assert_eq!(
+            result.outcomes[0]
+                .rejected_channels
+                .iter()
+                .map(|rejected| (rejected.channel_key.as_str(), rejected.reason))
+                .collect::<Vec<_>>(),
+            vec![(TRACKER_VOLTAGE, "type_mismatch")]
+        );
+    }
+    assert_eq!(
+        values(extended.id).await?,
+        vec![
+            (START, 12_340),
+            (START + 2 * STEP, -1),
+            (START + 3 * STEP, -1)
+        ]
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_stores_typed_channel_values_and_names_contradictions() -> Result<(), Box<dyn Error>>
+{
+    typed_channels(Fixture::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_stores_typed_channel_values_and_names_contradictions_when_configured()
+-> Result<(), Box<dyn Error>> {
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    typed_channels(Fixture::postgres(url).await?).await
 }
 
 fn summary(date: &str, generation: i64, complete: bool) -> SuppliedDailySummary {

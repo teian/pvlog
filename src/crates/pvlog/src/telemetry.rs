@@ -9,18 +9,21 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pvlog_application::{
-    BatchIngestionMode, BatchIngestionResult, BatchItemOutcome, BatchItemStatus, Clock,
-    CorrectObservation, CounterBaseline, IngestionNormalizationError, ModernTelemetryError,
-    ModernTelemetryUseCases, NormalizeObservation, PortError, VersionedObservation,
-    derive_counter_energy, normalize_observation,
+    BatchIngestionMode, BatchIngestionResult, BatchItemOutcome, BatchItemStatus,
+    ChannelAggregation, ChannelTyping, ChannelValueType, Clock, CorrectObservation,
+    CounterBaseline, IngestedObservation, IngestionNormalizationError, ModernTelemetryError,
+    ModernTelemetryUseCases, NormalizeObservation, PortError, RejectedChannel,
+    VersionedObservation, channel_typing_for, derive_counter_energy, normalize_observation,
+    scaled_channel_value,
 };
 use pvlog_domain::{
     AccountId, ApiCredentialId, CanonicalObservation, ChannelId, DataSourceId, EnergyReading,
     ExtendedValue, GridFlow, ObservationId, ObservationSourceKind, SystemId,
 };
 use pvlog_storage::{
-    DataSourceRepository, DatabaseTarget, ManagementRepository, ObservationInsertOutcome,
-    StoredMeasurements, StoredObservation, TelemetryRepository, TelemetryRepositoryError,
+    ChannelRecord, ChannelRegistration, ChannelRepository, DataSourceRepository, DatabaseTarget,
+    ManagementRepository, ObservationInsertOutcome, StoredMeasurements, StoredObservation,
+    TelemetryRepository, TelemetryRepositoryError,
 };
 
 const MAXIMUM_BATCH_ITEMS: usize = 1_000;
@@ -143,6 +146,16 @@ impl StorageTelemetryApi {
         }
     }
 
+    /// Opens the measurement channel repository of the system's account.
+    async fn channel_repository(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Box<dyn ChannelRepository>, ModernTelemetryError> {
+        crate::channels::channel_repository(&self.target, self.management.as_ref(), system_id)
+            .await
+            .ok_or(ModernTelemetryError::Repository(PortError::Unavailable))
+    }
+
     /// Keeps a test reading where it cannot be mistaken for telemetry.
     async fn store_test_reading(
         &self,
@@ -197,7 +210,7 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
     async fn ingest(
         &self,
         command: NormalizeObservation,
-    ) -> Result<CanonicalObservation, ModernTelemetryError> {
+    ) -> Result<IngestedObservation, ModernTelemetryError> {
         let system_id = command.system_id;
         let received_at = self.received_at();
         let data_source = self
@@ -209,26 +222,28 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
             let observation = normalize_observation(command).map_err(invalid)?;
             self.store_test_reading(system_id, data_source, &observation, received_at)
                 .await?;
-            return Ok(observation);
+            return Ok(observation.into());
         }
-        let command = self
-            .resolve_channels(system_id, command, received_at)
-            .await?;
+        let channels = self.channel_repository(system_id).await?;
+        let (command, rejected_channels) =
+            resolve_channels(channels.as_ref(), system_id, command, received_at).await?;
         let mut observation = normalize_observation(command).map_err(invalid)?;
         let repository = self.repository(system_id).await?;
         apply_counters(repository.as_ref(), &mut observation, data_source, &[]).await?;
         let stored = stored_observation(&observation, received_at, data_source)?;
         match repository.insert_observation(&stored).await {
             Ok(ObservationInsertOutcome::Inserted) => {
-                self.write_channel_values(system_id, &observation, received_at)
-                    .await?;
-                Ok(observation)
+                write_channel_values(channels.as_ref(), &observation, received_at).await?;
             }
             // A retry carries a fresh observation id; writing values under it
             // would orphan them, so an idempotent duplicate stores nothing new.
-            Ok(ObservationInsertOutcome::Duplicate) => Ok(observation),
-            Err(_) => Err(ModernTelemetryError::Conflict),
+            Ok(ObservationInsertOutcome::Duplicate) => {}
+            Err(_) => return Err(ModernTelemetryError::Conflict),
         }
+        Ok(IngestedObservation {
+            observation,
+            rejected_channels,
+        })
     }
 
     /// Ingests a single-system batch of up to the maximum item count, reporting a per-item status; in atomic mode any rejected or non-inserted item fails the batch as invalid and nothing is stored.
@@ -272,11 +287,11 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
                 .await;
         }
 
+        let channels = self.channel_repository(system_id).await?;
         let mut outcomes = Vec::with_capacity(commands.len());
         for (index, command) in commands.into_iter().enumerate() {
-            let command = self
-                .resolve_channels(system_id, command, received_at)
-                .await?;
+            let (command, rejected_channels) =
+                resolve_channels(channels.as_ref(), system_id, command, received_at).await?;
             let status = match normalize_observation(command) {
                 Err(_) => BatchItemStatus::Invalid,
                 Ok(mut observation) => {
@@ -285,7 +300,7 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
                         Err(_) => BatchItemStatus::Invalid,
                         Ok(stored) => match repository.insert_observation(&stored).await {
                             Ok(ObservationInsertOutcome::Inserted) => {
-                                self.write_channel_values(system_id, &observation, received_at)
+                                write_channel_values(channels.as_ref(), &observation, received_at)
                                     .await?;
                                 BatchItemStatus::Inserted
                             }
@@ -299,6 +314,7 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
                 index,
                 status,
                 code: None,
+                rejected_channels,
             });
         }
         Ok(BatchIngestionResult { outcomes })
@@ -332,12 +348,14 @@ impl StorageTelemetryApi {
         data_source: Option<DataSourceId>,
         repository: &dyn TelemetryRepository,
     ) -> Result<BatchIngestionResult, ModernTelemetryError> {
+        let channels = self.channel_repository(system_id).await?;
         let mut observations = Vec::with_capacity(commands.len());
+        let mut rejected = Vec::with_capacity(commands.len());
         let mut stored = Vec::with_capacity(commands.len());
         for command in commands {
-            let command = self
-                .resolve_channels(system_id, command, received_at)
-                .await?;
+            let (command, rejected_channels) =
+                resolve_channels(channels.as_ref(), system_id, command, received_at).await?;
+            rejected.push(rejected_channels);
             let mut observation = normalize_observation(command).map_err(invalid)?;
             // Nothing of this batch is stored yet, so an earlier item is the
             // predecessor of a later one only through this list.
@@ -364,15 +382,17 @@ impl StorageTelemetryApi {
             return Err(ModernTelemetryError::Invalid);
         }
         for observation in &observations {
-            self.write_channel_values(system_id, observation, received_at)
-                .await?;
+            write_channel_values(channels.as_ref(), observation, received_at).await?;
         }
         Ok(BatchIngestionResult {
-            outcomes: (0..observations.len())
-                .map(|index| BatchItemOutcome {
+            outcomes: rejected
+                .into_iter()
+                .enumerate()
+                .map(|(index, rejected_channels)| BatchItemOutcome {
                     index,
                     status: BatchItemStatus::Inserted,
                     code: None,
+                    rejected_channels,
                 })
                 .collect(),
         })
@@ -380,96 +400,6 @@ impl StorageTelemetryApi {
 }
 
 impl StorageTelemetryApi {
-    /// Resolves wire channel keys to identifiers, registering keys never seen
-    /// before so a newly wired meter is retained instead of rejected.
-    async fn resolve_channels(
-        &self,
-        system_id: SystemId,
-        mut command: NormalizeObservation,
-        received_at: i64,
-    ) -> Result<NormalizeObservation, ModernTelemetryError> {
-        if command.channel_readings.is_empty() {
-            return Ok(command);
-        }
-        #[cfg(feature = "sqlite")]
-        {
-            if matches!(self.target, DatabaseTarget::Sqlite { .. }) {
-                let account = self.sqlite_account(system_id).await?;
-                let mut connection = account
-                    .acquire()
-                    .await
-                    .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))?;
-                for (key, reading) in &command.channel_readings {
-                    let channel_id =
-                        ensure_channel(&mut connection, system_id, key, received_at).await?;
-                    // A channel carries one canonical number; power is the live
-                    // reading the dashboard needs, energy is the fallback.
-                    let value = reading
-                        .power_watts
-                        .or(reading.energy_watt_hours)
-                        .unwrap_or_default();
-                    command
-                        .extended
-                        .insert(channel_id, ExtendedValue::Integer(value));
-                    command.registered_channels.insert(channel_id);
-                }
-                return Ok(command);
-            }
-        }
-        let _ = (system_id, received_at);
-        Err(ModernTelemetryError::Repository(PortError::Unavailable))
-    }
-
-    /// Persists the per-channel values alongside the observation row.
-    async fn write_channel_values(
-        &self,
-        system_id: SystemId,
-        observation: &CanonicalObservation,
-        received_at: i64,
-    ) -> Result<(), ModernTelemetryError> {
-        if observation.values.extended.is_empty() {
-            return Ok(());
-        }
-        #[cfg(feature = "sqlite")]
-        {
-            if matches!(self.target, DatabaseTarget::Sqlite { .. }) {
-                let account = self.sqlite_account(system_id).await?;
-                let mut writer = account
-                    .acquire_writer()
-                    .await
-                    .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))?;
-                for (channel_id, value) in &observation.values.extended {
-                    let integer = match value {
-                        ExtendedValue::Integer(number) | ExtendedValue::DecimalScaled(number) => {
-                            *number
-                        }
-                        ExtendedValue::Boolean(flag) => i64::from(*flag),
-                    };
-                    sqlx::query(
-                        "INSERT INTO telemetry_hot_extended_values (observation_id,channel_id,integer_value) \
-                         VALUES (?,?,?) ON CONFLICT(observation_id,channel_id) DO UPDATE SET \
-                         integer_value=excluded.integer_value",
-                    )
-                    .bind(observation.id.as_uuid().as_bytes().to_vec())
-                    .bind(channel_id.as_uuid().as_bytes().to_vec())
-                    .bind(integer)
-                    .execute(writer.connection())
-                    .await
-                    .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))?;
-                    sqlx::query("UPDATE channel_definitions SET last_value_at=? WHERE id=?")
-                        .bind(received_at)
-                        .bind(channel_id.as_uuid().as_bytes().to_vec())
-                        .execute(writer.connection())
-                        .await
-                        .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))?;
-                }
-                return Ok(());
-            }
-        }
-        let _ = (system_id, received_at);
-        Ok(())
-    }
-
     /// Opens the routed `SQLite` account database for a system, failing when the target is not `SQLite` or routing fails.
     #[cfg(feature = "sqlite")]
     async fn sqlite_account(
@@ -501,57 +431,103 @@ impl StorageTelemetryApi {
     }
 }
 
-/// Returns the channel identifier for a wire key, registering it on first sight.
+/// Resolves wire channel keys to channels and their values to scaled integers.
 ///
-/// A newly discovered key starts unassigned: its readings are stored, but they
-/// contribute to no equipment until an operator binds it.
-#[cfg(feature = "sqlite")]
-async fn ensure_channel(
-    connection: &mut sqlx::SqliteConnection,
+/// A key never seen before is registered, so a newly wired meter is retained
+/// instead of rejected. A value that contradicts its channel's definition is
+/// left out and reported; the rest of the reading goes on.
+async fn resolve_channels(
+    repository: &dyn ChannelRepository,
     system_id: SystemId,
-    channel_key: &str,
-    now: i64,
-) -> Result<ChannelId, ModernTelemetryError> {
-    let system = system_id.as_uuid().as_bytes().to_vec();
-    let existing: Option<Vec<u8>> = sqlx::query_scalar(
-        "SELECT id FROM channel_definitions WHERE system_id=? AND channel_key=?",
-    )
-    .bind(system.clone())
-    .bind(channel_key)
-    .fetch_optional(&mut *connection)
-    .await
-    .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))?;
-    if let Some(bytes) = existing {
-        return channel_id(&bytes);
+    mut command: NormalizeObservation,
+    received_at: i64,
+) -> Result<(NormalizeObservation, Vec<RejectedChannel>), ModernTelemetryError> {
+    if command.channel_readings.is_empty() {
+        return Ok((command, Vec::new()));
     }
-    let generated = uuid::Uuid::now_v7();
-    sqlx::query(
-        "INSERT INTO channel_definitions \
-         (id,system_id,channel_key,display_name,data_type,unit,scale,effective_from,\
-          created_at,updated_at,target_kind,tracks_power,tracks_energy,discovered_at) \
-         VALUES (?,?,?,?,'integer','W',0,?,?,?,'unassigned',1,0,?)",
-    )
-    .bind(generated.as_bytes().to_vec())
-    .bind(system)
-    .bind(channel_key)
-    .bind(channel_key)
-    .bind(now)
-    .bind(now)
-    .bind(now)
-    .bind(now)
-    .execute(&mut *connection)
-    .await
-    .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))?;
-    channel_id(generated.as_bytes())
+    let unavailable = || ModernTelemetryError::Repository(PortError::Unavailable);
+    let registrations: Vec<ChannelRegistration> = command
+        .channel_readings
+        .iter()
+        .map(|(key, reading)| {
+            let typing = channel_typing_for(key, reading);
+            ChannelRegistration {
+                channel_key: key.clone(),
+                display_name: key.clone(),
+                data_type: typing.value_type.name().to_owned(),
+                unit: typing.unit,
+                scale: i32::from(typing.scale),
+                aggregation: typing.aggregation.name().to_owned(),
+            }
+        })
+        .collect();
+    let channels = repository
+        .register_channels(system_id, &registrations, received_at)
+        .await
+        .map_err(|_| unavailable())?;
+    let mut rejected = Vec::new();
+    for ((key, reading), channel) in command.channel_readings.iter().zip(&channels) {
+        let typing = channel_typing(channel).ok_or_else(unavailable)?;
+        match scaled_channel_value(&typing, reading) {
+            Ok(value) => {
+                let value = if typing.scale == 0 {
+                    ExtendedValue::Integer(value)
+                } else {
+                    ExtendedValue::DecimalScaled(value)
+                };
+                command.extended.insert(channel.id, value);
+                command.registered_channels.insert(channel.id);
+            }
+            Err(error) => rejected.push(RejectedChannel {
+                channel_key: key.clone(),
+                reason: error.code(),
+            }),
+        }
+    }
+    Ok((command, rejected))
 }
 
-/// Parses a channel identifier from blob bytes, failing with a repository `Unavailable` error if it is invalid.
-#[cfg(feature = "sqlite")]
-fn channel_id(bytes: &[u8]) -> Result<ChannelId, ModernTelemetryError> {
-    uuid::Uuid::from_slice(bytes)
-        .ok()
-        .and_then(|value| ChannelId::from_uuid(value).ok())
-        .ok_or(ModernTelemetryError::Repository(PortError::Unavailable))
+/// Reads the stored definition of a channel.
+fn channel_typing(channel: &ChannelRecord) -> Option<ChannelTyping> {
+    Some(ChannelTyping {
+        value_type: ChannelValueType::from_name(&channel.data_type)?,
+        unit: channel.unit.clone(),
+        scale: u8::try_from(channel.scale).ok()?,
+        aggregation: ChannelAggregation::from_name(&channel.aggregation)?,
+    })
+}
+
+/// Persists the per-channel values alongside the observation row.
+async fn write_channel_values(
+    repository: &dyn ChannelRepository,
+    observation: &CanonicalObservation,
+    received_at: i64,
+) -> Result<(), ModernTelemetryError> {
+    if observation.values.extended.is_empty() {
+        return Ok(());
+    }
+    let values: Vec<(ChannelId, i64)> = observation
+        .values
+        .extended
+        .iter()
+        .map(|(channel, value)| {
+            (
+                *channel,
+                match value {
+                    ExtendedValue::Integer(number) | ExtendedValue::DecimalScaled(number) => {
+                        *number
+                    }
+                    ExtendedValue::Boolean(flag) => i64::from(*flag),
+                },
+            )
+        })
+        .collect();
+    let measured_at = i64::try_from(observation.observed_at.epoch_millis())
+        .map_err(|_| ModernTelemetryError::Invalid)?;
+    repository
+        .write_channel_values(observation.id, measured_at, &values, received_at)
+        .await
+        .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))
 }
 
 /// Projects a canonical observation onto the persisted hot-row columns.

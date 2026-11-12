@@ -103,6 +103,33 @@ A rejected reading is answered with `422` and a problem document whose
 `detail` names the member, for example `gridExportPowerWatts` when import and
 export power are both above zero.
 
+### Measurement channels
+
+Anything PVLog has no field for travels under `channels`, keyed by a name the
+logger chooses, as a `value` with its `unit`:
+
+```json
+{
+  "observedAtEpochMillis": 1780000000000,
+  "generationPowerWatts": 4200,
+  "channels": {
+    "garage.temperature": { "value": 21.5, "unit": "°C" },
+    "inv.2000123456.mppt.1.voltage": { "value": 384120, "unit": "mV" }
+  }
+}
+```
+
+A key that is new becomes a measurement channel with the unit of its first
+value and room for decimal places; values are stored as sent, without rounding.
+Keys of the form `inv.<serial>.<measurement>` follow the device key scheme and
+take its unit instead, for example millivolts for `mppt.<n>.voltage`. The
+earlier members `powerWatts` and `energyWattHours` stay accepted.
+
+Once a channel exists, its unit is fixed. A value in another unit, or with more
+decimal places than the channel keeps, is left out: the reading is still stored
+and answered with `201`, and the response lists the value under
+`rejectedChannels` with the reason `unit_mismatch` or `type_mismatch`.
+
 ## Daily summaries
 
 A logger that keeps its own daily totals can send them as well:

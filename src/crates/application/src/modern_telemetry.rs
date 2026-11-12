@@ -2,18 +2,36 @@
 
 use crate::{
     BatchIngestionMode, BatchIngestionResult, CorrectObservation, NormalizeObservation, PortError,
-    VersionedObservation,
+    RejectedChannel, VersionedObservation,
 };
 use async_trait::async_trait;
 use pvlog_domain::{CanonicalObservation, ObservationId};
 use thiserror::Error;
+
+/// An accepted reading together with the channel values it could not keep.
+#[derive(Clone, Debug)]
+pub struct IngestedObservation {
+    pub observation: CanonicalObservation,
+    /// Channel values that contradicted their channel's definition. The rest
+    /// of the reading was stored.
+    pub rejected_channels: Vec<RejectedChannel>,
+}
+
+impl From<CanonicalObservation> for IngestedObservation {
+    fn from(observation: CanonicalObservation) -> Self {
+        Self {
+            observation,
+            rejected_channels: Vec::new(),
+        }
+    }
+}
 
 #[async_trait]
 pub trait ModernTelemetryUseCases: Send + Sync {
     async fn ingest(
         &self,
         command: NormalizeObservation,
-    ) -> Result<CanonicalObservation, ModernTelemetryError>;
+    ) -> Result<IngestedObservation, ModernTelemetryError>;
     async fn ingest_batch(
         &self,
         commands: Vec<NormalizeObservation>,

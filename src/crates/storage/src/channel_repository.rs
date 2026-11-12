@@ -79,14 +79,27 @@ pub struct ChannelValueRecord {
 /// Persistence of measurement channels within one account.
 #[async_trait]
 pub trait ChannelRepository: Send + Sync {
-    /// Returns the channel stored under the key, registering it with the given
-    /// definition when the key is new. An existing channel keeps its definition.
+    /// Returns the channel stored under each key, in the order given, and
+    /// registers the keys that are new with the given definition. An existing
+    /// channel keeps its definition. The newest value is not read.
+    async fn register_channels(
+        &self,
+        system_id: SystemId,
+        registrations: &[ChannelRegistration],
+        now: i64,
+    ) -> Result<Vec<ChannelRecord>, AccountRepositoryError>;
+    /// Returns the channel stored under the key, registering it when it is new.
     async fn register_channel(
         &self,
         system_id: SystemId,
         registration: &ChannelRegistration,
         now: i64,
-    ) -> Result<ChannelRecord, AccountRepositoryError>;
+    ) -> Result<ChannelRecord, AccountRepositoryError> {
+        self.register_channels(system_id, std::slice::from_ref(registration), now)
+            .await?
+            .pop()
+            .ok_or(AccountRepositoryError::InvalidStoredValue)
+    }
     /// Lists the active channels of a system, unassigned ones first.
     async fn channels(
         &self,
@@ -167,6 +180,23 @@ fn validate_binding(binding: &ChannelBindingRecord) -> Result<(), AccountReposit
     Ok(())
 }
 
+/// Picks the stored channel of each registration, in the order given.
+fn registered(
+    registrations: &[ChannelRegistration],
+    known: &[ChannelRecord],
+) -> Result<Vec<ChannelRecord>, AccountRepositoryError> {
+    registrations
+        .iter()
+        .map(|registration| {
+            known
+                .iter()
+                .find(|channel| channel.channel_key == registration.channel_key)
+                .cloned()
+                .ok_or(AccountRepositoryError::InvalidStoredValue)
+        })
+        .collect()
+}
+
 fn channel_id(value: Uuid) -> Result<ChannelId, AccountRepositoryError> {
     ChannelId::from_uuid(value).map_err(|_| AccountRepositoryError::InvalidStoredValue)
 }
@@ -201,6 +231,25 @@ macro_rules! sqlite_channel_select {
             $tail
         )
     };
+}
+
+/// Reads every channel definition of a system without its newest value.
+#[cfg(feature = "sqlite")]
+async fn sqlite_definitions(
+    connection: &mut sqlx::SqliteConnection,
+    system_id: SystemId,
+) -> Result<Vec<ChannelRecord>, AccountRepositoryError> {
+    sqlx::query(
+        "SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,c.unit,c.scale,\
+         c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,c.last_value_at,\
+         c.updated_at,NULL AS last_value FROM channel_definitions c WHERE c.system_id=?",
+    )
+    .bind(blob(system_id.as_uuid()))
+    .fetch_all(connection)
+    .await?
+    .iter()
+    .map(sqlite_channel)
+    .collect()
 }
 
 #[cfg(feature = "sqlite")]
@@ -260,38 +309,54 @@ async fn sqlite_channel_by_key(
 #[cfg(feature = "sqlite")]
 #[async_trait]
 impl ChannelRepository for SqliteChannelRepository {
-    async fn register_channel(
+    async fn register_channels(
         &self,
         system_id: SystemId,
-        registration: &ChannelRegistration,
+        registrations: &[ChannelRegistration],
         now: i64,
-    ) -> Result<ChannelRecord, AccountRepositoryError> {
-        validate_registration(registration)?;
+    ) -> Result<Vec<ChannelRecord>, AccountRepositoryError> {
+        let known = {
+            let mut connection = self.account.acquire().await?;
+            sqlite_definitions(&mut connection, system_id).await?
+        };
+        let missing: Vec<&ChannelRegistration> = registrations
+            .iter()
+            .filter(|registration| {
+                !known
+                    .iter()
+                    .any(|channel| channel.channel_key == registration.channel_key)
+            })
+            .collect();
+        if missing.is_empty() {
+            return registered(registrations, &known);
+        }
         let mut writer = self.account.acquire_writer().await?;
-        sqlx::query(
-            "INSERT INTO channel_definitions \
-             (id,system_id,channel_key,display_name,data_type,unit,scale,aggregation,\
-              effective_from,created_at,updated_at,target_kind,discovered_at) \
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,'unassigned',?) \
-             ON CONFLICT(system_id,channel_key) DO NOTHING",
-        )
-        .bind(blob(Uuid::now_v7()))
-        .bind(blob(system_id.as_uuid()))
-        .bind(&registration.channel_key)
-        .bind(&registration.display_name)
-        .bind(&registration.data_type)
-        .bind(&registration.unit)
-        .bind(registration.scale)
-        .bind(&registration.aggregation)
-        .bind(now)
-        .bind(now)
-        .bind(now)
-        .bind(now)
-        .execute(writer.connection())
-        .await?;
-        sqlite_channel_by_key(writer.connection(), system_id, &registration.channel_key)
-            .await?
-            .ok_or(AccountRepositoryError::InvalidStoredValue)
+        for registration in missing {
+            validate_registration(registration)?;
+            sqlx::query(
+                "INSERT INTO channel_definitions \
+                 (id,system_id,channel_key,display_name,data_type,unit,scale,aggregation,\
+                  effective_from,created_at,updated_at,target_kind,discovered_at) \
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,'unassigned',?) \
+                 ON CONFLICT(system_id,channel_key) DO NOTHING",
+            )
+            .bind(blob(Uuid::now_v7()))
+            .bind(blob(system_id.as_uuid()))
+            .bind(&registration.channel_key)
+            .bind(&registration.display_name)
+            .bind(&registration.data_type)
+            .bind(&registration.unit)
+            .bind(registration.scale)
+            .bind(&registration.aggregation)
+            .bind(now)
+            .bind(now)
+            .bind(now)
+            .bind(now)
+            .execute(writer.connection())
+            .await?;
+        }
+        let known = sqlite_definitions(writer.connection(), system_id).await?;
+        registered(registrations, &known)
     }
 
     async fn channels(
@@ -529,6 +594,27 @@ fn postgres_channel(row: &sqlx::postgres::PgRow) -> Result<ChannelRecord, Accoun
 
 #[cfg(feature = "postgres")]
 impl PostgresChannelRepository {
+    /// Reads every channel definition of a system without its newest value.
+    async fn definitions(
+        &self,
+        connection: &mut PgConnection,
+        system_id: SystemId,
+    ) -> Result<Vec<ChannelRecord>, AccountRepositoryError> {
+        sqlx::query(
+            "SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,c.unit,c.scale,\
+             c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,\
+             c.last_value_at,c.updated_at,NULL::BIGINT AS last_value \
+             FROM account_data.channel_definitions c WHERE c.account_id=$1 AND c.system_id=$2",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .fetch_all(connection)
+        .await?
+        .iter()
+        .map(postgres_channel)
+        .collect()
+    }
+
     async fn channel_by_key(
         &self,
         connection: &mut PgConnection,
@@ -552,38 +638,49 @@ impl PostgresChannelRepository {
 #[cfg(feature = "postgres")]
 #[async_trait]
 impl ChannelRepository for PostgresChannelRepository {
-    async fn register_channel(
+    async fn register_channels(
         &self,
         system_id: SystemId,
-        registration: &ChannelRegistration,
+        registrations: &[ChannelRegistration],
         now: i64,
-    ) -> Result<ChannelRecord, AccountRepositoryError> {
-        validate_registration(registration)?;
+    ) -> Result<Vec<ChannelRecord>, AccountRepositoryError> {
         let mut connection = self.connection().await?;
-        sqlx::query(
-            "INSERT INTO account_data.channel_definitions \
-             (account_id,id,system_id,channel_key,display_name,data_type,unit,scale,aggregation,\
-              effective_from,created_at,updated_at,target_kind,discovered_at) \
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10,$10,'unassigned',$10) \
-             ON CONFLICT(account_id,system_id,channel_key) DO NOTHING",
-        )
-        .bind(self.account_id.as_uuid())
-        .bind(Uuid::now_v7())
-        .bind(system_id.as_uuid())
-        .bind(&registration.channel_key)
-        .bind(&registration.display_name)
-        .bind(&registration.data_type)
-        .bind(&registration.unit)
-        .bind(registration.scale)
-        .bind(&registration.aggregation)
-        .bind(now)
-        .execute(&mut connection)
-        .await?;
-        let stored = self
-            .channel_by_key(&mut connection, system_id, &registration.channel_key)
+        let mut known = self.definitions(&mut connection, system_id).await?;
+        let mut inserted = false;
+        for registration in registrations {
+            if known
+                .iter()
+                .any(|channel| channel.channel_key == registration.channel_key)
+            {
+                continue;
+            }
+            validate_registration(registration)?;
+            sqlx::query(
+                "INSERT INTO account_data.channel_definitions \
+                 (account_id,id,system_id,channel_key,display_name,data_type,unit,scale,\
+                  aggregation,effective_from,created_at,updated_at,target_kind,discovered_at) \
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$10,$10,'unassigned',$10) \
+                 ON CONFLICT(account_id,system_id,channel_key) DO NOTHING",
+            )
+            .bind(self.account_id.as_uuid())
+            .bind(Uuid::now_v7())
+            .bind(system_id.as_uuid())
+            .bind(&registration.channel_key)
+            .bind(&registration.display_name)
+            .bind(&registration.data_type)
+            .bind(&registration.unit)
+            .bind(registration.scale)
+            .bind(&registration.aggregation)
+            .bind(now)
+            .execute(&mut connection)
             .await?;
+            inserted = true;
+        }
+        if inserted {
+            known = self.definitions(&mut connection, system_id).await?;
+        }
         connection.close().await?;
-        stored.ok_or(AccountRepositoryError::InvalidStoredValue)
+        registered(registrations, &known)
     }
 
     async fn channels(

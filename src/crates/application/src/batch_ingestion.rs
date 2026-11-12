@@ -25,6 +25,9 @@ pub struct BatchItemOutcome {
     pub index: usize,
     pub status: BatchItemStatus,
     pub code: Option<&'static str>,
+    /// Channel values of the item that were not stored while the item was.
+    #[serde(rename = "rejectedChannels", skip_serializing_if = "Vec::is_empty")]
+    pub rejected_channels: Vec<crate::RejectedChannel>,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct BatchIngestionResult {
@@ -84,6 +87,7 @@ impl BatchIngestionService {
                     index,
                     status: BatchItemStatus::Invalid,
                     code: Some(code),
+                    rejected_channels: Vec::new(),
                 });
             }
         }
@@ -109,6 +113,7 @@ impl BatchIngestionService {
                         index,
                         status,
                         code: None,
+                        rejected_channels: Vec::new(),
                     })
                     .collect(),
             });
@@ -128,6 +133,7 @@ impl BatchIngestionService {
                 index,
                 status,
                 code: (status == BatchItemStatus::Failed).then_some("persistence_failed"),
+                rejected_channels: Vec::new(),
             });
         }
         Ok(BatchIngestionResult { outcomes })

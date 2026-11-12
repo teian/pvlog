@@ -9,6 +9,7 @@ mod api_token;
 mod authorization_boundary;
 mod batch_ingestion;
 mod browser_session;
+mod channel_values;
 mod daily_values;
 mod data_quality;
 mod data_sources;
@@ -70,6 +71,11 @@ pub use browser_session::{
     BrowserSession, BrowserSessionError, BrowserSessionPolicy, BrowserSessionRecord,
     BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, SessionCookie,
 };
+pub use channel_values::{
+    ChannelAggregation, ChannelReading, ChannelTyping, ChannelValueError, ChannelValueType,
+    DecimalValue, DeviceChannel, DeviceChannelTarget, MAXIMUM_CHANNEL_SCALE, RejectedChannel,
+    channel_typing_for, device_channel, scaled_channel_value,
+};
 pub use daily_values::{
     ComputedDay, DayBasis, DayEnergy, IMPORT_BANDS, MAXIMUM_WEATHER_CONDITION_CHARACTERS,
     SUFFICIENT_DAILY_COVERAGE_BASIS_POINTS, SuppliedDailySummary, SuppliedDay, effective_day,
@@ -103,9 +109,8 @@ pub use ingestion_admission::{
 };
 pub use ingestion_counters::{CounterBaseline, CounterStep, counter_step, derive_counter_energy};
 pub use ingestion_normalization::{
-    ChannelReading, EnergyInput, EnergyUnit, IngestionNormalizationError,
-    MAXIMUM_MESSAGE_CHARACTERS, NormalizeObservation, ObservationSupplements, PowerUnit,
-    normalize_observation,
+    EnergyInput, EnergyUnit, IngestionNormalizationError, MAXIMUM_MESSAGE_CHARACTERS,
+    NormalizeObservation, ObservationSupplements, PowerUnit, normalize_observation,
 };
 pub use ingestion_validation::{
     IngestionValidationError, IngestionValidationPolicy, validate_observation,
@@ -121,7 +126,7 @@ pub use managed_resource::{
     CreateManagedResource, ManagedResource, ManagedResourceError, ManagedResourceKind,
     ManagedResourceService, ModernApiActor,
 };
-pub use modern_telemetry::{ModernTelemetryError, ModernTelemetryUseCases};
+pub use modern_telemetry::{IngestedObservation, ModernTelemetryError, ModernTelemetryUseCases};
 pub use oauth2_connector::{
     EncryptedProviderToken, OAuth2AuthorizationRequest, OAuth2ClaimMappings,
     OAuth2ClientAuthMethod, OAuth2ConnectorSettings, OAuth2ProtocolClient, OAuth2ProtocolError,

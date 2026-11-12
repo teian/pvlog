@@ -16,6 +16,62 @@ use pvlog_storage::{DatabaseTarget, ManagementRepository};
 use sqlx::Row;
 use uuid::Uuid;
 
+/// Opens the measurement channel repository of the account that owns a system.
+///
+/// Returns `None` when the system is unknown or its storage cannot be reached.
+pub async fn channel_repository(
+    target: &DatabaseTarget,
+    management: &dyn ManagementRepository,
+    system_id: SystemId,
+) -> Option<Box<dyn pvlog_storage::ChannelRepository>> {
+    let account_id = management
+        .system_registry(system_id)
+        .await
+        .ok()??
+        .account_id;
+    match target {
+        DatabaseTarget::Sqlite {
+            management_path,
+            accounts_dir,
+        } => {
+            #[cfg(feature = "sqlite")]
+            {
+                let account = pvlog_storage::SqliteAccountPoolRouter::new(
+                    management_path.clone(),
+                    accounts_dir.clone(),
+                    pvlog_storage::SqliteAccountPoolConfig::default(),
+                )
+                .ok()?
+                .route(account_id)
+                .await
+                .ok()?;
+                Some(Box::new(pvlog_storage::SqliteChannelRepository::new(
+                    account,
+                )))
+            }
+            #[cfg(not(feature = "sqlite"))]
+            {
+                let _ = (management_path, accounts_dir, account_id);
+                None
+            }
+        }
+        DatabaseTarget::Postgres { url } => {
+            #[cfg(feature = "postgres")]
+            {
+                Some(Box::new(pvlog_storage::PostgresChannelRepository::new(
+                    url.clone(),
+                    account_id,
+                )))
+            }
+            #[cfg(not(feature = "postgres"))]
+            {
+                let _ = (url, account_id);
+                None
+            }
+        }
+    }
+}
+
 /// Serves the channel binding endpoints from account storage.
 pub struct StorageChannelApi {
     target: DatabaseTarget,

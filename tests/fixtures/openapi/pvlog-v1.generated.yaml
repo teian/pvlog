@@ -1664,8 +1664,28 @@ paths:
         {
           "201":
             {
-              description: Observation accepted,
-              content: { application/json: { schema: { type: object } } },
+              description: Observation accepted. The stored reading is returned; rejectedChannels is present when a channel value was left out.,
+              content:
+                {
+                  application/json:
+                    {
+                      schema:
+                        {
+                          type: object,
+                          properties:
+                            {
+                              rejectedChannels:
+                                {
+                                  type: array,
+                                  items:
+                                    {
+                                      $ref: "#/components/schemas/RejectedChannel",
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
             },
           "422": { $ref: "#/components/responses/ValidationProblem" },
           "401": { $ref: "#/components/responses/UnauthorizedProblem" },
@@ -1762,7 +1782,7 @@ paths:
         {
           "200":
             {
-              description: Stable indexed batch outcomes,
+              description: Stable indexed batch outcomes. An outcome carries rejectedChannels when channel values of a stored item were left out.,
               content: { application/json: { schema: { type: object } } },
             },
           "422": { $ref: "#/components/responses/ValidationProblem" },
@@ -4478,6 +4498,17 @@ components:
         discoveredAtEpochMillis: { type: [integer, "null"], format: int64 }
         lastValueAtEpochMillis: { type: [integer, "null"], format: int64 }
         lastValue: { type: [integer, "null"], format: int64 }
+    RejectedChannel:
+      type: object
+      description: A channel value that was not stored because it contradicts the definition of its channel.
+      required: [channelKey, reason]
+      properties:
+        channelKey: { type: string }
+        reason:
+          type: string
+          enum:
+            [value_missing, unit_mismatch, type_mismatch, value_out_of_range]
+          description: unit_mismatch when the unit differs from the channel's unit, type_mismatch when the value has more decimal places than the channel keeps.
     MeasurementChannelBinding:
       type: object
       required: [targetKind, tracksPower, tracksEnergy]
@@ -4915,14 +4946,34 @@ components:
           channels:
             {
               type: object,
-              description: Per-meter readings keyed by the source's own channel names. An unknown key is registered as an unassigned measurement channel.,
+              description: "Values keyed by the source's own channel names. An unknown key is registered as an unassigned measurement channel: a key of the device key scheme with the unit the scheme defines, any other key with the unit of its first value. A value that contradicts its channel is left out and named in rejectedChannels; the rest of the reading is stored.",
               additionalProperties:
                 {
                   type: object,
                   properties:
                     {
-                      powerWatts: { type: integer },
-                      energyWattHours: { type: integer },
+                      value:
+                        {
+                          type: number,
+                          description: "Value in the channel's unit, in plain decimal notation with at most nine decimal places. It is stored without rounding.",
+                        },
+                      unit:
+                        {
+                          type: string,
+                          minLength: 1,
+                          maxLength: 16,
+                          description: "Unit of value. It becomes the unit of a new channel and must equal the unit of an existing one.",
+                        },
+                      powerWatts:
+                        {
+                          type: integer,
+                          description: Earlier form of a value in watts.,
+                        },
+                      energyWattHours:
+                        {
+                          type: integer,
+                          description: Earlier form of a value in watt-hours.,
+                        },
                       quality: { type: string, enum: [estimated] },
                     },
                 },

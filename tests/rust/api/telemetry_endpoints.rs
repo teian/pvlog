@@ -9,12 +9,12 @@ use pvlog_api::{
     telemetry_router,
 };
 use pvlog_application::{
-    BatchIngestionMode, BatchIngestionResult, CorrectObservation, ModernTelemetryError,
-    ModernTelemetryUseCases, NormalizeObservation, VersionedObservation, normalize_observation,
+    BatchIngestionMode, BatchIngestionResult, ChannelReading, CorrectObservation, DecimalValue,
+    IngestedObservation, ModernTelemetryError, ModernTelemetryUseCases, NormalizeObservation,
+    RejectedChannel, VersionedObservation, normalize_observation,
 };
 use pvlog_domain::{
-    AccountId, ApiCredentialId, ApiScope, CanonicalObservation, ObservationId, Permission,
-    PrincipalId, SystemId, UserId,
+    AccountId, ApiCredentialId, ApiScope, ObservationId, Permission, PrincipalId, SystemId, UserId,
 };
 use std::collections::BTreeSet;
 use std::{
@@ -143,6 +143,135 @@ async fn telemetry_write_api_key_is_account_authorized_and_supplies_safe_idempot
     Ok(())
 }
 
+#[tokio::test]
+async fn channel_values_are_typed_and_contradictions_are_returned() -> Result<(), Box<dyn Error>> {
+    let system = SystemId::new();
+    let user = UserId::new();
+    let stub = Arc::new(ChannelStub::default());
+    let app = telemetry_router(stub.clone(), Arc::new(Authorizer::new(system, user)))
+        .layer(Extension(RequestPrincipal::User(user)));
+    let post = |body: &'static str| {
+        let app = app.clone();
+        async move {
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .method(Method::POST)
+                        .uri(format!("/api/v1/systems/{system}/observations"))
+                        .header("content-type", "application/json")
+                        .header("idempotency-key", "one")
+                        .body(Body::from(body))?,
+                )
+                .await?;
+            let status = response.status();
+            let bytes = axum::body::to_bytes(response.into_body(), 65_536).await?;
+            Ok::<_, Box<dyn Error>>((status, serde_json::from_slice::<serde_json::Value>(&bytes)?))
+        }
+    };
+
+    let (status, body) = post(
+        r#"{"observedAtEpochMillis":0,"channels":{
+            "dc.voltage":{"value":384.12,"unit":"V"},
+            "status":{"value":307},
+            "meter":{"powerWatts":1500,"quality":"estimated"}}}"#,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    // The decimal reaches the service as written, not as a float.
+    let readings = stub.0.lock().map_err(|_| "poisoned")?.clone();
+    assert_eq!(
+        readings.get("dc.voltage"),
+        Some(&ChannelReading {
+            value: DecimalValue::parse("384.12"),
+            unit: Some("V".to_owned()),
+            ..ChannelReading::default()
+        })
+    );
+    assert_eq!(
+        readings.get("status").and_then(|reading| reading.value),
+        Some(DecimalValue::integer(307))
+    );
+    assert_eq!(
+        readings.get("meter"),
+        Some(&ChannelReading {
+            power_watts: Some(1_500),
+            estimated: true,
+            ..ChannelReading::default()
+        })
+    );
+    // The reading is stored; the value that did not fit is named.
+    assert_eq!(
+        body["rejectedChannels"],
+        serde_json::json!([{"channelKey": "status", "reason": "unit_mismatch"}])
+    );
+    assert!(body["id"].is_string());
+
+    // Without a contradiction the member is absent.
+    let (status, body) = post(r#"{"observedAtEpochMillis":0}"#).await?;
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(body.get("rejectedChannels").is_none());
+
+    // A number that is not plain decimal notation and a blank unit are refused.
+    for malformed in [
+        r#"{"observedAtEpochMillis":0,"channels":{"a":{"value":1e-12}}}"#,
+        r#"{"observedAtEpochMillis":0,"channels":{"a":{"value":1,"unit":""}}}"#,
+        r#"{"observedAtEpochMillis":0,"channels":{"a":{"value":1,"unit":"seventeen-letters"}}}"#,
+    ] {
+        let (status, body) = post(malformed).await?;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{malformed}");
+        assert_eq!(body["detail"], "channels", "{malformed}");
+    }
+    Ok(())
+}
+
+/// Records the channel readings it is handed and refuses the one named `status`.
+#[derive(Default)]
+struct ChannelStub(Mutex<std::collections::BTreeMap<String, ChannelReading>>);
+
+#[async_trait]
+impl ModernTelemetryUseCases for ChannelStub {
+    async fn ingest(
+        &self,
+        command: NormalizeObservation,
+    ) -> Result<IngestedObservation, ModernTelemetryError> {
+        *self.0.lock().map_err(|_| ModernTelemetryError::Invalid)? =
+            command.channel_readings.clone();
+        let rejected_channels = command
+            .channel_readings
+            .keys()
+            .filter(|key| key.as_str() == "status")
+            .map(|key| RejectedChannel {
+                channel_key: key.clone(),
+                reason: "unit_mismatch",
+            })
+            .collect();
+        Ok(IngestedObservation {
+            observation: normalize_observation(command)
+                .map_err(|_| ModernTelemetryError::Invalid)?,
+            rejected_channels,
+        })
+    }
+    async fn ingest_batch(
+        &self,
+        _commands: Vec<NormalizeObservation>,
+        _mode: BatchIngestionMode,
+    ) -> Result<BatchIngestionResult, ModernTelemetryError> {
+        Err(ModernTelemetryError::Invalid)
+    }
+    async fn correct(
+        &self,
+        _command: CorrectObservation,
+    ) -> Result<VersionedObservation, ModernTelemetryError> {
+        Err(ModernTelemetryError::Invalid)
+    }
+    async fn delete(
+        &self,
+        _command: CorrectObservation,
+    ) -> Result<ObservationId, ModernTelemetryError> {
+        Err(ModernTelemetryError::Invalid)
+    }
+}
+
 struct Authorizer {
     account: AccountId,
     system: SystemId,
@@ -213,12 +342,14 @@ impl ModernTelemetryUseCases for RecordingStub {
     async fn ingest(
         &self,
         command: NormalizeObservation,
-    ) -> Result<CanonicalObservation, ModernTelemetryError> {
+    ) -> Result<IngestedObservation, ModernTelemetryError> {
         self.0
             .lock()
             .map_err(|_| ModernTelemetryError::Invalid)?
             .push(command.idempotency_namespace.clone());
-        normalize_observation(command).map_err(|_| ModernTelemetryError::Invalid)
+        normalize_observation(command)
+            .map(Into::into)
+            .map_err(|_| ModernTelemetryError::Invalid)
     }
     async fn ingest_batch(
         &self,
@@ -246,8 +377,10 @@ impl ModernTelemetryUseCases for Stub {
     async fn ingest(
         &self,
         command: NormalizeObservation,
-    ) -> Result<CanonicalObservation, ModernTelemetryError> {
-        normalize_observation(command).map_err(|_| ModernTelemetryError::Invalid)
+    ) -> Result<IngestedObservation, ModernTelemetryError> {
+        normalize_observation(command)
+            .map(Into::into)
+            .map_err(|_| ModernTelemetryError::Invalid)
     }
     async fn ingest_batch(
         &self,

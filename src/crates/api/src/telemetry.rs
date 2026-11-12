@@ -6,15 +6,16 @@ use axum::{
     routing::{patch, post},
 };
 use pvlog_application::{
-    BatchIngestionMode, ChannelReading, CorrectObservation, EnergyInput, ModernTelemetryError,
-    ModernTelemetryUseCases, NormalizeObservation, ObservationSupplements, PowerUnit,
+    BatchIngestionMode, ChannelReading, CorrectObservation, DecimalValue, EnergyInput,
+    ModernTelemetryError, ModernTelemetryUseCases, NormalizeObservation, ObservationSupplements,
+    PowerUnit, RejectedChannel,
 };
 use pvlog_domain::{
-    ApiCredentialId, ApiScope, BatteryFlowState, MeasurementValues, ObservationId,
-    ObservationSource, ObservationSourceKind, Permission, QualityFlags, SystemId, UserId,
-    UtcTimestamp, Watts,
+    ApiCredentialId, ApiScope, BatteryFlowState, CanonicalObservation, MeasurementValues,
+    ObservationId, ObservationSource, ObservationSourceKind, Permission, QualityFlags, SystemId,
+    UserId, UtcTimestamp, Watts,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
@@ -80,9 +81,51 @@ struct ObservationBody {
 struct ChannelReadingBody {
     power_watts: Option<i64>,
     energy_watt_hours: Option<i64>,
+    /// Value in the channel's unit; may have decimal places.
+    value: Option<serde_json::Number>,
+    /// Unit of `value`. It must match the channel's unit once that is known.
+    unit: Option<String>,
     /// Free-form marker; only "estimated" changes how the value is flagged.
     quality: Option<String>,
 }
+/// Longest unit a channel value may state, counted in characters.
+const MAXIMUM_UNIT_CHARACTERS: usize = 16;
+
+impl ChannelReadingBody {
+    /// Converts the wire form, refusing a number that is not plain decimal
+    /// notation and a unit that is empty, too long or not printable.
+    fn reading(self) -> Result<ChannelReading, TelemetryApiError> {
+        let invalid = || TelemetryApiError::Domain(ModernTelemetryError::InvalidField("channels"));
+        let value = self
+            .value
+            .map(|number| DecimalValue::parse(&number.to_string()).ok_or_else(invalid))
+            .transpose()?;
+        if self.unit.as_ref().is_some_and(|unit| {
+            unit.is_empty()
+                || unit.chars().count() > MAXIMUM_UNIT_CHARACTERS
+                || unit.chars().any(char::is_control)
+        }) {
+            return Err(invalid());
+        }
+        Ok(ChannelReading {
+            power_watts: self.power_watts,
+            energy_watt_hours: self.energy_watt_hours,
+            value,
+            unit: self.unit,
+            estimated: self.quality.as_deref() == Some("estimated"),
+        })
+    }
+}
+
+/// A stored reading as it is returned, with the channel values it could not keep.
+#[derive(Serialize)]
+struct IngestedBody {
+    #[serde(flatten)]
+    observation: CanonicalObservation,
+    #[serde(rename = "rejectedChannels", skip_serializing_if = "Vec::is_empty")]
+    rejected_channels: Vec<RejectedChannel>,
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
 enum BatchModeBody {
@@ -126,8 +169,15 @@ async fn single(
         idempotency_key(&headers)?,
         body,
     )?;
-    let observation = state.service.ingest(command).await?;
-    Ok((StatusCode::CREATED, Json(observation)).into_response())
+    let ingested = state.service.ingest(command).await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(IngestedBody {
+            observation: ingested.observation,
+            rejected_channels: ingested.rejected_channels,
+        }),
+    )
+        .into_response())
 }
 async fn batch(
     State(state): State<TelemetryState>,
@@ -286,6 +336,11 @@ fn command(
 ) -> Result<NormalizeObservation, TelemetryApiError> {
     let observed_at = UtcTimestamp::from_epoch_millis(body.observed_at_epoch_millis)
         .map_err(|_| TelemetryApiError::Invalid)?;
+    let channel_readings = body
+        .channels
+        .into_iter()
+        .map(|(key, reading)| Ok((key, reading.reading()?)))
+        .collect::<Result<BTreeMap<_, _>, TelemetryApiError>>()?;
     Ok(NormalizeObservation {
         system_id,
         credential_id,
@@ -318,20 +373,7 @@ fn command(
         battery_flow_state: BatteryFlowState::Unknown,
         extended: BTreeMap::new(),
         registered_channels: BTreeSet::new(),
-        channel_readings: body
-            .channels
-            .into_iter()
-            .map(|(key, reading)| {
-                (
-                    key,
-                    ChannelReading {
-                        power_watts: reading.power_watts,
-                        energy_watt_hours: reading.energy_watt_hours,
-                        estimated: reading.quality.as_deref() == Some("estimated"),
-                    },
-                )
-            })
-            .collect(),
+        channel_readings,
         supplements: ObservationSupplements {
             generation_lifetime_wh: body.generation_lifetime_wh,
             consumption_lifetime_wh: body.consumption_lifetime_wh,
