@@ -184,7 +184,11 @@ impl AccountSeriesRepository {
         }
     }
 
-    /// Sums the channels bound to the requested equipment, one row per instant.
+    /// Sums the power channels bound to the requested equipment, one row per instant.
+    ///
+    /// Only channels in watts that are averaged over a period carry DC power.
+    /// A string's voltage or current channel is bound to it as well and must
+    /// not enter the sum.
     ///
     /// Returns `None` when the scope is the system and no string is metered, so
     /// the caller can fall back to the plant-wide observation columns.
@@ -206,7 +210,7 @@ impl AccountSeriesRepository {
                  JOIN telemetry_hot h ON h.observation_id=v.observation_id \
                  JOIN channel_definitions c ON c.id=v.channel_id \
                  WHERE h.system_id=? AND h.measured_at>=? AND h.measured_at<? \
-                 AND c.lifecycle='active' AND c.target_kind='string' \
+                 AND c.lifecycle='active' AND c.target_kind='string' AND c.unit='W' AND c.aggregation='mean' \
                  GROUP BY h.measured_at ORDER BY h.measured_at",
                 )
                 .bind(system)
@@ -222,7 +226,7 @@ impl AccountSeriesRepository {
                  JOIN telemetry_hot h ON h.observation_id=v.observation_id \
                  JOIN channel_definitions c ON c.id=v.channel_id \
                  WHERE h.system_id=? AND h.measured_at>=? AND h.measured_at<? \
-                 AND c.lifecycle='active' AND c.target_kind='string' \
+                 AND c.lifecycle='active' AND c.target_kind='string' AND c.unit='W' AND c.aggregation='mean' \
                  AND c.target_id IN (SELECT p.id FROM pv_strings p WHERE p.inverter_id=?) \
                  GROUP BY h.measured_at ORDER BY h.measured_at",
                 )
@@ -240,7 +244,7 @@ impl AccountSeriesRepository {
                  JOIN telemetry_hot h ON h.observation_id=v.observation_id \
                  JOIN channel_definitions c ON c.id=v.channel_id \
                  WHERE h.system_id=? AND h.measured_at>=? AND h.measured_at<? \
-                 AND c.lifecycle='active' AND c.target_kind='string' AND c.target_id=? \
+                 AND c.lifecycle='active' AND c.target_kind='string' AND c.unit='W' AND c.aggregation='mean' AND c.target_id=? \
                  GROUP BY h.measured_at ORDER BY h.measured_at",
                 )
                 .bind(system)

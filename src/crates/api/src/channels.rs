@@ -22,22 +22,27 @@ use crate::{
     authorization::principal_identity, problem::Problem,
 };
 
-/// One measurement channel and the equipment it is bound to.
+/// One measurement channel, what its values mean and the equipment it is bound to.
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChannelResponse {
     pub id: Uuid,
     pub channel_key: String,
     pub display_name: String,
+    /// `integer`, `decimal`, `boolean`, or `counter`.
+    pub data_type: String,
     pub unit: String,
+    /// Decimal places of `last_value`: a value of 1234 at scale 2 is 12.34.
+    pub scale: i32,
+    /// `mean`, `sum`, `min`, `max`, `last`, or `counter_delta`.
+    pub aggregation: String,
     /// `unassigned`, `plant`, `inverter`, or `string`.
     pub target_kind: String,
     /// Equipment identifier for the `inverter` and `string` targets.
     pub target_id: Option<Uuid>,
-    pub tracks_power: bool,
-    pub tracks_energy: bool,
     pub discovered_at_epoch_millis: Option<i64>,
     pub last_value_at_epoch_millis: Option<i64>,
+    /// Newest value as a scaled integer.
     pub last_value: Option<i64>,
 }
 
@@ -47,9 +52,9 @@ pub struct ChannelResponse {
 pub struct ChannelBindingInput {
     pub target_kind: String,
     pub target_id: Option<Uuid>,
-    pub tracks_power: bool,
-    pub tracks_energy: bool,
     pub display_name: Option<String>,
+    /// How a period of values is reduced; the stored kind is kept when absent.
+    pub aggregation: Option<String>,
 }
 
 #[async_trait::async_trait]
@@ -129,8 +134,17 @@ async fn remove(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// Rejects a binding whose target kind and identifier contradict each other.
+/// Rejects a binding whose target kind and identifier contradict each other
+/// or whose aggregation kind is unknown.
 fn validate(input: &ChannelBindingInput) -> Result<(), ChannelApiError> {
+    if input.aggregation.as_deref().is_some_and(|kind| {
+        !matches!(
+            kind,
+            "mean" | "sum" | "min" | "max" | "last" | "counter_delta"
+        )
+    }) {
+        return Err(ChannelApiError::InvalidInput("unknown_aggregation"));
+    }
     match input.target_kind.as_str() {
         "inverter" | "string" if input.target_id.is_none() => {
             Err(ChannelApiError::InvalidInput("target_id_required"))

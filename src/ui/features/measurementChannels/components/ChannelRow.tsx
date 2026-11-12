@@ -9,6 +9,7 @@ import type {
   ChannelBinding,
   MeasurementChannel,
 } from "@/features/measurementChannels/measurementChannels.types";
+import { formatChannelValue } from "@/features/measurementChannels/utils/formatChannelValue";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -51,8 +52,6 @@ export function ChannelRow({
     onBind({
       targetKind: channel.targetKind,
       targetId: channel.targetId,
-      tracksPower: channel.tracksPower,
-      tracksEnergy: channel.tracksEnergy,
       displayName: name.trim() || channel.channelKey,
       ...next,
     });
@@ -60,7 +59,12 @@ export function ChannelRow({
   const value =
     channel.lastValue === null
       ? t("channels.noValue")
-      : `${new Intl.NumberFormat(i18n.language).format(channel.lastValue)} ${channel.unit}`;
+      : formatChannelValue(
+          channel.lastValue,
+          channel.scale,
+          channel.unit,
+          i18n.language,
+        );
   const time =
     channel.lastValueAtEpochMillis === null
       ? null

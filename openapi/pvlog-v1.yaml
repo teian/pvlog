@@ -4476,16 +4476,26 @@ components:
           id,
           channelKey,
           displayName,
+          dataType,
           unit,
+          scale,
+          aggregation,
           targetKind,
-          tracksPower,
-          tracksEnergy,
         ]
       properties:
         id: { $ref: "#/components/schemas/UuidV7" }
         channelKey: { type: string }
         displayName: { type: string }
+        dataType:
+          type: string
+          enum: [integer, decimal, boolean, counter]
         unit: { type: string }
+        scale:
+          type: integer
+          minimum: 0
+          maximum: 9
+          description: Decimal places of the stored integer. A lastValue of 1234 at scale 2 is 12.34.
+        aggregation: { $ref: "#/components/schemas/ChannelAggregation" }
         targetKind:
           type: string
           enum: [unassigned, plant, inverter, string]
@@ -4493,11 +4503,16 @@ components:
           oneOf:
             - $ref: "#/components/schemas/UuidV7"
             - type: "null"
-        tracksPower: { type: boolean }
-        tracksEnergy: { type: boolean }
         discoveredAtEpochMillis: { type: [integer, "null"], format: int64 }
         lastValueAtEpochMillis: { type: [integer, "null"], format: int64 }
-        lastValue: { type: [integer, "null"], format: int64 }
+        lastValue:
+          type: [integer, "null"]
+          format: int64
+          description: Newest value as an integer with scale decimal places.
+    ChannelAggregation:
+      type: string
+      enum: [mean, sum, min, max, last, counter_delta]
+      description: How the values of a period are reduced to one value. counter_delta is the growth of a counter, ignoring resets.
     RejectedChannel:
       type: object
       description: A channel value that was not stored because it contradicts the definition of its channel.
@@ -4511,7 +4526,7 @@ components:
           description: unit_mismatch when the unit differs from the channel's unit, type_mismatch when the value has more decimal places than the channel keeps.
     MeasurementChannelBinding:
       type: object
-      required: [targetKind, tracksPower, tracksEnergy]
+      required: [targetKind]
       properties:
         targetKind:
           type: string
@@ -4520,9 +4535,12 @@ components:
           oneOf:
             - $ref: "#/components/schemas/UuidV7"
             - type: "null"
-        tracksPower: { type: boolean }
-        tracksEnergy: { type: boolean }
         displayName: { type: [string, "null"] }
+        aggregation:
+          oneOf:
+            - $ref: "#/components/schemas/ChannelAggregation"
+            - type: "null"
+          description: Kept as stored when absent.
     RangeSummary:
       type: object
       required:

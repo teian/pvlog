@@ -2,11 +2,14 @@
 
 use std::error::Error;
 
-use pvlog_domain::{AccountId, ChannelId, ObservationId, SystemId};
+use pvlog_domain::{
+    AccountId, ChannelId, EquipmentValueProvenance, InverterId, ObservationId, StringId, SystemId,
+};
 use pvlog_storage::{
-    AccountConfigurationRepository, ChannelRecord, ChannelRegistration, ChannelRepository,
-    DatabaseTarget, PostgresAccountConfigurationRepository, PostgresChannelRepository,
-    PostgresTelemetryRepository, RoutedSqliteAccount, SqliteAccountConfigurationRepository,
+    AccountConfigurationRepository, AccountRepositoryError, ChannelBindingRecord, ChannelRecord,
+    ChannelRegistration, ChannelRepository, DatabaseTarget, InverterRecord,
+    PostgresAccountConfigurationRepository, PostgresChannelRepository, PostgresTelemetryRepository,
+    PvStringRecord, RoutedSqliteAccount, SqliteAccountConfigurationRepository,
     SqliteAccountPoolConfig, SqliteAccountPoolRouter, SqliteAccountProvisioner,
     SqliteChannelRepository, SqliteTelemetryRepository, StoredMeasurements, StoredObservation,
     SystemConfigurationRecord, TelemetryRepository, apply_migrations,
@@ -286,6 +289,63 @@ fn system(id: SystemId) -> SystemConfigurationRecord {
     }
 }
 
+/// An inverter with one string per given name.
+fn inverter(system_id: SystemId, strings: &[&str]) -> InverterRecord {
+    let inverter_id = InverterId::new();
+    InverterRecord {
+        id: inverter_id,
+        system_id,
+        name: "Inverter".to_owned(),
+        manufacturer: None,
+        model: None,
+        serial_reference: None,
+        rated_power_watts: None,
+        catalog_entry_id: None,
+        catalog_revision: None,
+        value_provenance: EquipmentValueProvenance::Manual,
+        specification_snapshot: None,
+        effective_from: 0,
+        effective_to: None,
+        created_at: 1,
+        updated_at: 1,
+        strings: strings
+            .iter()
+            .map(|name| PvStringRecord {
+                id: StringId::new(),
+                inverter_id,
+                name: (*name).to_owned(),
+                panel_count: 10,
+                panel_manufacturer: None,
+                panel_model: None,
+                rated_power_watts: 4_000,
+                module_catalog_entry_id: None,
+                module_catalog_revision: None,
+                value_provenance: EquipmentValueProvenance::Manual,
+                module_specification_snapshot: None,
+                module_peak_power_watts: None,
+                total_peak_power_watts: None,
+                orientation_degrees: None,
+                tilt_degrees: None,
+                temperature_coefficient_ppm_per_celsius: None,
+                shading: Vec::new(),
+                effective_from: 0,
+                effective_to: None,
+                created_at: 1,
+                updated_at: 1,
+            })
+            .collect(),
+    }
+}
+
+fn binding(target_kind: &str, target_id: Option<Uuid>) -> ChannelBindingRecord {
+    ChannelBindingRecord {
+        target_kind: target_kind.to_owned(),
+        target_id,
+        display_name: None,
+        aggregation: None,
+    }
+}
+
 fn registration(key: &str, data_type: &str, unit: &str, scale: i32) -> ChannelRegistration {
     ChannelRegistration {
         channel_key: key.to_owned(),
@@ -404,4 +464,241 @@ async fn postgres_typed_channel_round_trip_when_configured() -> Result<(), Box<d
         return Ok(());
     };
     typed_channel_round_trip(Store::postgres(url).await?).await
+}
+
+/// Discovery, storage and binding behave the same on every database.
+#[allow(clippy::too_many_lines)]
+async fn channel_repository_contract(store: Store, other: Store) -> Result<(), Box<dyn Error>> {
+    let system_id = store.system_id;
+    let roof = inverter(system_id, &["East", "West"]);
+    store.configuration.save_inverter_aggregate(&roof).await?;
+    let east = roof.strings[0].id.as_uuid();
+
+    // Several keys of one reading are registered at once and come back in the
+    // order they were given.
+    let registered = store
+        .channels
+        .register_channels(
+            system_id,
+            &[
+                registration("mppt.1.power", "integer", "W", 0),
+                registration("ac.frequency", "integer", "mHz", 0),
+                registration("energy.lifetime", "counter", "Wh", 0),
+            ],
+            START,
+        )
+        .await?;
+    assert_eq!(
+        registered
+            .iter()
+            .map(|channel| channel.channel_key.as_str())
+            .collect::<Vec<_>>(),
+        vec!["mppt.1.power", "ac.frequency", "energy.lifetime"]
+    );
+    let (power, frequency, counter) = (&registered[0], &registered[1], &registered[2]);
+    assert!(
+        other.channels.channels(system_id).await?.is_empty(),
+        "another account sees none of them"
+    );
+
+    // Values are kept per channel, and writing a reading again replaces them.
+    let (reading, measured_at) = store.reading(0).await?;
+    for watts in [1_000, 1_200] {
+        store
+            .channels
+            .write_channel_values(
+                reading,
+                measured_at,
+                &[(power.id, watts), (frequency.id, 50_010)],
+                measured_at,
+            )
+            .await?;
+    }
+    store.values(1, &[(power.id, 1_300)]).await?;
+    assert_eq!(store.stored(power.id, 2).await?, vec![1_200, 1_300]);
+    assert_eq!(store.stored(frequency.id, 2).await?, vec![50_010]);
+    assert_eq!(store.stored(counter.id, 2).await?, Vec::<i64>::new());
+    assert_eq!(
+        store.stored(power.id, 1).await?,
+        vec![1_200],
+        "the end is exclusive"
+    );
+
+    // A binding names equipment of the same system and nothing else.
+    let bound = store
+        .channels
+        .bind_channel(
+            system_id,
+            "mppt.1.power",
+            &ChannelBindingRecord {
+                display_name: Some("East roof".to_owned()),
+                aggregation: Some("max".to_owned()),
+                ..binding("string", Some(east))
+            },
+            START + 10,
+        )
+        .await?
+        .ok_or("the channel is known")?;
+    assert_eq!(bound.target_kind, "string");
+    assert_eq!(bound.target_id, Some(east));
+    assert_eq!(bound.display_name, "East roof");
+    assert_eq!(bound.aggregation, "max");
+    assert_eq!(bound.updated_at, START + 10);
+    assert_eq!(bound.last_value, Some(1_300));
+    let on_inverter = store
+        .channels
+        .bind_channel(
+            system_id,
+            "ac.frequency",
+            &binding("inverter", Some(roof.id.as_uuid())),
+            START + 11,
+        )
+        .await?
+        .ok_or("the channel is known")?;
+    assert_eq!(on_inverter.target_id, Some(roof.id.as_uuid()));
+    assert_eq!(on_inverter.display_name, "ac.frequency", "the name is kept");
+    assert_eq!(on_inverter.aggregation, "mean", "the kind is kept");
+    let on_system = store
+        .channels
+        .bind_channel(
+            system_id,
+            "energy.lifetime",
+            &binding("plant", None),
+            START + 12,
+        )
+        .await?
+        .ok_or("the channel is known")?;
+    assert_eq!(
+        (on_system.target_kind.as_str(), on_system.target_id),
+        ("plant", None)
+    );
+
+    // Equipment of another system of the same account is foreign.
+    let neighbour = SystemId::new();
+    store.configuration.save_system(&system(neighbour)).await?;
+    let foreign = inverter(neighbour, &["North"]);
+    store
+        .configuration
+        .save_inverter_aggregate(&foreign)
+        .await?;
+    for (kind, target) in [
+        ("inverter", foreign.id.as_uuid()),
+        ("string", foreign.strings[0].id.as_uuid()),
+        ("string", roof.id.as_uuid()),
+        ("inverter", Uuid::now_v7()),
+    ] {
+        assert!(
+            matches!(
+                store
+                    .channels
+                    .bind_channel(
+                        system_id,
+                        "ac.frequency",
+                        &binding(kind, Some(target)),
+                        START
+                    )
+                    .await,
+                Err(AccountRepositoryError::InvalidRecord("channel target"))
+            ),
+            "{kind} {target} does not belong to the system"
+        );
+    }
+    for malformed in [
+        binding("inverter", None),
+        binding("plant", Some(east)),
+        binding("roof", None),
+        ChannelBindingRecord {
+            aggregation: Some("median".to_owned()),
+            ..binding("plant", None)
+        },
+    ] {
+        assert!(matches!(
+            store
+                .channels
+                .bind_channel(system_id, "ac.frequency", &malformed, START)
+                .await,
+            Err(AccountRepositoryError::InvalidRecord("channel binding"))
+        ));
+    }
+    assert_eq!(
+        store.channel("ac.frequency").await?,
+        on_inverter,
+        "a refused binding changes nothing"
+    );
+    assert_eq!(
+        store
+            .channels
+            .bind_channel(system_id, "unknown", &binding("plant", None), START)
+            .await?,
+        None
+    );
+
+    // Unassigned channels are listed first, then by key.
+    store
+        .channels
+        .register_channel(
+            system_id,
+            &registration("z.spare", "integer", "W", 0),
+            START,
+        )
+        .await?;
+    assert_eq!(
+        store
+            .channels
+            .channels(system_id)
+            .await?
+            .iter()
+            .map(|channel| channel.channel_key.as_str())
+            .collect::<Vec<_>>(),
+        vec!["z.spare", "ac.frequency", "energy.lifetime", "mppt.1.power"]
+    );
+
+    // Retiring hides a channel and keeps what it measured.
+    assert!(
+        store
+            .channels
+            .retire_channel(system_id, "mppt.1.power", START + 20)
+            .await?
+    );
+    assert!(
+        !store
+            .channels
+            .retire_channel(system_id, "unknown", START + 20)
+            .await?
+    );
+    assert_eq!(store.channels.channels(system_id).await?.len(), 3);
+    let retired = store.channel("mppt.1.power").await?;
+    assert_eq!(retired.lifecycle, "retired");
+    assert_eq!(store.stored(power.id, 2).await?, vec![1_200, 1_300]);
+    // A retired key that reports again stays the channel it was.
+    assert_eq!(
+        store
+            .channels
+            .register_channel(
+                system_id,
+                &registration("mppt.1.power", "integer", "W", 0),
+                START
+            )
+            .await?
+            .id,
+        power.id
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_channel_repository_contract() -> Result<(), Box<dyn Error>> {
+    channel_repository_contract(Store::sqlite().await?, Store::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_channel_repository_contract_when_configured() -> Result<(), Box<dyn Error>> {
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    channel_repository_contract(
+        Store::postgres(url.clone()).await?,
+        Store::postgres(url).await?,
+    )
+    .await
 }

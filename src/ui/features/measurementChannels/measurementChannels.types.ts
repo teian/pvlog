@@ -10,16 +10,27 @@ export const channelTargetKindSchema = z.enum([
   "string",
 ]);
 
-/** One named value series a data source delivers, with its binding. */
+/** How a period of channel values is reduced to one value. */
+export const channelAggregationSchema = z.enum([
+  "mean",
+  "sum",
+  "min",
+  "max",
+  "last",
+  "counter_delta",
+]);
+
+/** One named value series a data source delivers, with its definition and binding. `lastValue` is an integer with `scale` decimal places. */
 export const measurementChannelSchema = z.object({
   id,
   channelKey: z.string(),
   displayName: z.string(),
+  dataType: z.enum(["integer", "decimal", "boolean", "counter"]),
   unit: z.string(),
+  scale: z.number().int().min(0).max(9),
+  aggregation: channelAggregationSchema,
   targetKind: channelTargetKindSchema,
   targetId: id.nullable().default(null),
-  tracksPower: z.boolean(),
-  tracksEnergy: z.boolean(),
   discoveredAtEpochMillis: z.number().int().nullable().default(null),
   lastValueAtEpochMillis: z.number().int().nullable().default(null),
   lastValue: z.number().nullable().default(null),
@@ -44,7 +55,5 @@ export type BindableInverter = z.infer<typeof bindableInverterSchema>;
 export interface ChannelBinding {
   targetKind: ChannelTargetKind;
   targetId: string | null;
-  tracksPower: boolean;
-  tracksEnergy: boolean;
   displayName: string;
 }

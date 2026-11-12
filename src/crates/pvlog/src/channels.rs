@@ -10,11 +10,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use pvlog_api::{ChannelApiError, ChannelApiUseCases, ChannelBindingInput, ChannelResponse};
 use pvlog_application::Clock;
-use pvlog_domain::{AccountId, SystemId, UserId};
-use pvlog_storage::{DatabaseTarget, ManagementRepository};
-#[cfg(feature = "sqlite")]
-use sqlx::Row;
-use uuid::Uuid;
+use pvlog_domain::{SystemId, UserId};
+use pvlog_storage::{
+    AccountRepositoryError, ChannelBindingRecord, ChannelRecord, ChannelRepository, DatabaseTarget,
+    ManagementRepository,
+};
 
 /// Opens the measurement channel repository of the account that owns a system.
 ///
@@ -23,7 +23,7 @@ pub async fn channel_repository(
     target: &DatabaseTarget,
     management: &dyn ManagementRepository,
     system_id: SystemId,
-) -> Option<Box<dyn pvlog_storage::ChannelRepository>> {
+) -> Option<Box<dyn ChannelRepository>> {
     let account_id = management
         .system_registry(system_id)
         .await
@@ -94,39 +94,25 @@ impl StorageChannelApi {
         }
     }
 
-    /// Looks up the account owning a system; an unregistered system is `NotFound`.
-    async fn account_for(&self, system_id: SystemId) -> Result<AccountId, ChannelApiError> {
+    /// Opens the channel repository of the system's account; an unregistered
+    /// system is `NotFound`.
+    async fn repository(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Box<dyn ChannelRepository>, ChannelApiError> {
         self.management
             .system_registry(system_id)
             .await
             .map_err(|_| ChannelApiError::Unavailable)?
-            .map(|record| record.account_id)
-            .ok_or(ChannelApiError::NotFound)
+            .ok_or(ChannelApiError::NotFound)?;
+        channel_repository(&self.target, self.management.as_ref(), system_id)
+            .await
+            .ok_or(ChannelApiError::Unavailable)
     }
 
-    /// Routes to the `SQLite` account database that holds the system, failing as `Unavailable` for other targets.
-    #[cfg(feature = "sqlite")]
-    async fn account(
-        &self,
-        system_id: SystemId,
-    ) -> Result<pvlog_storage::RoutedSqliteAccount, ChannelApiError> {
-        let DatabaseTarget::Sqlite {
-            management_path,
-            accounts_dir,
-        } = &self.target
-        else {
-            return Err(ChannelApiError::Unavailable);
-        };
-        let account_id = self.account_for(system_id).await?;
-        pvlog_storage::SqliteAccountPoolRouter::new(
-            management_path.clone(),
-            accounts_dir.clone(),
-            pvlog_storage::SqliteAccountPoolConfig::default(),
-        )
-        .map_err(|_| ChannelApiError::Unavailable)?
-        .route(account_id)
-        .await
-        .map_err(|_| ChannelApiError::Unavailable)
+    /// Returns the clock's current time in epoch milliseconds.
+    fn now(&self) -> i64 {
+        i64::try_from(self.clock.now().epoch_millis()).unwrap_or_default()
     }
 }
 
@@ -134,34 +120,19 @@ impl StorageChannelApi {
 impl ChannelApiUseCases for StorageChannelApi {
     /// Lists the system's active channels, unassigned ones first.
     async fn list(&self, system_id: SystemId) -> Result<Vec<ChannelResponse>, ChannelApiError> {
-        #[cfg(feature = "sqlite")]
-        {
-            if matches!(self.target, DatabaseTarget::Sqlite { .. }) {
-                let account = self.account(system_id).await?;
-                let mut connection = account
-                    .acquire()
-                    .await
-                    .map_err(|_| ChannelApiError::Unavailable)?;
-                let rows = sqlx::query(
-                    "SELECT c.id,c.channel_key,c.display_name,c.unit,c.target_kind,c.target_id,\
-                     c.tracks_power,c.tracks_energy,c.discovered_at,c.last_value_at,\
-                     (SELECT v.integer_value FROM telemetry_hot_extended_values v \
-                      JOIN telemetry_hot h ON h.observation_id=v.observation_id \
-                      WHERE v.channel_id=c.id ORDER BY h.measured_at DESC LIMIT 1) AS last_value \
-                     FROM channel_definitions c WHERE c.system_id=? AND c.lifecycle='active' \
-                     ORDER BY c.target_kind='unassigned' DESC, c.channel_key",
-                )
-                .bind(id_blob(system_id))
-                .fetch_all(&mut *connection)
-                .await
-                .map_err(|_| ChannelApiError::Unavailable)?;
-                return rows.iter().map(channel_response).collect();
-            }
-        }
-        Err(ChannelApiError::Unavailable)
+        Ok(self
+            .repository(system_id)
+            .await?
+            .channels(system_id)
+            .await
+            .map_err(|_| ChannelApiError::Unavailable)?
+            .into_iter()
+            .map(channel_response)
+            .collect())
     }
 
-    /// Updates a channel's binding, drops dependent string and inverter rollups so they are rebuilt, and returns the refreshed channel.
+    /// Updates a channel's binding and returns the refreshed channel. The
+    /// aggregates built under the previous binding are dropped and rebuilt.
     async fn bind(
         &self,
         _actor: UserId,
@@ -169,173 +140,63 @@ impl ChannelApiUseCases for StorageChannelApi {
         channel_key: &str,
         input: ChannelBindingInput,
     ) -> Result<ChannelResponse, ChannelApiError> {
-        #[cfg(feature = "sqlite")]
-        {
-            if matches!(self.target, DatabaseTarget::Sqlite { .. }) {
-                let account = self.account(system_id).await?;
-                let mut connection = account
-                    .acquire()
-                    .await
-                    .map_err(|_| ChannelApiError::Unavailable)?;
-                verify_target(&mut connection, system_id, &input).await?;
-                let updated = sqlx::query(
-                    "UPDATE channel_definitions SET target_kind=?,target_id=?,tracks_power=?,\
-                     tracks_energy=?,display_name=COALESCE(?,display_name),updated_at=?,\
-                     version=version+1 WHERE system_id=? AND channel_key=?",
-                )
-                .bind(&input.target_kind)
-                .bind(input.target_id.map(|value| value.as_bytes().to_vec()))
-                .bind(i64::from(input.tracks_power))
-                .bind(i64::from(input.tracks_energy))
-                .bind(input.display_name.as_deref())
-                .bind(self.now())
-                .bind(id_blob(system_id))
-                .bind(channel_key)
-                .execute(&mut *connection)
-                .await
-                .map_err(|_| ChannelApiError::Unavailable)?;
-                if updated.rows_affected() == 0 {
-                    return Err(ChannelApiError::NotFound);
+        self.repository(system_id)
+            .await?
+            .bind_channel(
+                system_id,
+                channel_key,
+                &ChannelBindingRecord {
+                    target_kind: input.target_kind,
+                    target_id: input.target_id,
+                    display_name: input.display_name,
+                    aggregation: input.aggregation,
+                },
+                self.now(),
+            )
+            .await
+            .map_err(|error| match error {
+                AccountRepositoryError::InvalidRecord("channel target") => {
+                    ChannelApiError::InvalidInput("unknown_target_equipment")
                 }
-                // Per-string and per-inverter rollups follow the binding they were
-                // built under. Drop them so the aggregation cycle, which notices the
-                // newer binding, rebuilds them against the current one.
-                sqlx::query(
-                    "DELETE FROM telemetry_rollups \
-                     WHERE system_id=? AND scope_kind IN ('string','inverter')",
-                )
-                .bind(id_blob(system_id))
-                .execute(&mut *connection)
-                .await
-                .map_err(|_| ChannelApiError::Unavailable)?;
-                drop(connection);
-                return self
-                    .list(system_id)
-                    .await?
-                    .into_iter()
-                    .find(|channel| channel.channel_key == channel_key)
-                    .ok_or(ChannelApiError::NotFound);
-            }
-        }
-        let _ = (channel_key, input);
-        Err(ChannelApiError::Unavailable)
+                AccountRepositoryError::InvalidRecord(_) => {
+                    ChannelApiError::InvalidInput("invalid_binding")
+                }
+                _ => ChannelApiError::Unavailable,
+            })?
+            .map(channel_response)
+            .ok_or(ChannelApiError::NotFound)
     }
 
     /// Retires a channel while keeping its stored readings; an unknown channel is `NotFound`.
     async fn remove(&self, system_id: SystemId, channel_key: &str) -> Result<(), ChannelApiError> {
-        #[cfg(feature = "sqlite")]
-        {
-            if matches!(self.target, DatabaseTarget::Sqlite { .. }) {
-                let account = self.account(system_id).await?;
-                let mut connection = account
-                    .acquire()
-                    .await
-                    .map_err(|_| ChannelApiError::Unavailable)?;
-                // Retiring keeps the stored readings and their channel row intact;
-                // deleting the definition would orphan every extended value.
-                let updated = sqlx::query(
-                    "UPDATE channel_definitions SET lifecycle='retired',updated_at=?,\
-                     version=version+1 WHERE system_id=? AND channel_key=?",
-                )
-                .bind(self.now())
-                .bind(id_blob(system_id))
-                .bind(channel_key)
-                .execute(&mut *connection)
-                .await
-                .map_err(|_| ChannelApiError::Unavailable)?;
-                return if updated.rows_affected() == 0 {
-                    Err(ChannelApiError::NotFound)
-                } else {
-                    Ok(())
-                };
-            }
-        }
-        let _ = channel_key;
-        Err(ChannelApiError::Unavailable)
-    }
-}
-
-impl StorageChannelApi {
-    /// Returns the clock's current time in epoch milliseconds.
-    fn now(&self) -> i64 {
-        i64::try_from(self.clock.now().epoch_millis()).unwrap_or_default()
-    }
-}
-
-/// Confirms the requested equipment exists and belongs to the same system.
-#[cfg(feature = "sqlite")]
-async fn verify_target(
-    connection: &mut sqlx::SqliteConnection,
-    system_id: SystemId,
-    input: &ChannelBindingInput,
-) -> Result<(), ChannelApiError> {
-    let Some(target_id) = input.target_id else {
-        return Ok(());
-    };
-    let target = target_id.as_bytes().to_vec();
-    let exists: Option<i64> = match input.target_kind.as_str() {
-        "inverter" => {
-            sqlx::query_scalar("SELECT 1 FROM inverters WHERE id=? AND system_id=?")
-                .bind(target)
-                .bind(id_blob(system_id))
-                .fetch_optional(&mut *connection)
-                .await
-        }
-        "string" => {
-            sqlx::query_scalar(
-                "SELECT 1 FROM pv_strings p JOIN inverters i ON i.id=p.inverter_id \
-                 WHERE p.id=? AND i.system_id=?",
-            )
-            .bind(target)
-            .bind(id_blob(system_id))
-            .fetch_optional(&mut *connection)
+        if self
+            .repository(system_id)
+            .await?
+            .retire_channel(system_id, channel_key, self.now())
             .await
+            .map_err(|_| ChannelApiError::Unavailable)?
+        {
+            Ok(())
+        } else {
+            Err(ChannelApiError::NotFound)
         }
-        _ => return Ok(()),
     }
-    .map_err(|_| ChannelApiError::Unavailable)?;
-    if exists.is_none() {
-        return Err(ChannelApiError::InvalidInput("unknown_target_equipment"));
+}
+
+/// Converts a stored channel into its API form.
+fn channel_response(channel: ChannelRecord) -> ChannelResponse {
+    ChannelResponse {
+        id: channel.id.as_uuid(),
+        channel_key: channel.channel_key,
+        display_name: channel.display_name,
+        data_type: channel.data_type,
+        unit: channel.unit,
+        scale: channel.scale,
+        aggregation: channel.aggregation,
+        target_kind: channel.target_kind,
+        target_id: channel.target_id,
+        discovered_at_epoch_millis: channel.discovered_at,
+        last_value_at_epoch_millis: channel.last_value_at,
+        last_value: channel.last_value,
     }
-    Ok(())
-}
-
-/// Converts a `channel_definitions` row into a channel response, tolerating missing optional columns.
-#[cfg(feature = "sqlite")]
-fn channel_response(row: &sqlx::sqlite::SqliteRow) -> Result<ChannelResponse, ChannelApiError> {
-    Ok(ChannelResponse {
-        id: row_uuid(row, "id")?,
-        channel_key: row.get("channel_key"),
-        display_name: row.get("display_name"),
-        unit: row.get("unit"),
-        target_kind: row.get("target_kind"),
-        target_id: row
-            .try_get::<Option<Vec<u8>>, _>("target_id")
-            .ok()
-            .flatten()
-            .and_then(|bytes| Uuid::from_slice(&bytes).ok()),
-        tracks_power: row.try_get::<i64, _>("tracks_power").unwrap_or_default() != 0,
-        tracks_energy: row.try_get::<i64, _>("tracks_energy").unwrap_or_default() != 0,
-        discovered_at_epoch_millis: row
-            .try_get::<Option<i64>, _>("discovered_at")
-            .ok()
-            .flatten(),
-        last_value_at_epoch_millis: row
-            .try_get::<Option<i64>, _>("last_value_at")
-            .ok()
-            .flatten(),
-        last_value: row.try_get::<Option<i64>, _>("last_value").ok().flatten(),
-    })
-}
-
-/// Reads a UUID blob column, failing as `Unavailable` when it is malformed.
-#[cfg(feature = "sqlite")]
-fn row_uuid(row: &sqlx::sqlite::SqliteRow, column: &str) -> Result<Uuid, ChannelApiError> {
-    Uuid::from_slice(&row.get::<Vec<u8>, _>(column)).map_err(|_| ChannelApiError::Unavailable)
-}
-
-/// Encodes a system identifier as the blob bytes used in SQL bindings.
-#[cfg(feature = "sqlite")]
-fn id_blob(id: SystemId) -> Vec<u8> {
-    id.as_uuid().as_bytes().to_vec()
 }

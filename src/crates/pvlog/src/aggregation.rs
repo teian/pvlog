@@ -415,8 +415,9 @@ async fn plant_samples(
 
 /// Collects one sample series per metered string and per inverter above them.
 ///
-/// Channel values carry power; the energy a bucket needs is that power held for
-/// one reporting interval, which is the same integration the plant-wide columns
+/// Only a string's power channels count: channels in watts that are averaged
+/// over a period. The energy a bucket needs is that power held for one
+/// reporting interval, which is the same integration the plant-wide columns
 /// already represent.
 #[cfg(feature = "sqlite")]
 async fn metered_scopes(
@@ -427,7 +428,7 @@ async fn metered_scopes(
     interval_millis: i64,
 ) -> Result<Vec<(&'static str, Vec<u8>, Vec<Sample>)>, AggregationError> {
     let rows = sqlx::query(
-        "SELECT c.target_id AS string_id,p.inverter_id AS inverter_id,h.measured_at AS measured_at,         SUM(v.integer_value) AS power,MAX(h.quality_flags) AS quality_flags          FROM telemetry_hot_extended_values v          JOIN telemetry_hot h ON h.observation_id=v.observation_id          JOIN channel_definitions c ON c.id=v.channel_id          JOIN pv_strings p ON p.id=c.target_id          WHERE h.system_id=? AND h.measured_at>=? AND h.measured_at<?          AND c.lifecycle='active' AND c.target_kind='string'          GROUP BY c.target_id,h.measured_at ORDER BY c.target_id,h.measured_at",
+        "SELECT c.target_id AS string_id,p.inverter_id AS inverter_id,h.measured_at AS measured_at,         SUM(v.integer_value) AS power,MAX(h.quality_flags) AS quality_flags          FROM telemetry_hot_extended_values v          JOIN telemetry_hot h ON h.observation_id=v.observation_id          JOIN channel_definitions c ON c.id=v.channel_id          JOIN pv_strings p ON p.id=c.target_id          WHERE h.system_id=? AND h.measured_at>=? AND h.measured_at<?          AND c.lifecycle='active' AND c.target_kind='string'          AND c.unit='W' AND c.aggregation='mean'          GROUP BY c.target_id,h.measured_at ORDER BY c.target_id,h.measured_at",
     )
     .bind(system.to_vec())
     .bind(start)

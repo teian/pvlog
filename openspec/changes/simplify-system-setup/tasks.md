@@ -60,7 +60,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 
 - [x] 7.1 Migrate channel definitions to data type, unit, scale and aggregation kind and channel values to scaled integers, mapping existing channels to integer, scale 0, unit W; verify that existing channel values read back unchanged after migration on both databases.
 - [x] 7.2 Accept `value` with optional `unit` per channel, register profile-defined keys with the profile's definition, and reject values that contradict a channel's definition without rejecting the rest of the reading; verify with tests for a profile key, a decimal value and a contradicting value.
-- [ ] 7.3 Implement channel storage, discovery, binding and aggregation for PostgreSQL; verify by running the channel repository contract test against both databases.
+- [x] 7.3 Implement channel storage, discovery, binding and aggregation for PostgreSQL; verify by running the channel repository contract test against both databases.
 - [ ] 7.4 Aggregate channels bound to the system and to inverters according to their aggregation kind and rebuild aggregates on rebinding; verify inverter aggregates and the rebuild with tests.
 - [ ] 7.5 Record equipment discovery proposals from reported device identity and reporting DC inputs, and implement adopt and dismiss; verify the unknown-serial, adopt, never-reporting-input and dismiss scenarios with tests.
 - [ ] 7.6 Offer discovery proposals in the verification step and in the Measurement channels section; verify with a component test that adopting creates the inverter and strings and binds their channels.

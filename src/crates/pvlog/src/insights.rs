@@ -276,7 +276,8 @@ impl InsightApiUseCases for StorageInsightApi {
                 "SELECT p.id AS string_id,p.name AS name,p.rated_power_watts AS rated,\
                  i.id AS inverter_id,i.name AS inverter_name,\
                  (SELECT COUNT(*) FROM channel_definitions c WHERE c.target_kind='string' \
-                  AND c.target_id=p.id AND c.lifecycle='active') AS channel_count,\
+                  AND c.target_id=p.id AND c.lifecycle='active' \
+                  AND c.unit='W' AND c.aggregation='mean') AS channel_count,\
                  (SELECT COALESCE(SUM(r.generation_energy_sum_wh),0) FROM telemetry_rollups r \
                   WHERE r.system_id=? AND r.scope_kind='string' AND r.scope_id=p.id \
                   AND r.resolution=? AND r.bucket_start>=? AND r.bucket_start<?) AS energy_wh,\

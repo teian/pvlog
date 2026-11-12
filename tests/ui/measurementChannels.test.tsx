@@ -24,11 +24,12 @@ function channel(overrides: Record<string, unknown>) {
     id: "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f80",
     channelKey: "mppt-1",
     displayName: "mppt-1",
+    dataType: "integer",
     unit: "W",
+    scale: 0,
+    aggregation: "mean",
     targetKind: "unassigned",
     targetId: null,
-    tracksPower: true,
-    tracksEnergy: false,
     discoveredAtEpochMillis: 1_800_000_000_000,
     lastValueAtEpochMillis: 1_800_000_000_000,
     lastValue: 3100,
@@ -145,6 +146,36 @@ describe("measurement channels section", () => {
     ).toBeVisible();
   });
 
+  it("shows a decimal channel at its scale without trailing zeros", async () => {
+    const backend = installBackend(["system_manage"]);
+    backend.channels.push(
+      channel({
+        id: "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f82",
+        channelKey: "pvoutput.v7",
+        displayName: "DC voltage",
+        dataType: "decimal",
+        unit: "V",
+        scale: 3,
+        targetKind: "plant",
+        lastValue: 12_340,
+      }),
+      channel({
+        id: "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f83",
+        channelKey: "counter",
+        displayName: "Counter",
+        dataType: "decimal",
+        unit: "",
+        scale: 3,
+        targetKind: "plant",
+        lastValue: 7_000,
+      }),
+    );
+    renderChannels();
+
+    expect(await screen.findByText("12.34 V")).toBeVisible();
+    expect(screen.getByText("7")).toBeVisible();
+  });
+
   it("binds an unassigned channel to a string", async () => {
     const backend = installBackend(["system_manage"]);
     const user = userEvent.setup();
@@ -162,8 +193,6 @@ describe("measurement channels section", () => {
       body: {
         targetKind: "string",
         targetId: stringId,
-        tracksPower: true,
-        tracksEnergy: false,
         displayName: "mppt-1",
       },
     });

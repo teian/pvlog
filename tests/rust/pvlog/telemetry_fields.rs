@@ -7,11 +7,12 @@ use std::{
 };
 
 use pvlog::{
-    daily_summaries::StorageDailySummaryApi, reporting::StorageReportingApi,
-    telemetry::StorageTelemetryApi,
+    channels::StorageChannelApi, daily_summaries::StorageDailySummaryApi,
+    reporting::StorageReportingApi, telemetry::StorageTelemetryApi,
 };
 use pvlog_api::{
-    DailySummaryApiError, DailySummaryApiUseCases as _, ReportingApiUseCases as _, SummarySource,
+    ChannelApiError, ChannelApiUseCases as _, ChannelBindingInput, DailySummaryApiError,
+    DailySummaryApiUseCases as _, ReportingApiUseCases as _, SummarySource,
 };
 use pvlog_application::{
     BatchIngestionMode, ChannelReading, Clock, ComputedDay, DayBasis, DayEnergy, DecimalValue,
@@ -704,6 +705,72 @@ async fn typed_channels(fixture: Fixture) -> Result<(), Box<dyn Error>> {
             (START + 3 * STEP, -1)
         ]
     );
+
+    // The channel resource lists, binds and retires them on either database.
+    let api = StorageChannelApi::new(fixture.target.clone(), fixture.management.clone(), clock());
+    let failed = |error: ChannelApiError| format!("channel request failed: {error:?}");
+    let listed = api.list(fixture.system_id).await.map_err(failed)?;
+    assert_eq!(
+        listed
+            .iter()
+            .map(|channel| (
+                channel.channel_key.as_str(),
+                channel.unit.as_str(),
+                channel.scale,
+                channel.last_value
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (TRACKER_VOLTAGE, "mV", 0, Some(384_120)),
+            ("meter", "W", 0, Some(1_600)),
+            ("pvoutput.v7", "V", 3, Some(-1)),
+        ]
+    );
+    let bound = api
+        .bind(
+            UserId::new(),
+            fixture.system_id,
+            "meter",
+            ChannelBindingInput {
+                target_kind: "plant".to_owned(),
+                target_id: None,
+                display_name: Some("House meter".to_owned()),
+                aggregation: Some("max".to_owned()),
+            },
+        )
+        .await
+        .map_err(failed)?;
+    assert_eq!(
+        (
+            bound.target_kind.as_str(),
+            bound.display_name.as_str(),
+            bound.aggregation.as_str()
+        ),
+        ("plant", "House meter", "max")
+    );
+    assert!(matches!(
+        api.bind(
+            UserId::new(),
+            fixture.system_id,
+            "meter",
+            ChannelBindingInput {
+                target_kind: "inverter".to_owned(),
+                target_id: Some(uuid::Uuid::now_v7()),
+                display_name: None,
+                aggregation: None,
+            },
+        )
+        .await,
+        Err(ChannelApiError::InvalidInput("unknown_target_equipment"))
+    ));
+    api.remove(fixture.system_id, "pvoutput.v7")
+        .await
+        .map_err(failed)?;
+    assert!(matches!(
+        api.remove(fixture.system_id, "never-seen").await,
+        Err(ChannelApiError::NotFound)
+    ));
+    assert_eq!(api.list(fixture.system_id).await.map_err(failed)?.len(), 2);
     Ok(())
 }
 
