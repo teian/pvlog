@@ -254,7 +254,7 @@ PVOutput is replaced, not emulated. PVLog covers its data model (decision 8) and
 - **smalog:** no server import. Its export synchronizes stored history through the same cursor as live data (decision 7a); the Data sources section shows backfill progress from the timestamps it receives.
 - **SBFspot:** no server import either. `sbfspot-push` already backfills from a start time and the generated configuration includes that setting. Users with an old SBFspot database can alternatively migrate it into smalog first and backfill from there.
 
-Imports run as jobs in the existing `import_jobs` table and are limited in size per file; larger histories are imported file by file.
+Imports are kept in a `history_imports` table of the account database: a dry run stores the file with its report for 24 hours, and an explicit commit stores what it accepted. A file is limited to 4 MiB; larger histories are imported file by file.
 
 ### 11. Fixes that ride along because the setup depends on them
 

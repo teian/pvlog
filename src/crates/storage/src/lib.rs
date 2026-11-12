@@ -24,6 +24,7 @@ mod data_source_repository;
 mod device_event_repository;
 mod discovery_repository;
 mod external_identity_repository;
+mod history_import_repository;
 mod ingest_repository;
 mod integrity_planner;
 mod job_dispatch;
@@ -110,13 +111,18 @@ pub use external_identity_repository::PostgresExternalIdentityRepository;
 #[cfg(feature = "sqlite")]
 pub use external_identity_repository::SqliteExternalIdentityRepository;
 #[cfg(feature = "postgres")]
+pub use history_import_repository::PostgresHistoryImportRepository;
+#[cfg(feature = "sqlite")]
+pub use history_import_repository::SqliteHistoryImportRepository;
+pub use history_import_repository::{HistoryImportRecord, HistoryImportRepository};
+#[cfg(feature = "postgres")]
 pub use ingest_repository::PostgresIngestRepository;
 #[cfg(feature = "sqlite")]
 pub use ingest_repository::SqliteIngestRepository;
 pub use ingest_repository::{
     DeviceCounters, ENERGY_SAMPLE_ORIGIN, EnergySampleFilter, EnergySampleRecord,
-    INGESTION_SOURCE_KIND, IngestRepository, IngestionMarkRecord, ObservationUpsert, StoredReading,
-    UpsertOutcome,
+    IMPORT_SOURCE_KIND, INGESTION_SOURCE_KIND, IngestRepository, IngestionMarkRecord,
+    ObservationUpsert, StoredReading, UpsertOutcome,
 };
 pub use integrity_planner::{
     IntegrityIssue, IntegrityReport, IntegritySnapshot, RepairAction, plan_integrity_repairs,

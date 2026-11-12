@@ -139,3 +139,7 @@ path = "../../../tests/rust/api/administration_endpoints.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "history-import-endpoints"
+path = "../../../tests/rust/api/history_import_endpoints.rs"

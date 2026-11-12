@@ -1072,6 +1072,99 @@ paths:
               schema: { $ref: "#/components/schemas/TestReading" }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
         "404": { $ref: "#/components/responses/NotFoundProblem" }
+  /api/v1/systems/{system_id}/data-sources/{data_source_id}/imports:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - $ref: "#/components/parameters/DataSourceId"
+    get:
+      operationId: listHistoryImports
+      summary: List the history imports of a data source
+      description: Lists the dry runs and committed imports of a data source with the import profile, newest first. A dry run that was not committed is removed once it expires.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      responses:
+        "200":
+          description: History imports, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/HistoryImport" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+    post:
+      operationId: dryRunHistoryImport
+      summary: Read a PVOutput export in a dry run
+      description: |-
+        Reads a status or output file exported from PVOutput, with or without a header row, in the system's timezone. Nothing is stored as telemetry: the response reports how many rows can be imported, every rejected row with its reason up to 500 rows, the dates the file covers and how many rows overlap data already stored. The file is kept with its report for 24 hours, until it is committed.
+
+        The file is sent as text in a JSON body, which may be compressed with gzip, named in Content-Encoding. A file may have at most 4194304 bytes; a longer history is imported file by file. Only a data source with the import profile takes files, and a credential must not be restricted to one system.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters:
+        - $ref: "#/components/parameters/OptionalCsrfToken"
+        - name: Content-Encoding
+          in: header
+          description: Encoding of the request body.
+          schema: { type: string, enum: [identity, gzip] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/HistoryImportUpload" }
+      responses:
+        "201":
+          description: The dry run with its report
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistoryImport" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "413": { $ref: "#/components/responses/HistoryImportProblem" }
+        "415": { $ref: "#/components/responses/HistoryImportProblem" }
+        "422": { $ref: "#/components/responses/HistoryImportProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
+  /api/v1/systems/{system_id}/data-sources/{data_source_id}/imports/{import_id}:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - $ref: "#/components/parameters/DataSourceId"
+      - $ref: "#/components/parameters/HistoryImportId"
+    get:
+      operationId: getHistoryImport
+      summary: Read a history import
+      description: Reads a dry run with its report, or a committed import with what was stored.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      responses:
+        "200":
+          description: The history import
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistoryImport" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+  /api/v1/systems/{system_id}/data-sources/{data_source_id}/imports/{import_id}/commit:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - $ref: "#/components/parameters/DataSourceId"
+      - $ref: "#/components/parameters/HistoryImportId"
+    post:
+      operationId: commitHistoryImport
+      summary: Commit a history import
+      description: Stores the rows the dry run accepted. Statuses become readings and output rows daily summaries of the data source; a time or day for which another data source delivered data is skipped and that data is kept. Rows the data source already imported are not stored twice, and committing an import again returns it unchanged.
+      tags: [Data Sources]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
+      responses:
+        "200":
+          description: The committed import with what was stored
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistoryImport" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "422": { $ref: "#/components/responses/HistoryImportProblem" }
+        "503": { $ref: "#/components/responses/ServiceUnavailableProblem" }
   /api/v1/systems/{system_id}/test-readings:
     parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     delete:
@@ -3672,6 +3765,11 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/UuidV7" }
+    HistoryImportId:
+      name: import_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UuidV7" }
     InverterId:
       name: inverter_id
       in: path
@@ -3820,6 +3918,11 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/IngestProblem" }
+    HistoryImportProblem:
+      description: The file was not read and nothing was stored. A file over the limit names the limit.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/HistoryImportProblem" }
     IssuedDataSource:
       description: Data source with its one-time uploader configuration. The response must not be cached.
       headers:
@@ -4332,6 +4435,139 @@ components:
         receivedAtEpochMillis: { type: integer, format: int64 }
         values: { type: object, additionalProperties: true }
         test: { type: boolean, const: true }
+    HistoryImportUpload:
+      type: object
+      additionalProperties: false
+      required: [fileName, content]
+      properties:
+        fileName: { type: string, minLength: 1, maxLength: 200 }
+        content:
+          type: string
+          maxLength: 4194304
+          description: The PVOutput export as text.
+    HistoryImportRejection:
+      type: object
+      required: [row, reason]
+      properties:
+        row:
+          type: integer
+          minimum: 1
+          description: Position of the row in the file, counting from 1 and including a header.
+        reason:
+          type: string
+          enum:
+            [
+              invalid_date,
+              invalid_time,
+              nonexistent_local_time,
+              duplicate_time,
+              duplicate_date,
+              negative_value,
+              unknown_unit,
+              invalid_number,
+              out_of_range,
+              too_long,
+              invalid_value,
+            ]
+        column:
+          { type: string, description: The column whose value was refused. }
+    HistoryImportReport:
+      type: object
+      required: [rows, accepted, rejectedCount, rejected, overlap]
+      properties:
+        rows:
+          type: integer
+          minimum: 0
+          description: "Data rows of the file, without a header."
+        accepted:
+          { type: integer, minimum: 0, description: Rows that can be imported. }
+        rejectedCount: { type: integer, minimum: 0 }
+        rejected:
+          type: array
+          maxItems: 500
+          description: The first rejected rows.
+          items: { $ref: "#/components/schemas/HistoryImportRejection" }
+        firstDate:
+          anyOf: [{ type: string, format: date }, { type: "null" }]
+          description: First local date the accepted rows cover.
+        lastDate:
+          anyOf: [{ type: string, format: date }, { type: "null" }]
+          description: Last local date the accepted rows cover.
+        overlap:
+          type: object
+          required: [alreadyImported, otherSources]
+          properties:
+            alreadyImported:
+              type: integer
+              minimum: 0
+              description: Rows this data source already imported; committing them changes nothing.
+            otherSources:
+              type: integer
+              minimum: 0
+              description: Rows for which another data source delivered data; they are skipped.
+    HistoryImport:
+      type: object
+      required:
+        [id, dataSourceId, fileName, kind, state, createdAtEpochMillis, report]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        dataSourceId: { $ref: "#/components/schemas/UuidV7" }
+        fileName: { type: string }
+        kind:
+          type: string
+          enum: [status, output]
+          description: "`status` for statuses through the day, `output` for one row per day."
+        state:
+          type: string
+          enum: [ready, committed]
+        createdAtEpochMillis: { type: integer, format: int64 }
+        expiresAtEpochMillis:
+          type: integer
+          format: int64
+          description: When a dry run that is not committed is removed.
+        committedAtEpochMillis: { type: integer, format: int64 }
+        report: { $ref: "#/components/schemas/HistoryImportReport" }
+        result:
+          type: object
+          description: What committing stored.
+          required: [stored, alreadyPresent, skipped]
+          properties:
+            stored:
+              {
+                type: integer,
+                minimum: 0,
+                description: Readings or daily summaries that were new or changed.,
+              }
+            alreadyPresent:
+              {
+                type: integer,
+                minimum: 0,
+                description: Rows that were already stored as the file states them.,
+              }
+            skipped:
+              {
+                type: integer,
+                minimum: 0,
+                description: Rows for which another data source delivered data.,
+              }
+    HistoryImportProblem:
+      allOf:
+        - { $ref: "#/components/schemas/Problem" }
+        - type: object
+          properties:
+            title:
+              type: string
+              enum:
+                [
+                  not_an_import_source,
+                  invalid_import,
+                  unreadable_file,
+                  file_too_large,
+                  unsupported_content_encoding,
+                ]
+            limit:
+              type: integer
+              description: The largest file in bytes, when the file is too large.
     GeocodingResult:
       type: object
       additionalProperties: false

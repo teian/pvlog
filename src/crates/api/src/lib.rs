@@ -42,6 +42,7 @@ mod discovery;
 mod equipment_catalog;
 mod forecasting;
 mod geocoding;
+mod history_imports;
 mod identities;
 mod ingest;
 mod insights;
@@ -121,6 +122,11 @@ pub use forecasting::{
     forecasting_router,
 };
 pub use geocoding::{GeocodingApi, GeocodingError, GeocodingResult, geocoding_router};
+pub use history_imports::{
+    HistoryImportApiError, HistoryImportApiUseCases, HistoryImportReport, HistoryImportResponse,
+    HistoryImportResult, HistoryImportUpload, ImportOverlap, MAXIMUM_IMPORT_FILE_BYTES,
+    MAXIMUM_LISTED_REJECTIONS, RejectedImportRow, history_imports_router,
+};
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,
 };

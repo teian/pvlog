@@ -25,6 +25,9 @@ use crate::{SourceDailySummaryRecord, StoredObservation, TelemetryRepositoryErro
 /// Source kind every reading of the ingestion API is stored under.
 pub const INGESTION_SOURCE_KIND: &str = "modern_api";
 
+/// Source kind of the readings a history import writes.
+pub const IMPORT_SOURCE_KIND: &str = "import";
+
 /// Value of the provenance member `origin` of a reading that was built from
 /// archive energy samples because no live measurement exists for its time.
 pub const ENERGY_SAMPLE_ORIGIN: &str = "energy_samples";
@@ -118,11 +121,20 @@ pub struct IngestionMarkRecord {
 #[async_trait]
 pub trait IngestRepository: Send + Sync {
     /// Stores readings by source and time. All readings must belong to one
-    /// system and one source. Either all of them are stored or none.
+    /// system and one source, of the ingestion API or of a history import.
+    /// Either all of them are stored or none.
     async fn upsert_observations(
         &self,
         items: &[ObservationUpsert],
     ) -> Result<Vec<UpsertOutcome>, TelemetryRepositoryError>;
+    /// Lists the sources that hold a reading of a system from `from` through
+    /// `to`, as `(measured_at, source_kind, source_identity)`, oldest first.
+    async fn reading_sources(
+        &self,
+        system_id: SystemId,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<(i64, String, String)>, TelemetryRepositoryError>;
     /// Finds the lifetime counters the devices of a source reported last
     /// before `before`: those of its newest earlier reading that carries any.
     async fn device_counters_before(
@@ -208,7 +220,8 @@ fn validate(items: &[ObservationUpsert]) -> Result<(), TelemetryRepositoryError>
         let o = &item.observation;
         o.system_id != first.system_id
             || o.source_identity != first.source_identity
-            || o.source_kind != INGESTION_SOURCE_KIND
+            || o.source_kind != first.source_kind
+            || ![INGESTION_SOURCE_KIND, IMPORT_SOURCE_KIND].contains(&o.source_kind.as_str())
             || o.source_identity.is_empty()
             || o.version <= 0
             || !(0..=65_535).contains(&o.quality_flags)
@@ -389,7 +402,7 @@ impl IngestRepository for SqliteIngestRepository {
              AND measured_at>=? AND measured_at<=?",
         )
         .bind(blob(first.system_id.as_uuid()))
-        .bind(INGESTION_SOURCE_KIND)
+        .bind(&first.source_kind)
         .bind(&first.source_identity)
         .bind(from)
         .bind(to)
@@ -450,6 +463,33 @@ impl IngestRepository for SqliteIngestRepository {
         }
         transaction.commit().await?;
         Ok(outcomes)
+    }
+
+    async fn reading_sources(
+        &self,
+        system_id: SystemId,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<(i64, String, String)>, TelemetryRepositoryError> {
+        let mut connection = self.account.acquire().await?;
+        Ok(sqlx::query(
+            "SELECT measured_at,source_kind,source_identity FROM telemetry_hot \
+             WHERE system_id=? AND measured_at>=? AND measured_at<=? ORDER BY measured_at",
+        )
+        .bind(blob(system_id.as_uuid()))
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut *connection)
+        .await?
+        .iter()
+        .map(|row| {
+            (
+                row.get("measured_at"),
+                row.get("source_kind"),
+                row.get("source_identity"),
+            )
+        })
+        .collect())
     }
 
     async fn device_counters_before(
@@ -928,7 +968,7 @@ impl IngestRepository for PostgresIngestRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(first.system_id.as_uuid())
-        .bind(INGESTION_SOURCE_KIND)
+        .bind(&first.source_kind)
         .bind(&first.source_identity)
         .bind(from)
         .bind(to)
@@ -1006,6 +1046,37 @@ impl IngestRepository for PostgresIngestRepository {
         transaction.commit().await?;
         connection.close().await?;
         Ok(outcomes)
+    }
+
+    async fn reading_sources(
+        &self,
+        system_id: SystemId,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<(i64, String, String)>, TelemetryRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "SELECT measured_at,source_kind,source_identity FROM telemetry.hot_observations \
+             WHERE account_id=$1 AND system_id=$2 AND measured_at>=$3 AND measured_at<=$4 \
+             ORDER BY measured_at",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(rows
+            .iter()
+            .map(|row| {
+                (
+                    row.get("measured_at"),
+                    row.get("source_kind"),
+                    row.get("source_identity"),
+                )
+            })
+            .collect())
     }
 
     async fn device_counters_before(

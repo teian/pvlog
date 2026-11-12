@@ -132,3 +132,7 @@ path = "src/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "history-imports"
+path = "../../../tests/rust/pvlog/history_imports.rs"

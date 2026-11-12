@@ -855,6 +855,14 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 )),
                 request_authorizer.clone(),
             ))
+            .merge(pvlog_api::history_imports_router(
+                Arc::new(pvlog::history_imports::StorageHistoryImportApi::new(
+                    target.clone(),
+                    compose_management_repository(target)?,
+                    Arc::new(SystemClock),
+                )),
+                request_authorizer.clone(),
+            ))
             .merge(pvlog_api::device_events_router(
                 Arc::new(pvlog::device_events::StorageDeviceEventApi::new(
                     target.clone(),
