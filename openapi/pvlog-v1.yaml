@@ -1101,6 +1101,49 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/MeasurementChannel" }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/systems/{system_id}/channel-aggregates:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: listChannelAggregates
+      summary: List aggregates of bound measurement channels
+      description: Lists, for the system, one inverter or one string, the aggregates of every measurement channel bound to it. Buckets follow the local calendar of the system. Each bucket reports the value its channel's aggregation kind yields, together with the minimum, the maximum and the number of values. Aggregates are built by the worker shortly after readings arrive and are rebuilt under the new target when a channel is rebound.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      parameters:
+        - name: targetKind
+          in: query
+          required: true
+          schema: { type: string, enum: [plant, inverter, string] }
+        - name: targetId
+          in: query
+          description: Inverter or string identifier. Required for those targets and not allowed for the plant.
+          schema: { $ref: "#/components/schemas/UuidV7" }
+        - name: resolution
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [fifteen_minute, hour, day, month, year]
+        - name: from
+          in: query
+          required: true
+          description: Start of the range in epoch milliseconds, inclusive. A bucket belongs to the range when it starts within it.
+          schema: { type: integer, format: int64 }
+        - name: to
+          in: query
+          required: true
+          description: End of the range in epoch milliseconds, exclusive.
+          schema: { type: integer, format: int64 }
+      responses:
+        "200":
+          description: Aggregates per channel, ordered by channel key. A channel without a value in the range is left out.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ChannelAggregate" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/systems/{system_id}/channels/{channel_key}:
     parameters:
       - $ref: "#/components/parameters/NestedSystemId"
@@ -4513,6 +4556,33 @@ components:
       type: string
       enum: [mean, sum, min, max, last, counter_delta]
       description: How the values of a period are reduced to one value. counter_delta is the growth of a counter, ignoring resets.
+    ChannelAggregate:
+      type: object
+      required: [channelKey, displayName, unit, scale, aggregation, buckets]
+      properties:
+        channelKey: { type: string }
+        displayName: { type: string }
+        unit: { type: string }
+        scale:
+          type: integer
+          description: Decimal places of every value in buckets.
+        aggregation: { $ref: "#/components/schemas/ChannelAggregation" }
+        buckets:
+          type: array
+          items:
+            type: object
+            required:
+              [startEpochMillis, endEpochMillis, minimum, maximum, pointCount]
+            properties:
+              startEpochMillis: { type: integer, format: int64 }
+              endEpochMillis: { type: integer, format: int64 }
+              value:
+                type: [integer, "null"]
+                format: int64
+                description: The bucket reduced by the channel's aggregation kind. A mean is rounded to the nearest stored integer. Null for a counter whose first value in the bucket has no predecessor.
+              minimum: { type: integer, format: int64 }
+              maximum: { type: integer, format: int64 }
+              pointCount: { type: integer, format: int64 }
     RejectedChannel:
       type: object
       description: A channel value that was not stored because it contradicts the definition of its channel.

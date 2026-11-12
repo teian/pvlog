@@ -6,7 +6,7 @@
 
 use axum::{
     Extension, Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
     routing::get,
@@ -57,8 +57,57 @@ pub struct ChannelBindingInput {
     pub aggregation: Option<String>,
 }
 
+/// Which aggregates of bound channels to read.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelAggregateQuery {
+    /// `plant`, `inverter`, or `string`.
+    pub target_kind: String,
+    /// Equipment identifier for the `inverter` and `string` targets.
+    pub target_id: Option<Uuid>,
+    /// `fifteen_minute`, `hour`, `day`, `month`, or `year`.
+    pub resolution: String,
+    /// Start of the range in epoch milliseconds, inclusive.
+    pub from: i64,
+    /// End of the range in epoch milliseconds, exclusive.
+    pub to: i64,
+}
+
+/// The aggregates of one channel bound to the requested target.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelAggregateResponse {
+    pub channel_key: String,
+    pub display_name: String,
+    pub unit: String,
+    /// Decimal places of every value in `buckets`.
+    pub scale: i32,
+    pub aggregation: String,
+    pub buckets: Vec<ChannelAggregateBucket>,
+}
+
+/// What a channel reports for one local-calendar bucket.
+#[derive(Clone, Copy, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChannelAggregateBucket {
+    pub start_epoch_millis: i64,
+    pub end_epoch_millis: i64,
+    /// The bucket reduced by the channel's aggregation kind. Absent for a
+    /// counter whose first value in the bucket has no predecessor.
+    pub value: Option<i64>,
+    pub minimum: i64,
+    pub maximum: i64,
+    pub point_count: i64,
+}
+
 #[async_trait::async_trait]
 pub trait ChannelApiUseCases: Send + Sync {
+    /// Reads the aggregates of the channels bound to one target, per channel.
+    async fn aggregates(
+        &self,
+        system_id: SystemId,
+        query: ChannelAggregateQuery,
+    ) -> Result<Vec<ChannelAggregateResponse>, ChannelApiError>;
     /// Lists the active channels of a system.
     async fn list(&self, system_id: SystemId) -> Result<Vec<ChannelResponse>, ChannelApiError>;
     /// Binds a channel to a target (plant, inverter, string, or unassigned) and returns the updated channel.
@@ -87,6 +136,10 @@ pub fn channels_router(
     Router::new()
         .route("/api/v1/systems/{system_id}/channels", get(list))
         .route(
+            "/api/v1/systems/{system_id}/channel-aggregates",
+            get(aggregates),
+        )
+        .route(
             "/api/v1/systems/{system_id}/channels/{channel_key}",
             axum::routing::put(bind).delete(remove),
         )
@@ -104,6 +157,42 @@ async fn list(
 ) -> Result<Json<Vec<ChannelResponse>>, ChannelApiError> {
     authorize(&state, principal, system_id, false, "system.channel.list").await?;
     Ok(Json(state.service.list(system_id).await?))
+}
+
+/// Handles the aggregate route after a read authorization check, refusing an
+/// unknown resolution, a target without its identifier and an empty range.
+async fn aggregates(
+    State(state): State<ChannelState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path(system_id): Path<SystemId>,
+    Query(query): Query<ChannelAggregateQuery>,
+) -> Result<Json<Vec<ChannelAggregateResponse>>, ChannelApiError> {
+    authorize(
+        &state,
+        principal,
+        system_id,
+        false,
+        "system.channel.aggregates",
+    )
+    .await?;
+    if !matches!(
+        query.resolution.as_str(),
+        "fifteen_minute" | "hour" | "day" | "month" | "year"
+    ) {
+        return Err(ChannelApiError::InvalidInput("unknown_resolution"));
+    }
+    match (query.target_kind.as_str(), query.target_id) {
+        ("plant", None) | ("inverter" | "string", Some(_)) => {}
+        ("plant", Some(_)) => return Err(ChannelApiError::InvalidInput("target_id_not_allowed")),
+        ("inverter" | "string", None) => {
+            return Err(ChannelApiError::InvalidInput("target_id_required"));
+        }
+        _ => return Err(ChannelApiError::InvalidInput("unknown_target_kind")),
+    }
+    if query.to <= query.from {
+        return Err(ChannelApiError::InvalidInput("empty_range"));
+    }
+    Ok(Json(state.service.aggregates(system_id, query).await?))
 }
 
 /// Handles the channel binding route: authorizes the write, validates the target, then stores it.

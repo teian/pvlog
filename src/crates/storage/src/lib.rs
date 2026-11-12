@@ -67,7 +67,8 @@ pub use channel_repository::PostgresChannelRepository;
 #[cfg(feature = "sqlite")]
 pub use channel_repository::SqliteChannelRepository;
 pub use channel_repository::{
-    ChannelBindingRecord, ChannelRecord, ChannelRegistration, ChannelRepository, ChannelValueRecord,
+    ChannelBindingRecord, ChannelRecord, ChannelRegistration, ChannelRepository,
+    ChannelRollupRecord, ChannelValueRecord, PendingChannelRollup,
 };
 pub use compaction::{
     CompactionError, CompactionKey, CompactionPhase, CompactionRepository, CompactionService,

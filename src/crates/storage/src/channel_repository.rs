@@ -76,6 +76,43 @@ pub struct ChannelValueRecord {
     pub value: i64,
 }
 
+/// Aggregate of one channel over one local-calendar bucket.
+///
+/// The sums are kept so that a coarser bucket can be merged from finer ones.
+/// What the channel reports for the period follows from its aggregation kind.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ChannelRollupRecord {
+    pub channel_id: ChannelId,
+    /// `fifteen_minute`, `hour`, `day`, `month` or `year`.
+    pub resolution: String,
+    pub bucket_start: i64,
+    pub bucket_end: i64,
+    pub point_count: i64,
+    pub value_sum: i64,
+    pub value_min: i64,
+    pub value_max: i64,
+    pub value_first: i64,
+    pub value_last: i64,
+    /// Growth of a counter within the bucket; absent for other channels and
+    /// for a bucket whose first value has no predecessor.
+    pub counter_delta: Option<i64>,
+}
+
+/// A bound channel with values its aggregates do not cover yet.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PendingChannelRollup {
+    /// The channel, without its newest value.
+    pub channel: ChannelRecord,
+    /// Measurement time of the oldest value not yet aggregated.
+    pub first_measured_at: i64,
+    /// Measurement time of the newest value not yet aggregated.
+    pub last_measured_at: i64,
+    /// Receive time of the newest reading that carries a value of the channel.
+    pub last_received_at: i64,
+    /// Values of the channel received at exactly `last_received_at`.
+    pub last_received_values: i64,
+}
+
 /// Persistence of measurement channels within one account.
 #[async_trait]
 pub trait ChannelRepository: Send + Sync {
@@ -149,6 +186,64 @@ pub trait ChannelRepository: Send + Sync {
         from: i64,
         to: i64,
     ) -> Result<Vec<ChannelValueRecord>, AccountRepositoryError>;
+    /// Reads the timezone of a system, in which its aggregates are bucketed.
+    async fn system_timezone(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Option<String>, AccountRepositoryError>;
+    /// Reads the newest value of a channel measured before `before`.
+    async fn channel_value_before(
+        &self,
+        channel_id: ChannelId,
+        before: i64,
+    ) -> Result<Option<ChannelValueRecord>, AccountRepositoryError>;
+    /// Lists the active, bound channels of a system that received values
+    /// their aggregates do not cover yet.
+    async fn pending_channel_rollups(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Vec<PendingChannelRollup>, AccountRepositoryError>;
+    /// Replaces the aggregates of a channel at the given resolutions whose
+    /// bucket starts in `[from, to)`. They are stored under the channel's
+    /// binding; an unassigned channel only loses its aggregates.
+    async fn replace_channel_rollups(
+        &self,
+        channel: &ChannelRecord,
+        resolutions: &[&'static str],
+        from: i64,
+        to: i64,
+        rollups: &[ChannelRollupRecord],
+        calculated_at: i64,
+    ) -> Result<(), AccountRepositoryError>;
+    /// Reads the aggregates of a channel at one resolution whose bucket
+    /// starts in `[from, to)`, oldest first.
+    async fn channel_rollup_buckets(
+        &self,
+        channel_id: ChannelId,
+        resolution: &str,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<ChannelRollupRecord>, AccountRepositoryError>;
+    /// Records that the aggregates of a channel cover every value received up
+    /// to `received_at`, of which `values` arrived at that very instant.
+    async fn mark_channel_rollups_built(
+        &self,
+        channel_id: ChannelId,
+        received_at: i64,
+        values: i64,
+    ) -> Result<(), AccountRepositoryError>;
+    /// Reads the aggregates of every channel bound to one target at one
+    /// resolution whose bucket starts in `[from, to)`, by channel and time.
+    /// `target_id` is absent for the plant.
+    async fn target_channel_rollups(
+        &self,
+        system_id: SystemId,
+        target_kind: &str,
+        target_id: Option<Uuid>,
+        resolution: &str,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<ChannelRollupRecord>, AccountRepositoryError>;
 }
 
 const DATA_TYPES: [&str; 4] = ["integer", "decimal", "boolean", "counter"];
@@ -233,6 +328,24 @@ macro_rules! sqlite_channel_select {
     };
 }
 
+/// Removes the aggregates of the channel stored under a key.
+#[cfg(feature = "sqlite")]
+async fn sqlite_drop_rollups(
+    connection: &mut sqlx::SqliteConnection,
+    system_id: SystemId,
+    channel_key: &str,
+) -> Result<(), AccountRepositoryError> {
+    sqlx::query(
+        "DELETE FROM channel_rollups WHERE channel_id IN \
+         (SELECT id FROM channel_definitions WHERE system_id=? AND channel_key=?)",
+    )
+    .bind(blob(system_id.as_uuid()))
+    .bind(channel_key)
+    .execute(connection)
+    .await?;
+    Ok(())
+}
+
 /// Reads every channel definition of a system without its newest value.
 #[cfg(feature = "sqlite")]
 async fn sqlite_definitions(
@@ -285,6 +398,25 @@ fn sqlite_channel(row: &sqlx::sqlite::SqliteRow) -> Result<ChannelRecord, Accoun
         last_value_at: row.get("last_value_at"),
         last_value: row.get("last_value"),
         updated_at: row.get("updated_at"),
+    })
+}
+
+#[cfg(feature = "sqlite")]
+fn sqlite_rollup(
+    row: &sqlx::sqlite::SqliteRow,
+) -> Result<ChannelRollupRecord, AccountRepositoryError> {
+    Ok(ChannelRollupRecord {
+        channel_id: channel_id(sqlite_uuid(&row.get::<Vec<u8>, _>("channel_id"))?)?,
+        resolution: row.get("resolution"),
+        bucket_start: row.get("bucket_start"),
+        bucket_end: row.get("bucket_end"),
+        point_count: row.get("point_count"),
+        value_sum: row.get("value_sum"),
+        value_min: row.get("value_min"),
+        value_max: row.get("value_max"),
+        value_first: row.get("value_first"),
+        value_last: row.get("value_last"),
+        counter_delta: row.get("counter_delta"),
     })
 }
 
@@ -413,6 +545,7 @@ impl ChannelRepository for SqliteChannelRepository {
         let updated = sqlx::query(
             "UPDATE channel_definitions SET target_kind=?,target_id=?,\
              display_name=COALESCE(?,display_name),aggregation=COALESCE(?,aggregation),\
+             rollup_watermark=NULL,rollup_watermark_values=NULL,\
              updated_at=?,version=version+1 WHERE system_id=? AND channel_key=?",
         )
         .bind(&binding.target_kind)
@@ -437,6 +570,7 @@ impl ChannelRepository for SqliteChannelRepository {
         .bind(blob(system_id.as_uuid()))
         .execute(writer.connection())
         .await?;
+        sqlite_drop_rollups(writer.connection(), system_id, channel_key).await?;
         sqlite_channel_by_key(writer.connection(), system_id, channel_key).await
     }
 
@@ -448,9 +582,10 @@ impl ChannelRepository for SqliteChannelRepository {
     ) -> Result<bool, AccountRepositoryError> {
         let mut writer = self.account.acquire_writer().await?;
         // Retiring keeps the stored values and their channel row; deleting the
-        // definition would orphan every value.
-        Ok(sqlx::query(
+        // definition would orphan every value. Its aggregates go.
+        let retired = sqlx::query(
             "UPDATE channel_definitions SET lifecycle='retired',updated_at=?,\
+             rollup_watermark=NULL,rollup_watermark_values=NULL,\
              version=version+1 WHERE system_id=? AND channel_key=?",
         )
         .bind(now)
@@ -459,7 +594,9 @@ impl ChannelRepository for SqliteChannelRepository {
         .execute(writer.connection())
         .await?
         .rows_affected()
-            > 0)
+            > 0;
+        sqlite_drop_rollups(writer.connection(), system_id, channel_key).await?;
+        Ok(retired)
     }
 
     async fn write_channel_values(
@@ -519,6 +656,213 @@ impl ChannelRepository for SqliteChannelRepository {
             value: row.get("value"),
         })
         .collect())
+    }
+
+    async fn system_timezone(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Option<String>, AccountRepositoryError> {
+        let mut connection = self.account.acquire().await?;
+        Ok(
+            sqlx::query_scalar("SELECT timezone FROM systems WHERE id=?")
+                .bind(blob(system_id.as_uuid()))
+                .fetch_optional(&mut *connection)
+                .await?,
+        )
+    }
+
+    async fn channel_value_before(
+        &self,
+        channel_id: ChannelId,
+        before: i64,
+    ) -> Result<Option<ChannelValueRecord>, AccountRepositoryError> {
+        let mut connection = self.account.acquire().await?;
+        Ok(sqlx::query(
+            "SELECT h.measured_at AS measured_at,v.integer_value AS value \
+             FROM telemetry_hot_extended_values v \
+             JOIN telemetry_hot h ON h.observation_id=v.observation_id \
+             WHERE v.channel_id=? AND h.measured_at<? ORDER BY h.measured_at DESC LIMIT 1",
+        )
+        .bind(blob(channel_id.as_uuid()))
+        .bind(before)
+        .fetch_optional(&mut *connection)
+        .await?
+        .map(|row| ChannelValueRecord {
+            measured_at: row.get("measured_at"),
+            value: row.get("value"),
+        }))
+    }
+
+    async fn pending_channel_rollups(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Vec<PendingChannelRollup>, AccountRepositoryError> {
+        let mut connection = self.account.acquire().await?;
+        sqlx::query(
+            "WITH pending AS (\
+               SELECT v.channel_id AS channel_id,MIN(h.measured_at) AS first_measured_at,\
+               MAX(h.measured_at) AS last_measured_at,MAX(h.received_at) AS last_received_at,\
+               COUNT(*) AS value_count \
+               FROM channel_definitions c \
+               JOIN telemetry_hot_extended_values v ON v.channel_id=c.id \
+               JOIN telemetry_hot h ON h.observation_id=v.observation_id \
+               WHERE c.system_id=? AND c.lifecycle='active' AND c.target_kind<>'unassigned' \
+               AND (c.rollup_watermark IS NULL OR h.received_at>=c.rollup_watermark) \
+               GROUP BY v.channel_id) \
+             SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,c.unit,c.scale,\
+             c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,\
+             c.last_value_at,c.updated_at,NULL AS last_value,\
+             p.first_measured_at,p.last_measured_at,p.last_received_at,\
+             (SELECT COUNT(*) FROM telemetry_hot_extended_values v \
+              JOIN telemetry_hot h ON h.observation_id=v.observation_id \
+              WHERE v.channel_id=c.id AND h.received_at=p.last_received_at) \
+              AS last_received_values \
+             FROM pending p JOIN channel_definitions c ON c.id=p.channel_id \
+             WHERE c.rollup_watermark IS NULL OR p.last_received_at>c.rollup_watermark \
+             OR p.value_count<>c.rollup_watermark_values ORDER BY c.channel_key",
+        )
+        .bind(blob(system_id.as_uuid()))
+        .fetch_all(&mut *connection)
+        .await?
+        .iter()
+        .map(|row| {
+            Ok(PendingChannelRollup {
+                channel: sqlite_channel(row)?,
+                first_measured_at: row.get("first_measured_at"),
+                last_measured_at: row.get("last_measured_at"),
+                last_received_at: row.get("last_received_at"),
+                last_received_values: row.get("last_received_values"),
+            })
+        })
+        .collect()
+    }
+
+    async fn replace_channel_rollups(
+        &self,
+        channel: &ChannelRecord,
+        resolutions: &[&'static str],
+        from: i64,
+        to: i64,
+        rollups: &[ChannelRollupRecord],
+        calculated_at: i64,
+    ) -> Result<(), AccountRepositoryError> {
+        use sqlx::Connection as _;
+        let mut writer = self.account.acquire_writer().await?;
+        let mut transaction = writer.connection().begin().await?;
+        for resolution in resolutions {
+            sqlx::query(
+                "DELETE FROM channel_rollups WHERE channel_id=? AND resolution=? \
+                 AND bucket_start>=? AND bucket_start<?",
+            )
+            .bind(blob(channel.id.as_uuid()))
+            .bind(*resolution)
+            .bind(from)
+            .bind(to)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        if channel.target_kind != "unassigned" {
+            for rollup in rollups {
+                sqlx::query(
+                    "INSERT INTO channel_rollups (system_id,channel_id,target_kind,target_id,\
+                     resolution,bucket_start,bucket_end,point_count,value_sum,value_min,\
+                     value_max,value_first,value_last,counter_delta,calculated_at) \
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                )
+                .bind(blob(channel.system_id.as_uuid()))
+                .bind(blob(channel.id.as_uuid()))
+                .bind(&channel.target_kind)
+                .bind(channel.target_id.map(blob))
+                .bind(&rollup.resolution)
+                .bind(rollup.bucket_start)
+                .bind(rollup.bucket_end)
+                .bind(rollup.point_count)
+                .bind(rollup.value_sum)
+                .bind(rollup.value_min)
+                .bind(rollup.value_max)
+                .bind(rollup.value_first)
+                .bind(rollup.value_last)
+                .bind(rollup.counter_delta)
+                .bind(calculated_at)
+                .execute(&mut *transaction)
+                .await?;
+            }
+        }
+        transaction.commit().await?;
+        Ok(())
+    }
+
+    async fn channel_rollup_buckets(
+        &self,
+        channel_id: ChannelId,
+        resolution: &str,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<ChannelRollupRecord>, AccountRepositoryError> {
+        let mut connection = self.account.acquire().await?;
+        sqlx::query(
+            "SELECT channel_id,resolution,bucket_start,bucket_end,point_count,value_sum,\
+             value_min,value_max,value_first,value_last,counter_delta FROM channel_rollups \
+             WHERE channel_id=? AND resolution=? AND bucket_start>=? AND bucket_start<? \
+             ORDER BY bucket_start",
+        )
+        .bind(blob(channel_id.as_uuid()))
+        .bind(resolution)
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut *connection)
+        .await?
+        .iter()
+        .map(sqlite_rollup)
+        .collect()
+    }
+
+    async fn mark_channel_rollups_built(
+        &self,
+        channel_id: ChannelId,
+        received_at: i64,
+        values: i64,
+    ) -> Result<(), AccountRepositoryError> {
+        let mut writer = self.account.acquire_writer().await?;
+        sqlx::query(
+            "UPDATE channel_definitions SET rollup_watermark=?,rollup_watermark_values=? \
+             WHERE id=?",
+        )
+        .bind(received_at)
+        .bind(values)
+        .bind(blob(channel_id.as_uuid()))
+        .execute(writer.connection())
+        .await?;
+        Ok(())
+    }
+
+    async fn target_channel_rollups(
+        &self,
+        system_id: SystemId,
+        target_kind: &str,
+        target_id: Option<Uuid>,
+        resolution: &str,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<ChannelRollupRecord>, AccountRepositoryError> {
+        let mut connection = self.account.acquire().await?;
+        sqlx::query(
+            "SELECT channel_id,resolution,bucket_start,bucket_end,point_count,value_sum,\
+             value_min,value_max,value_first,value_last,counter_delta FROM channel_rollups \
+             WHERE system_id=? AND target_kind=? AND target_id IS ? AND resolution=? \
+             AND bucket_start>=? AND bucket_start<? ORDER BY channel_id,bucket_start",
+        )
+        .bind(blob(system_id.as_uuid()))
+        .bind(target_kind)
+        .bind(target_id.map(blob))
+        .bind(resolution)
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut *connection)
+        .await?
+        .iter()
+        .map(sqlite_rollup)
+        .collect()
     }
 }
 
@@ -593,6 +937,25 @@ fn postgres_channel(row: &sqlx::postgres::PgRow) -> Result<ChannelRecord, Accoun
 }
 
 #[cfg(feature = "postgres")]
+fn postgres_rollup(
+    row: &sqlx::postgres::PgRow,
+) -> Result<ChannelRollupRecord, AccountRepositoryError> {
+    Ok(ChannelRollupRecord {
+        channel_id: channel_id(row.get("channel_id"))?,
+        resolution: row.get("resolution"),
+        bucket_start: row.get("bucket_start"),
+        bucket_end: row.get("bucket_end"),
+        point_count: row.get("point_count"),
+        value_sum: row.get("value_sum"),
+        value_min: row.get("value_min"),
+        value_max: row.get("value_max"),
+        value_first: row.get("value_first"),
+        value_last: row.get("value_last"),
+        counter_delta: row.get("counter_delta"),
+    })
+}
+
+#[cfg(feature = "postgres")]
 impl PostgresChannelRepository {
     /// Reads every channel definition of a system without its newest value.
     async fn definitions(
@@ -613,6 +976,26 @@ impl PostgresChannelRepository {
         .iter()
         .map(postgres_channel)
         .collect()
+    }
+
+    /// Removes the aggregates of the channel stored under a key.
+    async fn drop_rollups(
+        &self,
+        connection: &mut PgConnection,
+        system_id: SystemId,
+        channel_key: &str,
+    ) -> Result<(), AccountRepositoryError> {
+        sqlx::query(
+            "DELETE FROM telemetry.channel_rollups r USING account_data.channel_definitions c \
+             WHERE r.account_id=c.account_id AND r.channel_id=c.id \
+             AND c.account_id=$1 AND c.system_id=$2 AND c.channel_key=$3",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .bind(channel_key)
+        .execute(connection)
+        .await?;
+        Ok(())
     }
 
     async fn channel_by_key(
@@ -746,6 +1129,7 @@ impl ChannelRepository for PostgresChannelRepository {
         let updated = sqlx::query(
             "UPDATE account_data.channel_definitions SET target_kind=$4,target_id=$5,\
              display_name=COALESCE($6,display_name),aggregation=COALESCE($7,aggregation),\
+             rollup_watermark=NULL,rollup_watermark_values=NULL,\
              updated_at=$8,version=version+1 \
              WHERE account_id=$1 AND system_id=$2 AND channel_key=$3",
         )
@@ -773,6 +1157,8 @@ impl ChannelRepository for PostgresChannelRepository {
         .bind(system_id.as_uuid())
         .execute(&mut connection)
         .await?;
+        self.drop_rollups(&mut connection, system_id, channel_key)
+            .await?;
         let stored = self
             .channel_by_key(&mut connection, system_id, channel_key)
             .await?;
@@ -789,6 +1175,7 @@ impl ChannelRepository for PostgresChannelRepository {
         let mut connection = self.connection().await?;
         let updated = sqlx::query(
             "UPDATE account_data.channel_definitions SET lifecycle='retired',updated_at=$4,\
+             rollup_watermark=NULL,rollup_watermark_values=NULL,\
              version=version+1 WHERE account_id=$1 AND system_id=$2 AND channel_key=$3",
         )
         .bind(self.account_id.as_uuid())
@@ -798,6 +1185,8 @@ impl ChannelRepository for PostgresChannelRepository {
         .execute(&mut connection)
         .await?
         .rows_affected();
+        self.drop_rollups(&mut connection, system_id, channel_key)
+            .await?;
         connection.close().await?;
         Ok(updated > 0)
     }
@@ -868,5 +1257,228 @@ impl ChannelRepository for PostgresChannelRepository {
                 value: row.get("value"),
             })
             .collect())
+    }
+
+    async fn system_timezone(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Option<String>, AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        let timezone = sqlx::query_scalar(
+            "SELECT timezone FROM account_data.systems WHERE account_id=$1 AND id=$2",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .fetch_optional(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(timezone)
+    }
+
+    async fn channel_value_before(
+        &self,
+        channel_id: ChannelId,
+        before: i64,
+    ) -> Result<Option<ChannelValueRecord>, AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        let row = sqlx::query(
+            "SELECT measured_at,integer_value AS value FROM telemetry.hot_extended_values \
+             WHERE account_id=$1 AND channel_id=$2 AND measured_at<$3 \
+             ORDER BY measured_at DESC LIMIT 1",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(channel_id.as_uuid())
+        .bind(before)
+        .fetch_optional(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(row.map(|row| ChannelValueRecord {
+            measured_at: row.get("measured_at"),
+            value: row.get("value"),
+        }))
+    }
+
+    async fn pending_channel_rollups(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Vec<PendingChannelRollup>, AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "WITH pending AS (\
+               SELECT v.channel_id AS channel_id,MIN(v.measured_at) AS first_measured_at,\
+               MAX(v.measured_at) AS last_measured_at,MAX(h.received_at) AS last_received_at,\
+               COUNT(*) AS value_count \
+               FROM account_data.channel_definitions c \
+               JOIN telemetry.hot_extended_values v \
+                 ON v.account_id=c.account_id AND v.channel_id=c.id \
+               JOIN telemetry.hot_observations h ON h.account_id=v.account_id \
+                 AND h.observation_id=v.observation_id AND h.measured_at=v.measured_at \
+               WHERE c.account_id=$1 AND c.system_id=$2 AND c.lifecycle='active' \
+               AND c.target_kind<>'unassigned' \
+               AND (c.rollup_watermark IS NULL OR h.received_at>=c.rollup_watermark) \
+               GROUP BY v.channel_id) \
+             SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,c.unit,c.scale,\
+             c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,\
+             c.last_value_at,c.updated_at,NULL::BIGINT AS last_value,\
+             p.first_measured_at,p.last_measured_at,p.last_received_at,\
+             (SELECT COUNT(*) FROM telemetry.hot_extended_values v \
+              JOIN telemetry.hot_observations h ON h.account_id=v.account_id \
+                AND h.observation_id=v.observation_id AND h.measured_at=v.measured_at \
+              WHERE v.account_id=c.account_id AND v.channel_id=c.id \
+              AND h.received_at=p.last_received_at) AS last_received_values \
+             FROM pending p JOIN account_data.channel_definitions c \
+               ON c.account_id=$1 AND c.id=p.channel_id \
+             WHERE c.rollup_watermark IS NULL OR p.last_received_at>c.rollup_watermark \
+             OR p.value_count<>c.rollup_watermark_values ORDER BY c.channel_key",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        rows.iter()
+            .map(|row| {
+                Ok(PendingChannelRollup {
+                    channel: postgres_channel(row)?,
+                    first_measured_at: row.get("first_measured_at"),
+                    last_measured_at: row.get("last_measured_at"),
+                    last_received_at: row.get("last_received_at"),
+                    last_received_values: row.get("last_received_values"),
+                })
+            })
+            .collect()
+    }
+
+    async fn replace_channel_rollups(
+        &self,
+        channel: &ChannelRecord,
+        resolutions: &[&'static str],
+        from: i64,
+        to: i64,
+        rollups: &[ChannelRollupRecord],
+        calculated_at: i64,
+    ) -> Result<(), AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        let mut transaction = connection.begin().await?;
+        for resolution in resolutions {
+            sqlx::query(
+                "DELETE FROM telemetry.channel_rollups WHERE account_id=$1 AND channel_id=$2 \
+                 AND resolution=$3 AND bucket_start>=$4 AND bucket_start<$5",
+            )
+            .bind(self.account_id.as_uuid())
+            .bind(channel.id.as_uuid())
+            .bind(*resolution)
+            .bind(from)
+            .bind(to)
+            .execute(&mut *transaction)
+            .await?;
+        }
+        if channel.target_kind != "unassigned" {
+            for rollup in rollups {
+                sqlx::query(
+                    "INSERT INTO telemetry.channel_rollups (account_id,system_id,channel_id,\
+                     target_kind,target_id,resolution,bucket_start,bucket_end,point_count,\
+                     value_sum,value_min,value_max,value_first,value_last,counter_delta,\
+                     calculated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)",
+                )
+                .bind(self.account_id.as_uuid())
+                .bind(channel.system_id.as_uuid())
+                .bind(channel.id.as_uuid())
+                .bind(&channel.target_kind)
+                .bind(channel.target_id)
+                .bind(&rollup.resolution)
+                .bind(rollup.bucket_start)
+                .bind(rollup.bucket_end)
+                .bind(rollup.point_count)
+                .bind(rollup.value_sum)
+                .bind(rollup.value_min)
+                .bind(rollup.value_max)
+                .bind(rollup.value_first)
+                .bind(rollup.value_last)
+                .bind(rollup.counter_delta)
+                .bind(calculated_at)
+                .execute(&mut *transaction)
+                .await?;
+            }
+        }
+        transaction.commit().await?;
+        connection.close().await?;
+        Ok(())
+    }
+
+    async fn channel_rollup_buckets(
+        &self,
+        channel_id: ChannelId,
+        resolution: &str,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<ChannelRollupRecord>, AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "SELECT channel_id,resolution,bucket_start,bucket_end,point_count,value_sum,\
+             value_min,value_max,value_first,value_last,counter_delta \
+             FROM telemetry.channel_rollups WHERE account_id=$1 AND channel_id=$2 \
+             AND resolution=$3 AND bucket_start>=$4 AND bucket_start<$5 ORDER BY bucket_start",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(channel_id.as_uuid())
+        .bind(resolution)
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        rows.iter().map(postgres_rollup).collect()
+    }
+
+    async fn mark_channel_rollups_built(
+        &self,
+        channel_id: ChannelId,
+        received_at: i64,
+        values: i64,
+    ) -> Result<(), AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        sqlx::query(
+            "UPDATE account_data.channel_definitions SET rollup_watermark=$3,\
+             rollup_watermark_values=$4 WHERE account_id=$1 AND id=$2",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(channel_id.as_uuid())
+        .bind(received_at)
+        .bind(values)
+        .execute(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(())
+    }
+
+    async fn target_channel_rollups(
+        &self,
+        system_id: SystemId,
+        target_kind: &str,
+        target_id: Option<Uuid>,
+        resolution: &str,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<ChannelRollupRecord>, AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "SELECT channel_id,resolution,bucket_start,bucket_end,point_count,value_sum,\
+             value_min,value_max,value_first,value_last,counter_delta \
+             FROM telemetry.channel_rollups WHERE account_id=$1 AND system_id=$2 \
+             AND target_kind=$3 AND target_id IS NOT DISTINCT FROM $4 AND resolution=$5 \
+             AND bucket_start>=$6 AND bucket_start<$7 ORDER BY channel_id,bucket_start",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .bind(target_kind)
+        .bind(target_id)
+        .bind(resolution)
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        rows.iter().map(postgres_rollup).collect()
     }
 }

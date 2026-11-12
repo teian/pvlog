@@ -175,6 +175,10 @@ pub trait ManagementRepository: Send + Sync {
         &self,
         account_id: AccountId,
     ) -> Result<Vec<SystemId>, ManagementRepositoryError>;
+    /// Lists every registered system with the account that owns it.
+    async fn registered_systems(
+        &self,
+    ) -> Result<Vec<SystemRegistryRecord>, ManagementRepositoryError>;
     async fn save_session(&self, record: &SessionRecord) -> Result<(), ManagementRepositoryError>;
     async fn active_session_by_digest(
         &self,
@@ -490,6 +494,20 @@ impl ManagementRepository for SqliteManagementRepository {
         .await?;
         connection.close().await?;
         rows.into_iter().map(system_id_from_blob).collect()
+    }
+
+    async fn registered_systems(
+        &self,
+    ) -> Result<Vec<SystemRegistryRecord>, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "SELECT system_id, account_id, created_at, updated_at FROM system_registry \
+             ORDER BY account_id, system_id",
+        )
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        rows.iter().map(sqlite_system_registry).collect()
     }
 
     async fn save_session(&self, record: &SessionRecord) -> Result<(), ManagementRepositoryError> {
@@ -1035,6 +1053,20 @@ impl ManagementRepository for PostgresManagementRepository {
         rows.into_iter()
             .map(|id| pg_id(id, SystemId::from_uuid))
             .collect()
+    }
+
+    async fn registered_systems(
+        &self,
+    ) -> Result<Vec<SystemRegistryRecord>, ManagementRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "SELECT system_id,account_id,created_at,updated_at FROM management.system_registry \
+             ORDER BY account_id,system_id",
+        )
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        rows.iter().map(postgres_system_registry).collect()
     }
 
     async fn save_session(&self, record: &SessionRecord) -> Result<(), ManagementRepositoryError> {

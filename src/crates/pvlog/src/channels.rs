@@ -7,8 +7,12 @@
 
 use std::sync::Arc;
 
+use crate::channel_aggregation::aggregate_value;
 use async_trait::async_trait;
-use pvlog_api::{ChannelApiError, ChannelApiUseCases, ChannelBindingInput, ChannelResponse};
+use pvlog_api::{
+    ChannelAggregateBucket, ChannelAggregateQuery, ChannelAggregateResponse, ChannelApiError,
+    ChannelApiUseCases, ChannelBindingInput, ChannelResponse,
+};
 use pvlog_application::Clock;
 use pvlog_domain::{SystemId, UserId};
 use pvlog_storage::{
@@ -118,6 +122,56 @@ impl StorageChannelApi {
 
 #[async_trait]
 impl ChannelApiUseCases for StorageChannelApi {
+    /// Reads the aggregates of the active channels bound to one target. A
+    /// channel without an aggregate in the range is left out.
+    async fn aggregates(
+        &self,
+        system_id: SystemId,
+        query: ChannelAggregateQuery,
+    ) -> Result<Vec<ChannelAggregateResponse>, ChannelApiError> {
+        let repository = self.repository(system_id).await?;
+        let rollups = repository
+            .target_channel_rollups(
+                system_id,
+                &query.target_kind,
+                query.target_id,
+                &query.resolution,
+                query.from,
+                query.to,
+            )
+            .await
+            .map_err(|_| ChannelApiError::Unavailable)?;
+        let channels = repository
+            .channels(system_id)
+            .await
+            .map_err(|_| ChannelApiError::Unavailable)?;
+        Ok(channels
+            .into_iter()
+            .filter_map(|channel| {
+                let buckets: Vec<ChannelAggregateBucket> = rollups
+                    .iter()
+                    .filter(|rollup| rollup.channel_id == channel.id)
+                    .map(|rollup| ChannelAggregateBucket {
+                        start_epoch_millis: rollup.bucket_start,
+                        end_epoch_millis: rollup.bucket_end,
+                        value: aggregate_value(&channel.aggregation, rollup),
+                        minimum: rollup.value_min,
+                        maximum: rollup.value_max,
+                        point_count: rollup.point_count,
+                    })
+                    .collect();
+                (!buckets.is_empty()).then_some(ChannelAggregateResponse {
+                    channel_key: channel.channel_key,
+                    display_name: channel.display_name,
+                    unit: channel.unit,
+                    scale: channel.scale,
+                    aggregation: channel.aggregation,
+                    buckets,
+                })
+            })
+            .collect())
+    }
+
     /// Lists the system's active channels, unassigned ones first.
     async fn list(&self, system_id: SystemId) -> Result<Vec<ChannelResponse>, ChannelApiError> {
         Ok(self

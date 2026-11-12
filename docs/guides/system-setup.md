@@ -110,8 +110,10 @@ it can be bookmarked:
 - **Equipment**: inverters and their strings. Once strings exist, their sum
   replaces the installed capacity entered under **General**.
 - **Measurement channels**: the individual values a data source delivers. A
-  channel that delivers values but is **Not assigned** can be bound to an
-  inverter or string here.
+  channel that delivers values but is **Not assigned** can be bound to the
+  system, an inverter or a string here. A bound channel is summarized per
+  quarter hour, hour, day, month and year at its target; rebinding it moves
+  its whole history to the new target.
 - **Tariffs**: **Add tariff** for exported or imported energy.
 - **Sharing**: visibility and the public link. **Create a new link** replaces
   the link; the previous one stops working at once.

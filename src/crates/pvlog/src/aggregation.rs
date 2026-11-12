@@ -27,7 +27,7 @@ const RESOLUTIONS: [Resolution; 5] = [
 ];
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum Resolution {
+pub(crate) enum Resolution {
     FifteenMinutes,
     Hour,
     Day,
@@ -37,7 +37,7 @@ enum Resolution {
 
 impl Resolution {
     /// Returns the stored name of the resolution.
-    const fn name(self) -> &'static str {
+    pub(crate) const fn name(self) -> &'static str {
         match self {
             Self::FifteenMinutes => "fifteen_minute",
             Self::Hour => "hour",
@@ -160,13 +160,25 @@ pub async fn run_cycle(
     target: &DatabaseTarget,
     management: &dyn ManagementRepository,
 ) -> Result<AggregationReport, AggregationError> {
+    let mut report = plant_cycle(target, management).await?;
+    report.channel_rollups_written =
+        crate::channel_aggregation::run_cycle(target, management).await?;
+    Ok(report)
+}
+
+/// Rebuilds the plant-wide rollups and summaries of every account once.
+async fn plant_cycle(
+    target: &DatabaseTarget,
+    management: &dyn ManagementRepository,
+) -> Result<AggregationReport, AggregationError> {
     let mut report = AggregationReport::default();
     let DatabaseTarget::Sqlite {
         management_path,
         accounts_dir,
     } = target
     else {
-        // The PostgreSQL aggregation path is not implemented yet.
+        // Plant-wide aggregation from readings is not implemented for
+        // PostgreSQL yet; channel aggregates are.
         return Ok(report);
     };
     #[cfg(not(feature = "sqlite"))]
@@ -204,6 +216,8 @@ pub struct AggregationReport {
     pub systems_rebuilt: u64,
     pub rollups_written: u64,
     pub daily_summaries_written: u64,
+    /// Aggregates of bound measurement channels written.
+    pub channel_rollups_written: u64,
 }
 
 impl AggregationReport {
@@ -738,14 +752,14 @@ fn bucket_samples(
 }
 
 /// Converts epoch milliseconds to local time in the zone, failing with `Timezone` when the value is out of range.
-fn local_time(zone: Tz, epoch_millis: i64) -> Result<DateTime<Tz>, AggregationError> {
+pub(crate) fn local_time(zone: Tz, epoch_millis: i64) -> Result<DateTime<Tz>, AggregationError> {
     DateTime::from_timestamp_millis(epoch_millis)
         .map(|value| value.with_timezone(&zone))
         .ok_or(AggregationError::Timezone)
 }
 
 /// Resolves the local bucket a timestamp belongs to as a half-open UTC interval.
-fn window(
+pub(crate) fn window(
     zone: Tz,
     resolution: Resolution,
     local: DateTime<Tz>,
@@ -832,14 +846,14 @@ fn start_of_day(zone: Tz, date: NaiveDate) -> Result<DateTime<Tz>, AggregationEr
 }
 
 /// Returns the UTC epoch milliseconds of the start of the local year containing the timestamp.
-fn year_start(zone: Tz, epoch_millis: i64) -> Result<i64, AggregationError> {
+pub(crate) fn year_start(zone: Tz, epoch_millis: i64) -> Result<i64, AggregationError> {
     let local = local_time(zone, epoch_millis)?;
     let date = NaiveDate::from_ymd_opt(local.year(), 1, 1).ok_or(AggregationError::Timezone)?;
     Ok(start_of_day(zone, date)?.timestamp_millis())
 }
 
 /// Returns the UTC epoch milliseconds of the start of the local year after the one containing the timestamp.
-fn next_year_start(zone: Tz, epoch_millis: i64) -> Result<i64, AggregationError> {
+pub(crate) fn next_year_start(zone: Tz, epoch_millis: i64) -> Result<i64, AggregationError> {
     let local = local_time(zone, epoch_millis)?;
     let date = NaiveDate::from_ymd_opt(local.year() + 1, 1, 1).ok_or(AggregationError::Timezone)?;
     Ok(start_of_day(zone, date)?.timestamp_millis())

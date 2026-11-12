@@ -77,7 +77,8 @@ pub use authorization::{
     principal_identity,
 };
 pub use channels::{
-    ChannelApiError, ChannelApiUseCases, ChannelBindingInput, ChannelResponse, channels_router,
+    ChannelAggregateBucket, ChannelAggregateQuery, ChannelAggregateResponse, ChannelApiError,
+    ChannelApiUseCases, ChannelBindingInput, ChannelResponse, channels_router,
 };
 pub use connectors::{
     ConnectorAdminError, ConnectorAdminResponse, ConnectorAdminUseCases, connectors_router,

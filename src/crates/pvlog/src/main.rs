@@ -565,12 +565,15 @@ async fn run_aggregation_cycle(
     management: &dyn pvlog_storage::ManagementRepository,
 ) {
     match pvlog::aggregation::run_cycle(target, management).await {
-        Ok(report) if report.systems_rebuilt > 0 => tracing::info!(
-            systems = report.systems_rebuilt,
-            rollups = report.rollups_written,
-            daily_summaries = report.daily_summaries_written,
-            "aggregation cycle completed"
-        ),
+        Ok(report) if report.systems_rebuilt > 0 || report.channel_rollups_written > 0 => {
+            tracing::info!(
+                systems = report.systems_rebuilt,
+                rollups = report.rollups_written,
+                daily_summaries = report.daily_summaries_written,
+                channel_rollups = report.channel_rollups_written,
+                "aggregation cycle completed"
+            );
+        }
         Ok(_) => tracing::debug!("aggregation cycle found no pending observations"),
         Err(error) => tracing::error!(%error, "aggregation cycle failed"),
     }
