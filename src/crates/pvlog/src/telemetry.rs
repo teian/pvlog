@@ -617,6 +617,14 @@ fn stored_observation(
                 .map(pvlog_domain::WattHours::value),
             // The net flow is only known when both directions were reported.
             net_grid_power_watts: grid_import.zip(grid_export).map(|(i, e)| i - e),
+            temperature_millidegrees_c: observation
+                .values
+                .temperature
+                .map(|value| i64::from(value.value())),
+            voltage_millivolts: observation
+                .values
+                .voltage
+                .map(|value| i64::from(value.value())),
             ..StoredMeasurements::default()
         },
     })
@@ -716,11 +724,6 @@ fn provenance(observation: &CanonicalObservation) -> serde_json::Value {
     serde_json::json!({
         "sourceKind": source_kind(observation.source.kind),
         "grid": grid,
-        "temperatureMilliCelsius": observation
-            .values
-            .temperature
-            .map(pvlog_domain::MilliDegreesCelsius::value),
-        "voltageMillivolts": observation.values.voltage.map(pvlog_domain::MilliVolts::value),
     })
 }
 

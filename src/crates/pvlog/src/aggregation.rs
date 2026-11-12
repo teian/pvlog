@@ -57,6 +57,8 @@ struct Sample {
     consumption_energy_wh: Option<i64>,
     grid_import_energy_wh: Option<i64>,
     grid_export_energy_wh: Option<i64>,
+    temperature_millidegrees_c: Option<i64>,
+    voltage_millivolts: Option<i64>,
     quality_flags: i64,
 }
 
@@ -71,6 +73,10 @@ struct Bucket {
     /// grid meter imported an unknown amount, not zero.
     grid_import_energy_wh: Option<i64>,
     grid_export_energy_wh: Option<i64>,
+    minimum_temperature: Option<i64>,
+    maximum_temperature: Option<i64>,
+    voltage_sum: i64,
+    voltage_points: i64,
     minimum_watts: Option<i64>,
     maximum_watts: Option<i64>,
     first_watts: Option<i64>,
@@ -94,12 +100,31 @@ impl Bucket {
             &mut self.grid_export_energy_wh,
             sample.grid_export_energy_wh,
         );
+        if let Some(temperature) = sample.temperature_millidegrees_c {
+            self.minimum_temperature = Some(
+                self.minimum_temperature
+                    .map_or(temperature, |value| value.min(temperature)),
+            );
+            self.maximum_temperature = Some(
+                self.maximum_temperature
+                    .map_or(temperature, |value| value.max(temperature)),
+            );
+        }
+        if let Some(voltage) = sample.voltage_millivolts {
+            self.voltage_sum += voltage;
+            self.voltage_points += 1;
+        }
         if let Some(watts) = sample.generation_power_watts {
             self.minimum_watts = Some(self.minimum_watts.map_or(watts, |value| value.min(watts)));
             self.maximum_watts = Some(self.maximum_watts.map_or(watts, |value| value.max(watts)));
             self.first_watts = self.first_watts.or(Some(watts));
             self.last_watts = Some(watts);
         }
+    }
+
+    /// Mean of the reported voltages, absent when none was reported.
+    fn mean_voltage(&self) -> Option<i64> {
+        (self.voltage_points > 0).then(|| self.voltage_sum / self.voltage_points)
     }
 
     /// Expected sample count for the bucket at the system's reporting cadence.
@@ -356,7 +381,7 @@ async fn plant_samples(
 ) -> Result<Option<Vec<Sample>>, AggregationError> {
     let rows = sqlx::query(
         "SELECT measured_at,generation_power_watts,generation_energy_wh,consumption_energy_wh,\
-         grid_import_energy_wh,grid_export_energy_wh,quality_flags FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? \
+         grid_import_energy_wh,grid_export_energy_wh,temperature_millidegrees_c,voltage_millivolts,quality_flags FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? \
          ORDER BY measured_at",
     )
     .bind(system.to_vec())
@@ -377,6 +402,11 @@ async fn plant_samples(
                 consumption_energy_wh: row.try_get("consumption_energy_wh").ok(),
                 grid_import_energy_wh: row.try_get("grid_import_energy_wh").ok().flatten(),
                 grid_export_energy_wh: row.try_get("grid_export_energy_wh").ok().flatten(),
+                temperature_millidegrees_c: row
+                    .try_get("temperature_millidegrees_c")
+                    .ok()
+                    .flatten(),
+                voltage_millivolts: row.try_get("voltage_millivolts").ok().flatten(),
                 quality_flags: row.try_get("quality_flags").unwrap_or_default(),
             })
             .collect(),
@@ -420,6 +450,8 @@ async fn metered_scopes(
             consumption_energy_wh: None,
             grid_import_energy_wh: None,
             grid_export_energy_wh: None,
+            temperature_millidegrees_c: None,
+            voltage_millivolts: None,
             quality_flags: row.try_get("quality_flags").unwrap_or_default(),
         };
         strings.entry(string_id).or_default().push(sample);
@@ -431,6 +463,8 @@ async fn metered_scopes(
             consumption_energy_wh: None,
             grid_import_energy_wh: None,
             grid_export_energy_wh: None,
+            temperature_millidegrees_c: None,
+            voltage_millivolts: None,
             quality_flags: 0,
         });
         merged.generation_power_watts =
@@ -515,8 +549,10 @@ async fn write_rollup(
          generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,\
          generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,\
          quality_flags,coverage_basis_points,calculated_at,\
-         grid_import_energy_sum_wh,grid_export_energy_sum_wh) \
-         VALUES (?,?,?,?,?,?,?,1,1,?,?,?,?,?,?,?,?,?,?,?,?,?) \
+         grid_import_energy_sum_wh,grid_export_energy_sum_wh,\
+         temperature_min_millidegrees_c,temperature_max_millidegrees_c,\
+         voltage_mean_millivolts) \
+         VALUES (?,?,?,?,?,?,?,1,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) \
          ON CONFLICT(system_id,scope_kind,scope_id,resolution,bucket_start,generation) DO UPDATE SET \
          bucket_end=excluded.bucket_end,point_count=excluded.point_count,\
          expected_count=excluded.expected_count,\
@@ -530,7 +566,10 @@ async fn write_rollup(
          coverage_basis_points=excluded.coverage_basis_points,\
          calculated_at=excluded.calculated_at,\
          grid_import_energy_sum_wh=excluded.grid_import_energy_sum_wh,\
-         grid_export_energy_sum_wh=excluded.grid_export_energy_sum_wh",
+         grid_export_energy_sum_wh=excluded.grid_export_energy_sum_wh,\
+         temperature_min_millidegrees_c=excluded.temperature_min_millidegrees_c,\
+         temperature_max_millidegrees_c=excluded.temperature_max_millidegrees_c,\
+         voltage_mean_millivolts=excluded.voltage_mean_millivolts",
     )
     .bind(context.blob.clone())
     .bind(context.scope_kind)
@@ -552,6 +591,9 @@ async fn write_rollup(
     .bind(context.calculated_at)
     .bind(bucket.grid_import_energy_wh)
     .bind(bucket.grid_export_energy_wh)
+    .bind(bucket.minimum_temperature)
+    .bind(bucket.maximum_temperature)
+    .bind(bucket.mean_voltage())
     .execute(connection)
     .await
     .map_err(|_| AggregationError::Unavailable)?;

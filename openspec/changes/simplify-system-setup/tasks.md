@@ -51,7 +51,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 
 - [x] 6.1 Accept lifetime generation and consumption counters, derive interval energy from counter differences with reset detection, and write the existing lifetime columns; verify the increase, reset and both-supplied scenarios with tests.
 - [x] 6.2 Accept grid import and export power and energy, write the existing grid columns and include them in interval, daily and lifetime aggregates; verify storage, aggregation and the contradiction rejection with tests.
-- [ ] 6.3 Write temperature and voltage to their dedicated columns, aggregate minimum and maximum temperature and mean voltage, and backfill the columns from provenance for existing readings; verify aggregates with tests and that the backfill is idempotent.
+- [x] 6.3 Write temperature and voltage to their dedicated columns, aggregate minimum and maximum temperature and mean voltage, and backfill the columns from provenance for existing readings; verify aggregates with tests and that the backfill is idempotent.
 - [ ] 6.4 Accept and return the optional reading message with its length limit; verify acceptance and rejection with tests.
 - [ ] 6.5 Add system-level daily-summary ingestion with replacement on resubmission and include supplied days in monthly and yearly statistics; verify the supplied-only and resubmission scenarios with tests on both databases.
 - [ ] 6.6 Document the new observation fields, the `channels` map and the daily-summary resource in OpenAPI, and write the PVOutput field-mapping reference; verify the OpenAPI contract checks and `test:docs` pass and that every PVOutput status, output and system field appears in the reference.

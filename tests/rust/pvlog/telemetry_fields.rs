@@ -37,6 +37,7 @@ struct Fixture {
     management: Arc<dyn ManagementRepository>,
     /// The account database, where aggregates can be read directly.
     sqlite: Option<pvlog_storage::RoutedSqliteAccount>,
+    postgres_url: Option<String>,
     _directory: Option<TempDir>,
 }
 
@@ -77,6 +78,7 @@ impl Fixture {
             target,
             management,
             sqlite: Some(router.route(account_id).await?),
+            postgres_url: None,
             _directory: Some(directory),
         })
     }
@@ -96,11 +98,12 @@ impl Fixture {
             .await?;
         Ok(Self {
             telemetry: StorageTelemetryApi::new(target.clone(), management.clone(), clock()),
-            stored: Box::new(PostgresTelemetryRepository::new(url, account_id)),
+            stored: Box::new(PostgresTelemetryRepository::new(url.clone(), account_id)),
             system_id,
             target,
             management,
             sqlite: None,
+            postgres_url: Some(url),
             _directory: None,
         })
     }
@@ -355,6 +358,138 @@ async fn postgres_stores_grid_flows_when_configured() -> Result<(), Box<dyn Erro
         return Ok(());
     };
     grid_flows(Fixture::postgres(url).await?).await
+}
+
+/// The statements that fill the measurement columns from the provenance of
+/// readings stored before those columns were written.
+fn backfill_statements(migration: &str) -> Vec<String> {
+    migration
+        .lines()
+        .filter(|line| !line.trim_start().starts_with("--"))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .split(';')
+        .map(str::trim)
+        .filter(|statement| statement.starts_with("UPDATE"))
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+#[allow(clippy::too_many_lines)]
+async fn temperature_and_voltage(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    for (step, temperature, voltage) in [
+        (0, Some(18_500), Some(229_000)),
+        (1, Some(31_250), Some(231_000)),
+        (2, Some(-2_000), None),
+        (3, None, None),
+    ] {
+        let mut reading = fixture.reading(step);
+        reading.temperature_millidegrees_celsius = temperature;
+        reading.voltage_millivolts = voltage;
+        fixture.telemetry.ingest(reading).await?;
+    }
+    let stored = fixture.at(1).await?;
+    assert_eq!(stored.measurements.temperature_millidegrees_c, Some(31_250));
+    assert_eq!(stored.measurements.voltage_millivolts, Some(231_000));
+    assert_eq!(
+        fixture.at(3).await?.measurements.temperature_millidegrees_c,
+        None
+    );
+
+    // A reading from before the columns were written: values in provenance only.
+    let mut legacy = fixture.at(3).await?;
+    legacy.id = pvlog_domain::ObservationId::new();
+    legacy.measured_at = START + 4 * STEP;
+    legacy.idempotency_identity = Some("legacy".to_owned());
+    legacy.canonical_hash = [9; 32];
+    legacy.provenance = serde_json::json!({
+        "temperatureMilliCelsius": 40_000,
+        "voltageMillivolts": 235_000,
+    });
+    fixture.stored.insert_observation(&legacy).await?;
+    // And one whose column already holds a value that differs from its provenance.
+    let mut kept = legacy.clone();
+    kept.id = pvlog_domain::ObservationId::new();
+    kept.measured_at = START + 5 * STEP;
+    kept.idempotency_identity = Some("kept".to_owned());
+    kept.canonical_hash = [8; 32];
+    kept.measurements.temperature_millidegrees_c = Some(12_000);
+    fixture.stored.insert_observation(&kept).await?;
+
+    // Running the backfill twice gives the same result as running it once.
+    for _ in 0..2 {
+        if let Some(account) = &fixture.sqlite {
+            let mut writer = account.acquire_writer().await?;
+            for statement in backfill_statements(include_str!(
+                "../../../src/crates/storage/migrations/sqlite-account/0013_temperature_and_voltage.sql"
+            )) {
+                sqlx::query(sqlx::AssertSqlSafe(statement))
+                    .execute(writer.connection())
+                    .await?;
+            }
+        }
+        if let Some(url) = &fixture.postgres_url {
+            use sqlx::Connection as _;
+            let mut connection = sqlx::PgConnection::connect(url).await?;
+            for statement in backfill_statements(include_str!(
+                "../../../src/crates/storage/migrations/postgres/0016_temperature_and_voltage.sql"
+            )) {
+                sqlx::query(sqlx::AssertSqlSafe(statement))
+                    .execute(&mut connection)
+                    .await?;
+            }
+        }
+        let filled = fixture.at(4).await?.measurements;
+        assert_eq!(filled.temperature_millidegrees_c, Some(40_000));
+        assert_eq!(filled.voltage_millivolts, Some(235_000));
+        let kept = fixture.at(5).await?.measurements;
+        assert_eq!(kept.temperature_millidegrees_c, Some(12_000));
+        assert_eq!(kept.voltage_millivolts, Some(235_000));
+        assert_eq!(
+            fixture.at(3).await?.measurements.temperature_millidegrees_c,
+            None
+        );
+    }
+
+    let Some(account) = &fixture.sqlite else {
+        return Ok(());
+    };
+    pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
+    let mut connection = account.acquire().await?;
+    let day: (Option<i64>, Option<i64>, Option<i64>) = sqlx::query_as(
+        "SELECT temperature_min_millidegrees_c,temperature_max_millidegrees_c,\
+         voltage_mean_millivolts FROM telemetry_rollups \
+         WHERE system_id=? AND scope_kind='system' AND resolution='day'",
+    )
+    .bind(fixture.system_id.as_uuid().as_bytes().to_vec())
+    .fetch_one(&mut *connection)
+    .await?;
+    // Minimum and maximum over all readings of the day; the mean voltage over
+    // the four readings that reported one.
+    assert_eq!(
+        day,
+        (
+            Some(-2_000),
+            Some(40_000),
+            Some((229_000 + 231_000 + 235_000 + 235_000) / 4)
+        )
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_stores_backfills_and_aggregates_temperature_and_voltage()
+-> Result<(), Box<dyn Error>> {
+    temperature_and_voltage(Fixture::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_stores_and_backfills_temperature_and_voltage_when_configured()
+-> Result<(), Box<dyn Error>> {
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    temperature_and_voltage(Fixture::postgres(url).await?).await
 }
 
 fn clock() -> Arc<dyn Clock> {
