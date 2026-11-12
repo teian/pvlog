@@ -14,9 +14,9 @@ use axum::{
     http::{Method, Request, StatusCode, header},
 };
 use pvlog_api::{
-    AuthorizedRequest, DeviceEventApiError, DeviceEventApiUseCases, DeviceEventInput,
-    DeviceEventQuery, DeviceEventResponse, DeviceEventsAccepted, ModernRequestAuthorizer,
-    RequestAuthorizationError, RequestPrincipal, device_events_router,
+    AuthorizedRequest, DeviceEventApiError, DeviceEventApiUseCases, DeviceEventDetails,
+    DeviceEventInput, DeviceEventQuery, DeviceEventResponse, DeviceEventsAccepted,
+    ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal, device_events_router,
 };
 use pvlog_domain::{
     AccountId, ApiCredentialId, ApiScope, Permission, PrincipalId, SystemId, UserId,
@@ -93,9 +93,11 @@ async fn an_upload_is_checked_trimmed_and_handed_to_the_service() -> Result<(), 
         Some(
             r#"{"events":[
                 {"deviceId":" 2000123456 ","eventId":"8812","occurredAtEpochMillis":1780000000000,
-                 "code":3501,"message":" Insulation failure "},
+                 "code":3501,"message":" Insulation failure ","type":"Event","category":" Error ",
+                 "group":"Insulation","oldValue":"230.0 V","newValue":"235.0 V",
+                 "userGroup":"Installer"},
                 {"deviceId":"2000123456","eventId":"  ","occurredAtEpochMillis":1780000300000,
-                 "message":""}]}"#,
+                 "message":"","category":" "}]}"#,
         ),
     )
     .await?;
@@ -112,6 +114,14 @@ async fn an_upload_is_checked_trimmed_and_handed_to_the_service() -> Result<(), 
                     occurred_at_epoch_millis: 1_780_000_000_000,
                     code: Some(3_501),
                     message: Some("Insulation failure".to_owned()),
+                    details: DeviceEventDetails {
+                        event_type: Some("Event".to_owned()),
+                        category: Some("Error".to_owned()),
+                        group: Some("Insulation".to_owned()),
+                        old_value: Some("230.0 V".to_owned()),
+                        new_value: Some("235.0 V".to_owned()),
+                        user_group: Some("Installer".to_owned()),
+                    },
                 },
                 // A blank identifier and a blank message are absent.
                 DeviceEventInput {
@@ -120,6 +130,7 @@ async fn an_upload_is_checked_trimmed_and_handed_to_the_service() -> Result<(), 
                     occurred_at_epoch_millis: 1_780_000_300_000,
                     code: None,
                     message: None,
+                    details: DeviceEventDetails::default(),
                 },
             ]
         )]
@@ -216,6 +227,10 @@ async fn events_are_listed_per_system_and_per_inverter() -> Result<(), Box<dyn E
     assert_eq!(body[0]["deviceId"], "2000123456");
     assert_eq!(body[0]["eventId"], "8812");
     assert_eq!(body[0]["occurredAtEpochMillis"], 15);
+    // Old and new value are returned; a detail the device did not report is absent.
+    assert_eq!(body[0]["oldValue"], "230.0 V");
+    assert_eq!(body[0]["newValue"], "235.0 V");
+    assert!(body[0].get("userGroup").is_none());
 
     let (status, _) = send(
         app(reader(), &calls),
@@ -353,6 +368,11 @@ impl DeviceEventApiUseCases for Stub {
             occurred_at_epoch_millis: 15,
             code: Some(3_501),
             message: None,
+            details: DeviceEventDetails {
+                old_value: Some("230.0 V".to_owned()),
+                new_value: Some("235.0 V".to_owned()),
+                ..DeviceEventDetails::default()
+            },
             data_source_id: None,
             received_at_epoch_millis: 16,
         }])

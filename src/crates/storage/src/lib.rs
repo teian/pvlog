@@ -93,7 +93,9 @@ pub use data_source_repository::{
 pub use device_event_repository::PostgresDeviceEventRepository;
 #[cfg(feature = "sqlite")]
 pub use device_event_repository::SqliteDeviceEventRepository;
-pub use device_event_repository::{DeviceEventFilter, DeviceEventRecord, DeviceEventRepository};
+pub use device_event_repository::{
+    DeviceEventDetails, DeviceEventFilter, DeviceEventRecord, DeviceEventRepository,
+};
 #[cfg(feature = "postgres")]
 pub use discovery_repository::PostgresDiscoveryRepository;
 #[cfg(feature = "sqlite")]

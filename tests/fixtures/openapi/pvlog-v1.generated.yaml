@@ -4837,10 +4837,34 @@ components:
         eventId:
           type: [string, "null"]
           maxLength: 128
-          description: The source's own identifier of the event within the device. Without it, the event is identified by its time and code.
+          description: The source's own identifier of the event within the device. Without it, the event is identified by its time and code. An event uploaded again with the same device and identifier is stored once; when any of its members differs, it replaces the stored event.
         occurredAtEpochMillis: { type: integer, format: int64, minimum: 0 }
         code: { type: [integer, "null"], format: int64 }
         message: { type: [string, "null"], maxLength: 500 }
+        type:
+          type: string
+          maxLength: 500
+          description: Kind of event as the device names it.
+        category:
+          type: string
+          maxLength: 500
+          description: Severity category, such as an error or a warning.
+        group:
+          type: string
+          maxLength: 500
+          description: Group the device files the event under.
+        oldValue:
+          type: string
+          maxLength: 500
+          description: Value a changed setting had before the event.
+        newValue:
+          type: string
+          maxLength: 500
+          description: Value a changed setting has since the event.
+        userGroup:
+          type: string
+          maxLength: 500
+          description: User group that caused the event, such as an installer.
     DeviceEvent:
       type: object
       required: [id, deviceId, occurredAtEpochMillis, receivedAtEpochMillis]
@@ -4851,6 +4875,16 @@ components:
         occurredAtEpochMillis: { type: integer, format: int64 }
         code: { type: [integer, "null"], format: int64 }
         message: { type: [string, "null"] }
+        type:
+          {
+            type: string,
+            description: Absent when the device did not report it.,
+          }
+        category: { type: string }
+        group: { type: string }
+        oldValue: { type: string }
+        newValue: { type: string }
+        userGroup: { type: string }
         dataSourceId:
           oneOf:
             - $ref: "#/components/schemas/UuidV7"

@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use pvlog_api::{
-    DEFAULT_DEVICE_EVENT_LIMIT, DeviceEventApiError, DeviceEventApiUseCases, DeviceEventInput,
-    DeviceEventQuery, DeviceEventResponse, DeviceEventsAccepted,
+    DEFAULT_DEVICE_EVENT_LIMIT, DeviceEventApiError, DeviceEventApiUseCases, DeviceEventDetails,
+    DeviceEventInput, DeviceEventQuery, DeviceEventResponse, DeviceEventsAccepted,
 };
 use pvlog_application::Clock;
 use pvlog_domain::{AccountId, ApiCredentialId, DataSourceId, SystemId};
@@ -168,6 +168,14 @@ fn response(event: DeviceEventRecord) -> DeviceEventResponse {
         occurred_at_epoch_millis: event.occurred_at,
         code: event.code,
         message: event.message,
+        details: DeviceEventDetails {
+            event_type: event.details.event_type,
+            category: event.details.category,
+            group: event.details.group,
+            old_value: event.details.old_value,
+            new_value: event.details.new_value,
+            user_group: event.details.user_group,
+        },
         data_source_id: event.data_source_id.map(DataSourceId::as_uuid),
         received_at_epoch_millis: event.received_at,
     }
@@ -208,6 +216,14 @@ impl DeviceEventApiUseCases for StorageDeviceEventApi {
                 occurred_at: event.occurred_at_epoch_millis,
                 code: event.code,
                 message: event.message.clone(),
+                details: pvlog_storage::DeviceEventDetails {
+                    event_type: event.details.event_type.clone(),
+                    category: event.details.category.clone(),
+                    group: event.details.group.clone(),
+                    old_value: event.details.old_value.clone(),
+                    new_value: event.details.new_value.clone(),
+                    user_group: event.details.user_group.clone(),
+                },
                 received_at,
             })
             .collect();

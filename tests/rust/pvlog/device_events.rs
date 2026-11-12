@@ -4,8 +4,8 @@ use std::{error::Error, sync::Arc};
 
 use pvlog::device_events::StorageDeviceEventApi;
 use pvlog_api::{
-    DeviceEventApiError, DeviceEventApiUseCases as _, DeviceEventInput, DeviceEventQuery,
-    DeviceEventResponse, DeviceEventsAccepted,
+    DeviceEventApiError, DeviceEventApiUseCases as _, DeviceEventDetails, DeviceEventInput,
+    DeviceEventQuery, DeviceEventResponse, DeviceEventsAccepted,
 };
 use pvlog_application::Clock;
 use pvlog_domain::{
@@ -198,6 +198,7 @@ fn event(
         occurred_at_epoch_millis: START + minutes * 60_000,
         code,
         message: message.map(ToOwned::to_owned),
+        details: DeviceEventDetails::default(),
     }
 }
 
@@ -457,6 +458,123 @@ async fn device_events_are_stored_once(fixture: Fixture) -> Result<(), Box<dyn E
         Err(DeviceEventApiError::NotFound)
     );
     Ok(())
+}
+
+/// A changed setting as an SMA inverter reports it.
+fn parameter_change(event_id: &str, new_value: &str) -> DeviceEventInput {
+    DeviceEventInput {
+        details: DeviceEventDetails {
+            event_type: Some("Event".to_owned()),
+            category: Some("Info".to_owned()),
+            group: Some("Parameter".to_owned()),
+            old_value: Some("230.0 V".to_owned()),
+            new_value: Some(new_value.to_owned()),
+            user_group: Some("Installer".to_owned()),
+        },
+        ..event(
+            ROOF,
+            Some(event_id),
+            0,
+            Some(10_100),
+            Some("Grid voltage setpoint"),
+        )
+    }
+}
+
+async fn event_details_are_kept(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    let system_id = fixture.system().await?;
+    let stored = |stored, unchanged| DeviceEventsAccepted { stored, unchanged };
+    let change = parameter_change("9001", "235.0 V");
+    // Another device may use the same event identifier for another event.
+    let other_device = DeviceEventInput {
+        device_id: GARAGE.to_owned(),
+        ..parameter_change("9001", "240.0 V")
+    };
+    let upload = vec![change.clone(), other_device.clone()];
+    assert_eq!(
+        fixture
+            .events
+            .store(system_id, None, upload.clone())
+            .await
+            .map_err(failed)?,
+        stored(2, 0)
+    );
+    assert_eq!(
+        fixture
+            .events
+            .store(system_id, None, upload)
+            .await
+            .map_err(failed)?,
+        stored(0, 2),
+        "an event is stored once per device and event identifier"
+    );
+
+    // Old and new value read back with everything else the device said.
+    let of_roof = fixture
+        .list(
+            system_id,
+            DeviceEventQuery {
+                device_id: Some(ROOF.to_owned()),
+                ..DeviceEventQuery::default()
+            },
+        )
+        .await?;
+    assert_eq!(of_roof.len(), 1);
+    assert_eq!(of_roof[0].event_id.as_deref(), Some("9001"));
+    assert_eq!(of_roof[0].details, change.details);
+    assert_eq!(of_roof[0].details.old_value.as_deref(), Some("230.0 V"));
+    assert_eq!(of_roof[0].details.new_value.as_deref(), Some("235.0 V"));
+
+    // A detail that differs replaces the stored event instead of adding one.
+    assert_eq!(
+        fixture
+            .events
+            .store(system_id, None, vec![parameter_change("9001", "236.5 V")])
+            .await
+            .map_err(failed)?,
+        stored(1, 0)
+    );
+    let all = fixture.list(system_id, DeviceEventQuery::default()).await?;
+    assert_eq!(all.len(), 2);
+    let new_values: Vec<(&str, Option<&str>)> = all
+        .iter()
+        .map(|event| (event.device_id.as_str(), event.details.new_value.as_deref()))
+        .collect();
+    assert!(new_values.contains(&(ROOF, Some("236.5 V"))));
+    assert!(new_values.contains(&(GARAGE, Some("240.0 V"))));
+
+    // An event without details keeps none.
+    fixture
+        .events
+        .store(
+            system_id,
+            None,
+            vec![event(ROOF, Some("9002"), 1, None, None)],
+        )
+        .await
+        .map_err(failed)?;
+    let plain = fixture
+        .list(system_id, DeviceEventQuery::default())
+        .await?
+        .into_iter()
+        .find(|event| event.event_id.as_deref() == Some("9002"))
+        .ok_or("the plain event is listed")?;
+    assert_eq!(plain.details, DeviceEventDetails::default());
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_keeps_the_details_of_a_device_event() -> Result<(), Box<dyn Error>> {
+    event_details_are_kept(Fixture::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_keeps_the_details_of_a_device_event_when_configured() -> Result<(), Box<dyn Error>>
+{
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    event_details_are_kept(Fixture::postgres(url).await?).await
 }
 
 #[tokio::test]

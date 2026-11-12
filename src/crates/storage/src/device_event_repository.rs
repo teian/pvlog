@@ -17,6 +17,51 @@ use crate::AccountRepositoryError;
 #[cfg(feature = "sqlite")]
 use crate::RoutedSqliteAccount;
 
+/// What a device says about an event beyond its code and message.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct DeviceEventDetails {
+    pub event_type: Option<String>,
+    /// Severity category, such as an error or a warning.
+    pub category: Option<String>,
+    pub group: Option<String>,
+    /// Value a changed setting had before the event.
+    pub old_value: Option<String>,
+    /// Value a changed setting has since the event.
+    pub new_value: Option<String>,
+    /// User group that caused the event, such as an installer.
+    pub user_group: Option<String>,
+}
+
+impl DeviceEventDetails {
+    fn texts(&self) -> [&Option<String>; 6] {
+        [
+            &self.event_type,
+            &self.category,
+            &self.group,
+            &self.old_value,
+            &self.new_value,
+            &self.user_group,
+        ]
+    }
+}
+
+/// Reads the details of an event from a row; both databases use the same column names.
+fn details<'r, R>(row: &'r R) -> DeviceEventDetails
+where
+    R: sqlx::Row,
+    &'r str: sqlx::ColumnIndex<R>,
+    Option<String>: sqlx::Decode<'r, R::Database> + sqlx::Type<R::Database>,
+{
+    DeviceEventDetails {
+        event_type: row.get("event_type"),
+        category: row.get("category"),
+        group: row.get("event_group"),
+        old_value: row.get("old_value"),
+        new_value: row.get("new_value"),
+        user_group: row.get("user_group"),
+    }
+}
+
 /// One event a device reported.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DeviceEventRecord {
@@ -31,6 +76,7 @@ pub struct DeviceEventRecord {
     pub occurred_at: i64,
     pub code: Option<i64>,
     pub message: Option<String>,
+    pub details: DeviceEventDetails,
     pub received_at: i64,
 }
 
@@ -81,6 +127,12 @@ fn validate(event: &DeviceEventRecord) -> Result<(), AccountRepositoryError> {
             .message
             .as_ref()
             .is_some_and(|message| characters(message) > 500)
+        || event
+            .details
+            .texts()
+            .into_iter()
+            .flatten()
+            .any(|text| characters(text) > 500)
     {
         return Err(AccountRepositoryError::InvalidRecord("device event"));
     }
@@ -122,13 +174,23 @@ impl DeviceEventRepository for SqliteDeviceEventRepository {
         for event in events {
             stored += sqlx::query(
                 "INSERT INTO device_events (id,system_id,device_key,event_key,data_source_id,\
-                 occurred_at,code,message,received_at) VALUES (?,?,?,?,?,?,?,?,?) \
+                 occurred_at,code,message,received_at,event_type,category,event_group,\
+                 old_value,new_value,user_group) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) \
                  ON CONFLICT(system_id,device_key,event_key) DO UPDATE SET \
                  occurred_at=excluded.occurred_at,code=excluded.code,message=excluded.message,\
-                 data_source_id=excluded.data_source_id,received_at=excluded.received_at \
+                 data_source_id=excluded.data_source_id,received_at=excluded.received_at,\
+                 event_type=excluded.event_type,category=excluded.category,\
+                 event_group=excluded.event_group,old_value=excluded.old_value,\
+                 new_value=excluded.new_value,user_group=excluded.user_group \
                  WHERE device_events.occurred_at IS NOT excluded.occurred_at \
                  OR device_events.code IS NOT excluded.code \
-                 OR device_events.message IS NOT excluded.message",
+                 OR device_events.message IS NOT excluded.message \
+                 OR device_events.event_type IS NOT excluded.event_type \
+                 OR device_events.category IS NOT excluded.category \
+                 OR device_events.event_group IS NOT excluded.event_group \
+                 OR device_events.old_value IS NOT excluded.old_value \
+                 OR device_events.new_value IS NOT excluded.new_value \
+                 OR device_events.user_group IS NOT excluded.user_group",
             )
             .bind(blob(event.id))
             .bind(blob(event.system_id.as_uuid()))
@@ -139,6 +201,12 @@ impl DeviceEventRepository for SqliteDeviceEventRepository {
             .bind(event.code)
             .bind(event.message.as_deref())
             .bind(event.received_at)
+            .bind(event.details.event_type.as_deref())
+            .bind(event.details.category.as_deref())
+            .bind(event.details.group.as_deref())
+            .bind(event.details.old_value.as_deref())
+            .bind(event.details.new_value.as_deref())
+            .bind(event.details.user_group.as_deref())
             .execute(&mut *transaction)
             .await?
             .rows_affected();
@@ -154,7 +222,8 @@ impl DeviceEventRepository for SqliteDeviceEventRepository {
     ) -> Result<Vec<DeviceEventRecord>, AccountRepositoryError> {
         let mut connection = self.account.acquire().await?;
         sqlx::query(
-            "SELECT id,device_key,event_key,data_source_id,occurred_at,code,message,received_at \
+            "SELECT id,device_key,event_key,data_source_id,occurred_at,code,message,received_at,\
+             event_type,category,event_group,old_value,new_value,user_group \
              FROM device_events WHERE system_id=?1 AND (?2 IS NULL OR device_key=?2) \
              AND occurred_at>=?3 AND occurred_at<?4 \
              ORDER BY occurred_at DESC,id DESC LIMIT ?5",
@@ -186,6 +255,7 @@ impl DeviceEventRepository for SqliteDeviceEventRepository {
                 occurred_at: row.get("occurred_at"),
                 code: row.get("code"),
                 message: row.get("message"),
+                details: details(row),
                 received_at: row.get("received_at"),
             })
         })
@@ -254,14 +324,24 @@ impl DeviceEventRepository for PostgresDeviceEventRepository {
         for event in events {
             stored += sqlx::query(
                 "INSERT INTO telemetry.device_events AS e (account_id,id,system_id,device_key,\
-                 event_key,data_source_id,occurred_at,code,message,received_at) \
-                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) \
+                 event_key,data_source_id,occurred_at,code,message,received_at,event_type,\
+                 category,event_group,old_value,new_value,user_group) \
+                 VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) \
                  ON CONFLICT(account_id,system_id,device_key,event_key) DO UPDATE SET \
                  occurred_at=excluded.occurred_at,code=excluded.code,message=excluded.message,\
-                 data_source_id=excluded.data_source_id,received_at=excluded.received_at \
+                 data_source_id=excluded.data_source_id,received_at=excluded.received_at,\
+                 event_type=excluded.event_type,category=excluded.category,\
+                 event_group=excluded.event_group,old_value=excluded.old_value,\
+                 new_value=excluded.new_value,user_group=excluded.user_group \
                  WHERE e.occurred_at IS DISTINCT FROM excluded.occurred_at \
                  OR e.code IS DISTINCT FROM excluded.code \
-                 OR e.message IS DISTINCT FROM excluded.message",
+                 OR e.message IS DISTINCT FROM excluded.message \
+                 OR e.event_type IS DISTINCT FROM excluded.event_type \
+                 OR e.category IS DISTINCT FROM excluded.category \
+                 OR e.event_group IS DISTINCT FROM excluded.event_group \
+                 OR e.old_value IS DISTINCT FROM excluded.old_value \
+                 OR e.new_value IS DISTINCT FROM excluded.new_value \
+                 OR e.user_group IS DISTINCT FROM excluded.user_group",
             )
             .bind(self.account_id.as_uuid())
             .bind(event.id)
@@ -273,6 +353,12 @@ impl DeviceEventRepository for PostgresDeviceEventRepository {
             .bind(event.code)
             .bind(event.message.as_deref())
             .bind(event.received_at)
+            .bind(event.details.event_type.as_deref())
+            .bind(event.details.category.as_deref())
+            .bind(event.details.group.as_deref())
+            .bind(event.details.old_value.as_deref())
+            .bind(event.details.new_value.as_deref())
+            .bind(event.details.user_group.as_deref())
             .execute(&mut *transaction)
             .await?
             .rows_affected();
@@ -289,7 +375,8 @@ impl DeviceEventRepository for PostgresDeviceEventRepository {
     ) -> Result<Vec<DeviceEventRecord>, AccountRepositoryError> {
         let mut connection = self.connection().await?;
         let rows = sqlx::query(
-            "SELECT id,device_key,event_key,data_source_id,occurred_at,code,message,received_at \
+            "SELECT id,device_key,event_key,data_source_id,occurred_at,code,message,received_at,\
+             event_type,category,event_group,old_value,new_value,user_group \
              FROM telemetry.device_events WHERE account_id=$1 AND system_id=$2 \
              AND ($3::TEXT IS NULL OR device_key=$3) AND occurred_at>=$4 AND occurred_at<$5 \
              ORDER BY occurred_at DESC,id DESC LIMIT $6",
@@ -318,6 +405,7 @@ impl DeviceEventRepository for PostgresDeviceEventRepository {
                     occurred_at: row.get("occurred_at"),
                     code: row.get("code"),
                     message: row.get("message"),
+                    details: details(row),
                     received_at: row.get("received_at"),
                 })
             })

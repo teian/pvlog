@@ -32,6 +32,31 @@ pub const MAXIMUM_DEVICE_EVENT_LIMIT: u32 = 1_000;
 const MAXIMUM_DEVICE_ID_CHARACTERS: usize = 64;
 const MAXIMUM_EVENT_ID_CHARACTERS: usize = 128;
 const MAXIMUM_MESSAGE_CHARACTERS: usize = 500;
+const MAXIMUM_DETAIL_CHARACTERS: usize = 500;
+
+/// What a device says about an event beyond its code and message. An absent
+/// member was not reported.
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeviceEventDetails {
+    /// Kind of event as the device names it.
+    #[serde(rename = "type", default, skip_serializing_if = "Option::is_none")]
+    pub event_type: Option<String>,
+    /// Severity category, such as an error or a warning.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// Value a changed setting had before the event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub old_value: Option<String>,
+    /// Value a changed setting has since the event.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub new_value: Option<String>,
+    /// User group that caused the event, such as an installer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub user_group: Option<String>,
+}
 
 /// One event as a source uploads it.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
@@ -44,6 +69,8 @@ pub struct DeviceEventInput {
     pub occurred_at_epoch_millis: i64,
     pub code: Option<i64>,
     pub message: Option<String>,
+    #[serde(flatten)]
+    pub details: DeviceEventDetails,
 }
 
 #[derive(Deserialize)]
@@ -71,6 +98,8 @@ pub struct DeviceEventResponse {
     pub occurred_at_epoch_millis: i64,
     pub code: Option<i64>,
     pub message: Option<String>,
+    #[serde(flatten)]
+    pub details: DeviceEventDetails,
     pub data_source_id: Option<Uuid>,
     pub received_at_epoch_millis: i64,
 }
@@ -257,10 +286,32 @@ fn validated(events: Vec<DeviceEventInput>) -> Result<Vec<DeviceEventInput>, Dev
             {
                 return Err(DeviceEventApiError::InvalidInput("events.message"));
             }
+            // A blank detail counts as absent, like a blank message.
+            let mut details = event.details;
+            for (text, member) in [
+                (&mut details.event_type, "events.type"),
+                (&mut details.category, "events.category"),
+                (&mut details.group, "events.group"),
+                (&mut details.old_value, "events.oldValue"),
+                (&mut details.new_value, "events.newValue"),
+                (&mut details.user_group, "events.userGroup"),
+            ] {
+                *text = text
+                    .take()
+                    .map(|value| value.trim().to_owned())
+                    .filter(|value| !value.is_empty());
+                if text.as_ref().is_some_and(|value| {
+                    value.chars().count() > MAXIMUM_DETAIL_CHARACTERS
+                        || value.chars().any(char::is_control)
+                }) {
+                    return Err(DeviceEventApiError::InvalidInput(member));
+                }
+            }
             Ok(DeviceEventInput {
                 device_id,
                 event_id,
                 message,
+                details,
                 ..event
             })
         })
