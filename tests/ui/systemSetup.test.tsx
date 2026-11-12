@@ -159,6 +159,25 @@ function installBackend(): Backend {
               ? null
               : reading(backend.firstData === "test"),
         });
+      if (url.endsWith("/discovery-proposals?includeDismissed=true"))
+        return json(
+          backend.firstData === "received"
+            ? [
+                {
+                  id: "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f76",
+                  deviceSerial: "2000123456",
+                  reportedName: null,
+                  model: null,
+                  firmware: null,
+                  state: "open",
+                  trackers: [1, 2],
+                  channelCount: 9,
+                  firstSeenAtEpochMillis: 1,
+                  lastSeenAtEpochMillis: 1,
+                },
+              ]
+            : [],
+        );
       if (url.endsWith("/test-reading") && method === "POST") {
         return json(
           {
@@ -336,6 +355,15 @@ describe("guided system setup", () => {
     expect(screen.getByText(/4,200/)).toBeVisible();
     expect(screen.getByText("smalog")).toBeVisible();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    // The inverter the logger reported is offered right where data arrived.
+    const proposal = await screen.findByRole("group", {
+      name: "Inverter 2000123456",
+    });
+    expect(within(proposal).getByText("DC input 1")).toBeVisible();
+    expect(within(proposal).getByText("DC input 2")).toBeVisible();
+    expect(
+      within(proposal).getByRole("button", { name: "Adopt" }),
+    ).toBeEnabled();
 
     await user.click(screen.getByRole("button", { name: "Open system" }));
     expect(await screen.findByText("system page")).toBeVisible();

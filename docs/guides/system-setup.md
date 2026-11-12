@@ -109,16 +109,18 @@ it can be bookmarked:
   readings it delivered.
 - **Equipment**: inverters and their strings. Once strings exist, their sum
   replaces the installed capacity entered under **General**.
-- **Discovered equipment**: when a data source reports an inverter serial that
-  no inverter of the system has, PVLog proposes the device instead of creating
-  it. **Adopt** creates the inverter with one string per DC input that has
-  delivered power and assigns the device's measurement channels; **Dismiss**
-  keeps the device from being proposed again until the dismissal is reset.
 - **Measurement channels**: the individual values a data source delivers. A
   channel that delivers values but is **Not assigned** can be bound to the
   system, an inverter or a string here. A bound channel is summarized per
   quarter hour, hour, day, month and year at its target; rebinding it moves
   its whole history to the new target.
+  When a data source reports an inverter serial that no inverter of the system
+  has, the device is offered here, and at the end of the setup, as
+  **Discovered equipment** instead of being created. **Adopt** asks for a
+  name and the capacity of each string, creates the inverter with one string
+  per DC input that has delivered power, and assigns the device's measurement
+  channels. **Dismiss** keeps the device from being proposed until you choose
+  **Propose again**.
 - **Tariffs**: **Add tariff** for exported or imported energy.
 - **Sharing**: visibility and the public link. **Create a new link** replaces
   the link; the previous one stops working at once.

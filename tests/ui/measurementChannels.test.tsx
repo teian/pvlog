@@ -82,6 +82,8 @@ function installBackend(permissions: string[]): Backend {
             strings: [{ id: stringId, name: "East" }],
           },
         ]);
+      if (url.endsWith("/discovery-proposals?includeDismissed=true"))
+        return json([]);
       const collection = `/api/v1/systems/${systemId}/channels`;
       if (url === collection) return json(backend.channels);
       if (url === `${collection}/mppt-1` && method === "PUT") {

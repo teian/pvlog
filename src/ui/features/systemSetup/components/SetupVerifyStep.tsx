@@ -1,5 +1,6 @@
 /* eslint-disable max-lines-per-function -- waiting, test and verified states share one polling query */
 import { useSendTestReading, type DataSource } from "@/entities/dataSource";
+import { DiscoveryProposals } from "@/entities/equipmentDiscovery";
 import { useFirstData } from "@/entities/system";
 import { SetupReadingSummary } from "@/features/systemSetup/components/SetupReadingSummary";
 import {
@@ -40,6 +41,7 @@ export function SetupVerifyStep({
           </AlertDescription>
         </Alert>
         <SetupReadingSummary reading={reading} />
+        <DiscoveryProposals readOnly={false} systemId={systemId} />
         <Button className="self-start" onClick={onFinish} type="button">
           {t("setup.verify.openSystem")}
         </Button>

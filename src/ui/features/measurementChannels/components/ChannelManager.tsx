@@ -1,3 +1,4 @@
+import { DiscoveryProposals } from "@/entities/equipmentDiscovery";
 import { ChannelRow } from "@/features/measurementChannels/components/ChannelRow";
 import {
   useBindChannel,
@@ -18,7 +19,7 @@ import {
 } from "@/shared/components";
 import { useTranslation } from "react-i18next";
 
-/** Lists a system's measurement channels and lets them be bound, renamed or retired. @param props - The system and whether its channels may only be viewed. @returns The measurement channels section of the system settings. */
+/** Lists a system's measurement channels and lets them be bound, renamed or retired; devices the channels reveal are offered for adoption first. @param props - The system and whether its channels may only be viewed. @returns The measurement channels section of the system settings. */
 export function ChannelManager({
   systemId,
   readOnly,
@@ -63,6 +64,7 @@ export function ChannelManager({
   );
   return (
     <div className="flex flex-col gap-4">
+      <DiscoveryProposals readOnly={readOnly} systemId={systemId} />
       {unassigned > 0 ? (
         <Alert>
           <AlertTitle>

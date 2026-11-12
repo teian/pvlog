@@ -63,7 +63,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 - [x] 7.3 Implement channel storage, discovery, binding and aggregation for PostgreSQL; verify by running the channel repository contract test against both databases.
 - [x] 7.4 Aggregate channels bound to the system and to inverters according to their aggregation kind and rebuild aggregates on rebinding; verify inverter aggregates and the rebuild with tests.
 - [x] 7.5 Record equipment discovery proposals from reported device identity and reporting DC inputs, and implement adopt and dismiss; verify the unknown-serial, adopt, never-reporting-input and dismiss scenarios with tests.
-- [ ] 7.6 Offer discovery proposals in the verification step and in the Measurement channels section; verify with a component test that adopting creates the inverter and strings and binds their channels.
+- [x] 7.6 Offer discovery proposals in the verification step and in the Measurement channels section; verify with a component test that adopting creates the inverter and strings and binds their channels.
 - [ ] 7.7 Accept and store device events idempotently and list them per system and per inverter; verify that an event uploaded twice is stored once.
 
 ## 8. smalog and SBFspot parity
