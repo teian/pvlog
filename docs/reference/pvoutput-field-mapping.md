@@ -5,7 +5,8 @@ every field of PVOutput's status, output and system services with the PVLog
 field that carries the same information. PVLog does not speak PVOutput's
 upload protocol: a logger sends its data through the PVLog API (see
 [Uploader integration](../guides/uploader-integration.md)), and existing
-history is brought over by an import.
+history is brought over by an import (see
+[Moving history from PVOutput](../guides/pvoutput-migration.md)).
 
 Units differ in places. PVLog uses integer SI sub-units throughout: watts,
 watt-hours, millivolts and thousandths of a degree Celsius. Timestamps are

@@ -10,6 +10,7 @@ const documents = [
   "docs/guides/local-authentication-rbac.md",
   "docs/guides/operator-recovery.md",
   "docs/guides/system-setup.md",
+  "docs/guides/pvoutput-migration.md",
   "docs/guides/uploader-integration.md",
   "docs/guides/ingestion-api.md",
   "docs/guides/smalog-export.md",
@@ -60,12 +61,23 @@ const interfaceTexts = new Set();
   JSON.parse(await readFile("src/ui/shared/lib/i18n/locales/en.json", "utf8")),
 );
 const setupGuide = await readFile("docs/guides/system-setup.md", "utf8");
-const unknownLabels = [...setupGuide.matchAll(/\*\*([^*]+)\*\*/g)]
+const migrationGuide = await readFile(
+  "docs/guides/pvoutput-migration.md",
+  "utf8",
+);
+const unknownLabels = [
+  ...setupGuide.matchAll(/\*\*([^*]+)\*\*/g),
+  // The migration guide's lists name file kinds in bold, not labels.
+  ...migrationGuide
+    .split("## What can be imported")[0]
+    .concat(migrationGuide.split("## Importing in the web interface")[1] ?? "")
+    .matchAll(/\*\*([^*]+)\*\*/g),
+]
   .map((match) => match[1].replace(/\s+/g, " "))
   .filter((label) => !interfaceTexts.has(label));
 if (unknownLabels.length > 0)
   throw new Error(
-    `system-setup.md names labels the interface does not show: ${[...new Set(unknownLabels)].join(", ")}`,
+    `the setup guides name labels the interface does not show: ${[...new Set(unknownLabels)].join(", ")}`,
   );
 
 // The PVOutput mapping has to name every field of PVOutput's status, output

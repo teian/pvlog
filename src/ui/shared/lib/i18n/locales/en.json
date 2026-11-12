@@ -1076,6 +1076,62 @@
       "title": "Delete this data source?",
       "description": "The key of “{{name}}” stops working immediately. Readings it already delivered are kept.",
       "confirm": "Delete data source"
+    },
+    "import": {
+      "title": "Import history: {{name}}",
+      "description": "Upload a status or output export from PVOutput. A dry run shows what the file holds; nothing is stored until you commit the import. Times for which another data source already delivered values stay as they are.",
+      "file": "Export file (CSV)",
+      "dryRun": "Start dry run",
+      "reading": "Reading and checking the file …",
+      "reportTitle": "Dry run result",
+      "ready": "Dry run of “{{file}}”: nothing stored yet.",
+      "committed": "“{{file}}” was imported.",
+      "commit_one": "Commit {{count}} row",
+      "commit_other": "Commit {{count}} rows",
+      "committing": "Committing the import …",
+      "earlier": "Earlier imports",
+      "earlierItem": "{{file}} · {{at}} · {{stored}} stored",
+      "rejectedRows_one": "{{count}} rejected row",
+      "rejectedRows_other": "{{count}} rejected rows",
+      "rejectedRow": "Row {{row}}: {{reason}} (column {{column}})",
+      "kinds": {
+        "status": "Statuses through the day",
+        "output": "Daily output"
+      },
+      "report": {
+        "kind": "Kind",
+        "rows": "Rows",
+        "accepted": "Importable",
+        "rejected": "Rejected",
+        "period": "Period",
+        "periodValue": "{{first}} to {{last}}",
+        "alreadyImported": "Already imported",
+        "otherSources": "Held by another source"
+      },
+      "result": {
+        "stored": "Stored",
+        "alreadyPresent": "Already present",
+        "skipped": "Skipped"
+      },
+      "reasons": {
+        "invalid_date": "invalid date",
+        "invalid_time": "invalid time",
+        "nonexistent_local_time": "time does not exist because the clocks go forward",
+        "duplicate_time": "time occurs twice",
+        "duplicate_date": "date occurs twice",
+        "negative_value": "negative value",
+        "unknown_unit": "unknown unit",
+        "invalid_number": "not a number",
+        "out_of_range": "value out of range",
+        "too_long": "text too long",
+        "invalid_value": "invalid value"
+      },
+      "errors": {
+        "tooLarge": "The file is larger than {{limit}} MiB. Split the history into several files and import them one after another.",
+        "unreadable": "The file is not a readable PVOutput export.",
+        "failed": "The file could not be uploaded. Try again in a moment.",
+        "commit": "The import could not be committed. Try again in a moment."
+      }
     }
   },
   "systemSettings": {

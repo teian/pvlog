@@ -56,7 +56,9 @@ remaining steps can be done from the system's settings at any time.
 
 The key of a data source can upload readings for this one system and nothing
 else. **Connect later** skips the step; the system then shows a data source as
-its next step until one exists. The **Import** profile needs no key.
+its next step until one exists. The **Import** profile needs no key; how
+files exported from PVOutput are imported into it is described in
+[Moving history from PVOutput](pvoutput-migration.md).
 
 How each logger uses the configuration is described in
 [Uploader integration](uploader-integration.md) and

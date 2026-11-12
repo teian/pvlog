@@ -1076,6 +1076,62 @@
       "title": "Diese Datenquelle löschen?",
       "description": "Der Schlüssel von „{{name}}“ funktioniert sofort nicht mehr. Bereits gelieferte Messwerte bleiben erhalten.",
       "confirm": "Datenquelle löschen"
+    },
+    "import": {
+      "title": "Historie importieren: {{name}}",
+      "description": "Lade einen Status- oder Ertragsexport von PVOutput hoch. Ein Probelauf zeigt, was die Datei enthält; gespeichert wird erst, wenn du den Import übernimmst. Zeiten, für die eine andere Datenquelle schon Werte geliefert hat, bleiben unverändert.",
+      "file": "Exportdatei (CSV)",
+      "dryRun": "Probelauf starten",
+      "reading": "Datei wird gelesen und geprüft …",
+      "reportTitle": "Ergebnis des Probelaufs",
+      "ready": "Probelauf für „{{file}}“: noch nichts gespeichert.",
+      "committed": "„{{file}}“ wurde importiert.",
+      "commit_one": "{{count}} Zeile übernehmen",
+      "commit_other": "{{count}} Zeilen übernehmen",
+      "committing": "Import wird übernommen …",
+      "earlier": "Bisherige Importe",
+      "earlierItem": "{{file}} · {{at}} · {{stored}} gespeichert",
+      "rejectedRows_one": "{{count}} abgelehnte Zeile",
+      "rejectedRows_other": "{{count}} abgelehnte Zeilen",
+      "rejectedRow": "Zeile {{row}}: {{reason}} (Spalte {{column}})",
+      "kinds": {
+        "status": "Statuswerte im Tagesverlauf",
+        "output": "Tageserträge"
+      },
+      "report": {
+        "kind": "Art",
+        "rows": "Zeilen",
+        "accepted": "Importierbar",
+        "rejected": "Abgelehnt",
+        "period": "Zeitraum",
+        "periodValue": "{{first}} bis {{last}}",
+        "alreadyImported": "Bereits importiert",
+        "otherSources": "Von anderer Quelle belegt"
+      },
+      "result": {
+        "stored": "Gespeichert",
+        "alreadyPresent": "Schon vorhanden",
+        "skipped": "Übersprungen"
+      },
+      "reasons": {
+        "invalid_date": "ungültiges Datum",
+        "invalid_time": "ungültige Uhrzeit",
+        "nonexistent_local_time": "Uhrzeit gibt es wegen der Zeitumstellung nicht",
+        "duplicate_time": "Uhrzeit kommt doppelt vor",
+        "duplicate_date": "Datum kommt doppelt vor",
+        "negative_value": "negativer Wert",
+        "unknown_unit": "unbekannte Einheit",
+        "invalid_number": "keine Zahl",
+        "out_of_range": "Wert außerhalb des gültigen Bereichs",
+        "too_long": "Text zu lang",
+        "invalid_value": "ungültiger Wert"
+      },
+      "errors": {
+        "tooLarge": "Die Datei ist größer als {{limit}} MiB. Teile die Historie auf mehrere Dateien auf und importiere sie nacheinander.",
+        "unreadable": "Die Datei ist kein lesbarer Export von PVOutput.",
+        "failed": "Die Datei konnte nicht hochgeladen werden. Versuche es gleich noch einmal.",
+        "commit": "Der Import konnte nicht übernommen werden. Versuche es gleich noch einmal."
+      }
     }
   },
   "systemSettings": {

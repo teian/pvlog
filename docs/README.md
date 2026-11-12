@@ -15,6 +15,7 @@ Documentation version: 1.0
 - [PV yield forecasting and performance](guides/pv-yield-forecasting.md)
 - [API and domain reference](reference/api-domain-reference.md)
 - [PVOutput field mapping](reference/pvoutput-field-mapping.md)
+- [Moving history from PVOutput](guides/pvoutput-migration.md)
 - [Telemetry segment format](architecture/telemetry-segment-format.md)
 - [Certified capacity report](operations/capacity-report.md)
 - [Security policy and release review](../SECURITY.md)

@@ -11,6 +11,27 @@ export {
   sendTestReading,
 } from "./dataSourceApi";
 export {
+  commitHistoryImport,
+  fetchHistoryImports,
+  uploadHistoryImport,
+} from "./historyImportApi";
+export {
+  useCommitHistoryImport,
+  useHistoryImports,
+  useUploadHistoryImport,
+} from "./useHistoryImports";
+export {
+  historyImportRejectionSchema,
+  historyImportReportSchema,
+  historyImportSchema,
+  MAXIMUM_IMPORT_FILE_BYTES,
+} from "./historyImport.types";
+export type {
+  HistoryImport,
+  HistoryImportRejection,
+  HistoryImportReport,
+} from "./historyImport.types";
+export {
   useCreateDataSource,
   useDataSources,
   useDeleteDataSource,

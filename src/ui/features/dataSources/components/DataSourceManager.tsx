@@ -12,6 +12,7 @@ import {
 } from "@/entities/dataSource";
 import { DataSourceCreateForm } from "@/features/dataSources/components/DataSourceCreateForm";
 import { DataSourceRow } from "@/features/dataSources/components/DataSourceRow";
+import { HistoryImportPanel } from "@/features/dataSources/components/HistoryImportPanel";
 import {
   Alert,
   AlertDescription,
@@ -127,6 +128,15 @@ export function DataSourceManager({
           </TableBody>
         </Table>
       )}
+      {sources.data
+        .filter((dataSource) => !readOnly && dataSource.profile === "import")
+        .map((dataSource) => (
+          <HistoryImportPanel
+            dataSource={dataSource}
+            key={dataSource.id}
+            systemId={systemId}
+          />
+        ))}
       {failed ? (
         <p className="text-sm text-destructive" role="alert">
           {t("dataSources.errors.actionDescription")}
