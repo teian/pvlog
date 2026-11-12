@@ -833,6 +833,13 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 compose_data_sources(config, target)?,
                 request_authorizer.clone(),
             ))
+            .merge(pvlog_api::daily_summaries_router(
+                Arc::new(pvlog::daily_summaries::StorageDailySummaryApi::new(
+                    target.clone(),
+                    Arc::new(SystemClock),
+                )),
+                request_authorizer.clone(),
+            ))
             .merge(pvlog_api::channels_router(
                 channels,
                 request_authorizer.clone(),

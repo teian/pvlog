@@ -9,6 +9,7 @@ mod api_token;
 mod authorization_boundary;
 mod batch_ingestion;
 mod browser_session;
+mod daily_values;
 mod data_quality;
 mod data_sources;
 mod equipment_catalog;
@@ -68,6 +69,10 @@ pub use batch_ingestion::{
 pub use browser_session::{
     BrowserSession, BrowserSessionError, BrowserSessionPolicy, BrowserSessionRecord,
     BrowserSessionRepository, BrowserSessionService, BrowserSessionUseCases, SessionCookie,
+};
+pub use daily_values::{
+    ComputedDay, DayBasis, DayEnergy, IMPORT_BANDS, MAXIMUM_WEATHER_CONDITION_CHARACTERS,
+    SUFFICIENT_DAILY_COVERAGE_BASIS_POINTS, SuppliedDailySummary, SuppliedDay, effective_day,
 };
 pub use data_quality::{
     DataQualityError, DataQualityIssue, DataQualityKind, DataQualityPolicy, QualitySample,

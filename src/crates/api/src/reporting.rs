@@ -53,6 +53,18 @@ pub struct StatisticsResponse {
     pub last_observation_at_epoch_millis: Option<i64>,
     pub coverage_basis_points: u16,
     pub monthly: Vec<MonthlyProductionResponse>,
+    /// The months summed per local calendar year.
+    pub yearly: Vec<YearlyProductionResponse>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct YearlyProductionResponse {
+    pub year: i32,
+    pub generation_energy_wh: Option<i64>,
+    pub consumption_energy_wh: Option<i64>,
+    /// Days of the year whose value is a summary the source supplied.
+    pub supplied_days: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -62,6 +74,9 @@ pub struct MonthlyProductionResponse {
     pub generation_energy_wh: Option<i64>,
     pub consumption_energy_wh: Option<i64>,
     pub coverage_basis_points: u16,
+    /// Days of the month whose value is a summary the source supplied rather
+    /// than computed from interval readings.
+    pub supplied_days: u32,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

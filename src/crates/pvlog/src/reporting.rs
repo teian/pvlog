@@ -4,8 +4,10 @@ use async_trait::async_trait;
 use pvlog_api::{
     DataState, MonthlyProductionResponse, ReportingApiError, ReportingApiUseCases,
     SeasonProductionResponse, SeasonalResponse, StatisticsResponse, SystemOverviewResponse,
-    WeatherForecastPointResponse, WeatherForecastResponse,
+    WeatherForecastPointResponse, WeatherForecastResponse, YearlyProductionResponse,
 };
+
+use crate::daily_summaries::{ALL_DATES, daily_repositories, daily_values};
 use pvlog_domain::{AccountId, SystemId};
 use pvlog_storage::{DatabaseTarget, SqliteAccountPoolConfig, SqliteAccountPoolRouter};
 use sqlx::Row;
@@ -122,11 +124,14 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .bind(id_blob(system_id)).fetch_optional(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     let rows = sqlx::query("SELECT bucket_start,generation_energy_sum_wh,consumption_energy_sum_wh,coverage_basis_points FROM telemetry_rollups r WHERE system_id=? AND scope_kind='system' AND resolution='month' AND generation=(SELECT MAX(latest.generation) FROM telemetry_rollups latest WHERE latest.system_id=r.system_id AND latest.scope_kind=r.scope_kind AND latest.scope_id=r.scope_id AND latest.resolution=r.resolution AND latest.bucket_start=r.bucket_start) ORDER BY bucket_start")
                         .bind(id_blob(system_id)).fetch_all(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
-                    Ok(statistics_response(
+                    let mut response = statistics_response(
                         system_id,
                         lifetime.as_ref().map(LifetimeValues::from_row),
                         rows.iter().map(MonthlyValues::from_row).collect(),
-                    ))
+                    );
+                    self.include_supplied_days(account_id, system_id, &mut response)
+                        .await?;
+                    Ok(response)
                 }
                 #[cfg(not(feature = "sqlite"))]
                 {
@@ -148,11 +153,14 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .close()
                         .await
                         .map_err(|_| ReportingApiError::Unavailable)?;
-                    Ok(statistics_response(
+                    let mut response = statistics_response(
                         system_id,
                         lifetime.as_ref().map(LifetimeValues::from_row),
                         rows.iter().map(MonthlyValues::from_row).collect(),
-                    ))
+                    );
+                    self.include_supplied_days(account_id, system_id, &mut response)
+                        .await?;
+                    Ok(response)
                 }
                 #[cfg(not(feature = "postgres"))]
                 {
@@ -168,56 +176,19 @@ impl ReportingApiUseCases for StorageReportingApi {
         account_id: AccountId,
         system_id: SystemId,
     ) -> Result<SeasonalResponse, ReportingApiError> {
-        let days = match &self.target {
-            DatabaseTarget::Sqlite {
-                management_path,
-                accounts_dir,
-            } => {
-                #[cfg(feature = "sqlite")]
-                {
-                    let account = sqlite_account(management_path, accounts_dir, account_id).await?;
-                    let mut connection = account
-                        .acquire()
-                        .await
-                        .map_err(|_| ReportingApiError::Unavailable)?;
-                    sqlx::query("SELECT local_date,generation_energy_wh FROM system_daily_summaries d WHERE system_id=? AND generation=(SELECT MAX(latest.generation) FROM system_daily_summaries latest WHERE latest.system_id=d.system_id AND latest.local_date=d.local_date) ORDER BY local_date")
-                        .bind(id_blob(system_id)).fetch_all(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?
-                        .into_iter().map(|row| (row.get::<String, _>("local_date"), row.try_get::<i64, _>("generation_energy_wh").ok())).collect::<Vec<_>>()
-                }
-                #[cfg(not(feature = "sqlite"))]
-                {
-                    let _ = (management_path, accounts_dir, account_id, system_id);
-                    return Err(ReportingApiError::Unavailable);
-                }
-            }
-            DatabaseTarget::Postgres { url } => {
-                #[cfg(feature = "postgres")]
-                {
-                    let mut connection = PgConnection::connect(url)
-                        .await
-                        .map_err(|_| ReportingApiError::Unavailable)?;
-                    let rows = sqlx::query("SELECT local_date::TEXT AS local_date,generation_energy_wh FROM telemetry.daily_summaries d WHERE account_id=$1 AND system_id=$2 AND generation=(SELECT MAX(latest.generation) FROM telemetry.daily_summaries latest WHERE latest.account_id=d.account_id AND latest.system_id=d.system_id AND latest.local_date=d.local_date) ORDER BY local_date")
-                        .bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_all(&mut connection).await.map_err(|_| ReportingApiError::Unavailable)?;
-                    connection
-                        .close()
-                        .await
-                        .map_err(|_| ReportingApiError::Unavailable)?;
-                    rows.into_iter()
-                        .map(|row| {
-                            (
-                                row.get::<String, _>("local_date"),
-                                row.try_get::<i64, _>("generation_energy_wh").ok(),
-                            )
-                        })
-                        .collect::<Vec<_>>()
-                }
-                #[cfg(not(feature = "postgres"))]
-                {
-                    let _ = (url, account_id, system_id);
-                    return Err(ReportingApiError::Unavailable);
-                }
-            }
-        };
+        // Every day that reports a value counts, whether it was computed from
+        // readings or supplied by the source: history imported as daily
+        // summaries belongs to its season like any other day.
+        let repositories = daily_repositories(&self.target, account_id)
+            .await
+            .map_err(|_| ReportingApiError::Unavailable)?;
+        let (from, to) = ALL_DATES;
+        let days = daily_values(repositories.summaries.as_ref(), system_id, from, to)
+            .await
+            .map_err(|_| ReportingApiError::Unavailable)?
+            .into_iter()
+            .map(|day| (day.date, day.energy.generation_energy_wh))
+            .collect::<Vec<_>>();
         Ok(seasonal_response(system_id, &days))
     }
 
@@ -437,6 +408,135 @@ impl MonthlyValues {
     }
 }
 
+impl StorageReportingApi {
+    /// Brings days whose value is a supplied summary into the statistics.
+    ///
+    /// The month rollups and the lifetime summary only know interval readings.
+    /// For each day that reports the source's summary instead, the difference
+    /// to what was computed is added to its month and to the lifetime totals.
+    async fn include_supplied_days(
+        &self,
+        account_id: AccountId,
+        system_id: SystemId,
+        response: &mut StatisticsResponse,
+    ) -> Result<(), ReportingApiError> {
+        let unavailable = |_| ReportingApiError::Unavailable;
+        let repositories = daily_repositories(&self.target, account_id)
+            .await
+            .map_err(unavailable)?;
+        let (from, to) = ALL_DATES;
+        let days = daily_values(repositories.summaries.as_ref(), system_id, from, to)
+            .await
+            .map_err(unavailable)?;
+        let Some(zone) = repositories
+            .configuration
+            .system(system_id)
+            .await
+            .map_err(|_| ReportingApiError::Unavailable)?
+            .and_then(|system| system.timezone.parse::<chrono_tz::Tz>().ok())
+        else {
+            return Ok(());
+        };
+        for day in days.iter().filter(|day| day.basis.is_supplied()) {
+            let Some(month_start) = local_month_start(zone, &day.date) else {
+                continue;
+            };
+            let computed = day.computed.as_ref();
+            let generation = day.energy.generation_energy_wh.map(|value| {
+                value
+                    - computed
+                        .and_then(|c| c.generation_energy_wh)
+                        .unwrap_or_default()
+            });
+            let consumption = day.energy.consumption_energy_wh.map(|value| {
+                value
+                    - computed
+                        .and_then(|c| c.consumption_energy_wh)
+                        .unwrap_or_default()
+            });
+            let index = match response
+                .monthly
+                .binary_search_by_key(&month_start, |month| month.bucket_start_epoch_millis)
+            {
+                Ok(index) => index,
+                Err(index) => {
+                    response.monthly.insert(
+                        index,
+                        MonthlyProductionResponse {
+                            bucket_start_epoch_millis: month_start,
+                            generation_energy_wh: None,
+                            consumption_energy_wh: None,
+                            coverage_basis_points: 0,
+                            supplied_days: 0,
+                        },
+                    );
+                    index
+                }
+            };
+            let month = &mut response.monthly[index];
+            month.supplied_days += 1;
+            add_delta(&mut month.generation_energy_wh, generation);
+            add_delta(&mut month.consumption_energy_wh, consumption);
+            add_delta(&mut response.generation_energy_wh, generation);
+            add_delta(&mut response.consumption_energy_wh, consumption);
+        }
+        response.yearly = yearly(zone, &response.monthly);
+        Ok(())
+    }
+}
+
+/// Adds a difference to a total that is absent until something contributes.
+fn add_delta(total: &mut Option<i64>, delta: Option<i64>) {
+    if let Some(delta) = delta {
+        *total = Some(total.unwrap_or_default() + delta);
+    }
+}
+
+/// First instant of the local month a date belongs to, in epoch milliseconds.
+fn local_month_start(zone: chrono_tz::Tz, date: &str) -> Option<i64> {
+    use chrono::{Datelike as _, TimeZone as _};
+    let date = chrono::NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
+    let first = date.with_day(1)?;
+    zone.from_local_datetime(&first.and_hms_opt(0, 0, 0)?)
+        .earliest()
+        // A local midnight skipped by a DST jump starts one hour later.
+        .or_else(|| {
+            zone.from_local_datetime(&first.and_hms_opt(1, 0, 0)?)
+                .earliest()
+        })
+        .map(|start| start.timestamp_millis())
+}
+
+/// Sums the months of each local calendar year.
+fn yearly(
+    zone: chrono_tz::Tz,
+    monthly: &[MonthlyProductionResponse],
+) -> Vec<YearlyProductionResponse> {
+    use chrono::Datelike as _;
+    let mut years: std::collections::BTreeMap<i32, YearlyProductionResponse> =
+        std::collections::BTreeMap::new();
+    for month in monthly {
+        let Some(year) = chrono::DateTime::from_timestamp_millis(month.bucket_start_epoch_millis)
+            .map(|start| start.with_timezone(&zone).year())
+        else {
+            continue;
+        };
+        let entry = years.entry(year).or_insert(YearlyProductionResponse {
+            year,
+            generation_energy_wh: None,
+            consumption_energy_wh: None,
+            supplied_days: 0,
+        });
+        add_delta(&mut entry.generation_energy_wh, month.generation_energy_wh);
+        add_delta(
+            &mut entry.consumption_energy_wh,
+            month.consumption_energy_wh,
+        );
+        entry.supplied_days += month.supplied_days;
+    }
+    years.into_values().collect()
+}
+
 fn statistics_response(
     system_id: SystemId,
     lifetime: Option<LifetimeValues>,
@@ -474,15 +574,16 @@ fn statistics_response(
                 generation_energy_wh: row.generation_energy_wh,
                 consumption_energy_wh: row.consumption_energy_wh,
                 coverage_basis_points: row.coverage_basis_points,
+                supplied_days: 0,
             })
             .collect(),
+        yearly: Vec::new(),
     }
 }
 
-pub(crate) fn seasonal_response(
-    system_id: SystemId,
-    days: &[(String, Option<i64>)],
-) -> SeasonalResponse {
+/// Groups daily generation by meteorological season; days without a value are not counted.
+#[must_use]
+pub fn seasonal_response(system_id: SystemId, days: &[(String, Option<i64>)]) -> SeasonalResponse {
     let mut totals = [
         ("winter", 0_i64, 0_u64),
         ("spring", 0, 0),

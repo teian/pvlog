@@ -18,6 +18,7 @@ mod account_repository;
 mod administration_repository;
 mod browser_session_repository;
 mod compaction;
+mod daily_summary_repository;
 mod data_source_repository;
 mod external_identity_repository;
 mod integrity_planner;
@@ -62,6 +63,13 @@ pub use administration_repository::{
 };
 pub use compaction::{
     CompactionError, CompactionKey, CompactionPhase, CompactionRepository, CompactionService,
+};
+#[cfg(feature = "postgres")]
+pub use daily_summary_repository::PostgresDailySummaryRepository;
+#[cfg(feature = "sqlite")]
+pub use daily_summary_repository::SqliteDailySummaryRepository;
+pub use daily_summary_repository::{
+    ComputedDailySummaryRecord, DailySummaryRepository, SourceDailySummaryRecord,
 };
 #[cfg(feature = "postgres")]
 pub use data_source_repository::PostgresDataSourceRepository;

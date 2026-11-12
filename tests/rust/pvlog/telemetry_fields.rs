@@ -6,10 +6,17 @@ use std::{
     sync::{Arc, atomic::AtomicI64, atomic::Ordering},
 };
 
-use pvlog::telemetry::StorageTelemetryApi;
+use pvlog::{
+    daily_summaries::StorageDailySummaryApi, reporting::StorageReportingApi,
+    telemetry::StorageTelemetryApi,
+};
+use pvlog_api::{
+    DailySummaryApiError, DailySummaryApiUseCases as _, ReportingApiUseCases as _, SummarySource,
+};
 use pvlog_application::{
-    BatchIngestionMode, Clock, EnergyInput, EnergyUnit, ModernTelemetryError,
-    ModernTelemetryUseCases as _, NormalizeObservation, ObservationSupplements,
+    BatchIngestionMode, Clock, ComputedDay, DayBasis, DayEnergy, EnergyInput, EnergyUnit,
+    ModernTelemetryError, ModernTelemetryUseCases as _, NormalizeObservation,
+    ObservationSupplements, SuppliedDailySummary, SuppliedDay, effective_day,
 };
 use pvlog_domain::{
     AccountId, BatteryFlowState, MembershipId, ObservationSource, ObservationSourceKind,
@@ -33,6 +40,7 @@ struct Fixture {
     telemetry: StorageTelemetryApi,
     stored: Box<dyn TelemetryRepository>,
     system_id: SystemId,
+    account_id: AccountId,
     target: DatabaseTarget,
     management: Arc<dyn ManagementRepository>,
     /// The account database, where aggregates can be read directly.
@@ -75,6 +83,7 @@ impl Fixture {
                 router.route(account_id).await?,
             )),
             system_id,
+            account_id,
             target,
             management,
             sqlite: Some(router.route(account_id).await?),
@@ -100,6 +109,7 @@ impl Fixture {
             telemetry: StorageTelemetryApi::new(target.clone(), management.clone(), clock()),
             stored: Box::new(PostgresTelemetryRepository::new(url.clone(), account_id)),
             system_id,
+            account_id,
             target,
             management,
             sqlite: None,
@@ -532,6 +542,271 @@ async fn postgres_accepts_and_returns_the_reading_message_when_configured()
         return Ok(());
     };
     reading_message(Fixture::postgres(url).await?).await
+}
+
+fn summary(date: &str, generation: i64, complete: bool) -> SuppliedDailySummary {
+    SuppliedDailySummary {
+        date: date.to_owned(),
+        generation_energy_wh: Some(generation),
+        consumption_energy_wh: Some(5_000),
+        complete,
+        ..SuppliedDailySummary::default()
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+async fn daily_summaries(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    let failed = |error: DailySummaryApiError| format!("daily summary failed: {error:?}");
+    let summaries = StorageDailySummaryApi::new(fixture.target.clone(), clock());
+    let reporting = StorageReportingApi::new(fixture.target.clone());
+    let source = || SummarySource {
+        credential_id: None,
+        identity: "user:history".to_owned(),
+    };
+    let (account_id, system_id) = (fixture.account_id, fixture.system_id);
+
+    // A day that has nothing but a supplied summary.
+    let day = summaries
+        .supply(
+            account_id,
+            system_id,
+            source(),
+            SuppliedDailySummary {
+                peak_power_watts: Some(7_400),
+                peak_time: Some("12:35".to_owned()),
+                weather_condition: Some("Fine".to_owned()),
+                temperature_min_millidegrees_celsius: Some(9_000),
+                temperature_max_millidegrees_celsius: Some(24_000),
+                generation_lifetime_wh: Some(18_400_000),
+                export_energy_wh: Some(6_500),
+                import_energy_wh_by_band: [("peak".to_owned(), 1_200), ("offPeak".to_owned(), 800)]
+                    .into(),
+                ..summary("2026-06-10", 12_000, false)
+            },
+        )
+        .await
+        .map_err(failed)?;
+    assert_eq!(day.basis, DayBasis::SuppliedIncomplete);
+    assert_eq!(day.generation_energy_wh, Some(12_000));
+    assert!(day.computed.is_none());
+    let supplied = day.supplied.ok_or("the supplied summary is returned")?;
+    assert_eq!(supplied.peak_time.as_deref(), Some("12:35"));
+    assert_eq!(supplied.weather_condition.as_deref(), Some("Fine"));
+    assert_eq!(supplied.generation_lifetime_wh, Some(18_400_000));
+    assert_eq!(supplied.import_energy_wh_by_band.get("offPeak"), Some(&800));
+
+    let statistics = reporting.statistics(account_id, system_id).await?;
+    assert_eq!(statistics.generation_energy_wh, Some(12_000));
+    assert_eq!(statistics.monthly.len(), 1);
+    assert_eq!(statistics.monthly[0].generation_energy_wh, Some(12_000));
+    assert_eq!(statistics.monthly[0].consumption_energy_wh, Some(5_000));
+    assert_eq!(
+        statistics.monthly[0].supplied_days, 1,
+        "the month says that it rests on a supplied day"
+    );
+    assert_eq!(statistics.yearly.len(), 1);
+    assert_eq!(statistics.yearly[0].year, 2026);
+    assert_eq!(statistics.yearly[0].generation_energy_wh, Some(12_000));
+    assert_eq!(statistics.yearly[0].supplied_days, 1);
+    let seasonal = reporting.seasonal(account_id, system_id).await?;
+    let summer = seasonal
+        .seasons
+        .iter()
+        .find(|season| season.season == "summer")
+        .ok_or("summer is reported")?;
+    assert_eq!(
+        (summer.generation_energy_wh, summer.measured_days),
+        (12_000, 1)
+    );
+
+    // The current day is resubmitted with more energy and finally marked
+    // complete: each submission replaces the one before.
+    for (generation, complete) in [(14_000, false), (15_000, true)] {
+        summaries
+            .supply(
+                account_id,
+                system_id,
+                source(),
+                summary("2026-06-10", generation, complete),
+            )
+            .await
+            .map_err(failed)?;
+    }
+    let days = summaries
+        .list(
+            account_id,
+            system_id,
+            "2026-06-01".to_owned(),
+            "2026-06-30".to_owned(),
+        )
+        .await
+        .map_err(failed)?;
+    assert_eq!(days.len(), 1, "a resubmission creates no duplicate");
+    assert_eq!(days[0].basis, DayBasis::SuppliedComplete);
+    assert_eq!(days[0].generation_energy_wh, Some(15_000));
+    assert_eq!(
+        days[0].supplied.as_ref().and_then(|s| s.peak_power_watts),
+        None,
+        "the replacement is complete, not merged with its predecessor"
+    );
+    let statistics = reporting.statistics(account_id, system_id).await?;
+    assert_eq!(statistics.generation_energy_wh, Some(15_000));
+    assert_eq!(statistics.monthly[0].generation_energy_wh, Some(15_000));
+    assert_eq!(statistics.monthly[0].supplied_days, 1);
+
+    // A second day in another year.
+    summaries
+        .supply(
+            account_id,
+            system_id,
+            source(),
+            summary("2025-12-31", 900, true),
+        )
+        .await
+        .map_err(failed)?;
+    let statistics = reporting.statistics(account_id, system_id).await?;
+    assert_eq!(
+        statistics
+            .yearly
+            .iter()
+            .map(|year| (year.year, year.generation_energy_wh))
+            .collect::<Vec<_>>(),
+        vec![(2025, Some(900)), (2026, Some(15_000))]
+    );
+
+    // Members out of range are rejected by name.
+    for (broken, field) in [
+        (summary("2026-02-30", 1, false), "date"),
+        (summary("2026-06-11", -1, false), "generationEnergyWh"),
+        (
+            SuppliedDailySummary {
+                peak_time: Some("25:00".to_owned()),
+                ..summary("2026-06-11", 1, false)
+            },
+            "peakTime",
+        ),
+        (
+            SuppliedDailySummary {
+                import_energy_wh_by_band: [("night".to_owned(), 1)].into(),
+                ..summary("2026-06-11", 1, false)
+            },
+            "importEnergyWhByBand",
+        ),
+    ] {
+        assert_eq!(
+            summaries
+                .supply(account_id, system_id, source(), broken)
+                .await,
+            Err(DailySummaryApiError::InvalidField(field))
+        );
+    }
+
+    // With interval readings for the same day; aggregates exist on SQLite only.
+    if fixture.sqlite.is_none() {
+        return Ok(());
+    }
+    for step in 0..3 {
+        let mut reading = fixture.reading(step);
+        reading.generation_energy = interval(100);
+        fixture.telemetry.ingest(reading).await?;
+    }
+    pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
+    let today = "2027-01-15";
+    let listed = |days: Vec<pvlog_api::DailyValueResponse>| {
+        days.into_iter()
+            .next()
+            .ok_or("the day with readings is listed")
+    };
+    let computed_only = listed(
+        summaries
+            .list(account_id, system_id, today.to_owned(), today.to_owned())
+            .await
+            .map_err(failed)?,
+    )?;
+    assert_eq!(computed_only.basis, DayBasis::Computed);
+    assert_eq!(computed_only.generation_energy_wh, Some(300));
+
+    // Three readings do not cover the day, so an incomplete summary is used,
+    // and it replaces the computed value in the totals instead of adding to it.
+    let incomplete = summaries
+        .supply(account_id, system_id, source(), summary(today, 500, false))
+        .await
+        .map_err(failed)?;
+    assert_eq!(incomplete.basis, DayBasis::SuppliedIncomplete);
+    assert_eq!(
+        incomplete
+            .computed
+            .as_ref()
+            .and_then(|c| c.generation_energy_wh),
+        Some(300),
+        "the computed value stays retrievable"
+    );
+    let january = |statistics: &pvlog_api::StatisticsResponse| {
+        statistics
+            .yearly
+            .iter()
+            .find(|year| year.year == 2027)
+            .map(|year| (year.generation_energy_wh, year.supplied_days))
+    };
+    let statistics = reporting.statistics(account_id, system_id).await?;
+    assert_eq!(january(&statistics), Some((Some(500), 1)));
+    assert_eq!(statistics.generation_energy_wh, Some(15_000 + 900 + 500));
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_includes_supplied_daily_summaries_in_statistics() -> Result<(), Box<dyn Error>> {
+    daily_summaries(Fixture::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_includes_supplied_daily_summaries_in_statistics_when_configured()
+-> Result<(), Box<dyn Error>> {
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    daily_summaries(Fixture::postgres(url).await?).await
+}
+
+#[test]
+fn a_day_reports_the_complete_summary_then_covered_readings_then_the_incomplete_summary() {
+    let energy = |generation| DayEnergy {
+        generation_energy_wh: Some(generation),
+        ..DayEnergy::default()
+    };
+    let computed = |coverage| {
+        Some(ComputedDay {
+            energy: energy(300),
+            coverage_basis_points: coverage,
+        })
+    };
+    let supplied = |complete| {
+        Some(SuppliedDay {
+            energy: energy(500),
+            complete,
+        })
+    };
+    let basis = |computed, supplied| effective_day(computed, supplied).map(|(_, basis)| basis);
+
+    assert_eq!(
+        basis(computed(10_000), supplied(true)),
+        Some(DayBasis::SuppliedComplete)
+    );
+    assert_eq!(
+        basis(computed(9_000), supplied(false)),
+        Some(DayBasis::Computed),
+        "sufficient coverage beats a summary that may still change"
+    );
+    assert_eq!(
+        basis(computed(2_000), supplied(false)),
+        Some(DayBasis::SuppliedIncomplete)
+    );
+    assert_eq!(basis(computed(2_000), None), Some(DayBasis::Computed));
+    assert_eq!(
+        basis(None, supplied(false)),
+        Some(DayBasis::SuppliedIncomplete)
+    );
+    assert_eq!(basis(None, None), None);
 }
 
 fn clock() -> Arc<dyn Clock> {

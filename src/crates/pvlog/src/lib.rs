@@ -10,6 +10,7 @@ pub mod api_keys;
 pub mod authentication;
 pub mod channels;
 pub mod config;
+pub mod daily_summaries;
 pub mod dashboard;
 pub mod data_sources;
 pub mod embedded_ui;

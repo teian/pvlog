@@ -34,6 +34,7 @@ mod authentication;
 mod authorization;
 mod channels;
 mod connectors;
+mod daily_summaries;
 mod dashboard;
 mod data_sources;
 mod equipment_catalog;
@@ -80,6 +81,10 @@ pub use channels::{
 };
 pub use connectors::{
     ConnectorAdminError, ConnectorAdminResponse, ConnectorAdminUseCases, connectors_router,
+};
+pub use daily_summaries::{
+    ComputedSummaryResponse, DailySummaryApiError, DailySummaryApiUseCases, DailyValueResponse,
+    SummarySource, SuppliedSummaryResponse, daily_summaries_router,
 };
 pub use dashboard::{
     DashboardAlertResponse, DashboardApiError, DashboardApiUseCases, DashboardIngestionResponse,
@@ -128,7 +133,7 @@ pub use readiness::{ReadinessError, ReadinessResponse, ReadinessUseCases, readin
 pub use reporting::{
     MonthlyProductionResponse, ReportingApiError, ReportingApiUseCases, SeasonProductionResponse,
     SeasonalResponse, StatisticsResponse, SystemOverviewResponse, WeatherForecastPointResponse,
-    WeatherForecastResponse, reporting_router,
+    WeatherForecastResponse, YearlyProductionResponse, reporting_router,
 };
 pub use sessions::{
     SessionApiError, SessionBootstrap, SessionBootstrapUseCases, SessionConnector, SessionUser,

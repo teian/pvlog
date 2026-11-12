@@ -1,8 +1,4 @@
-#![allow(dead_code)]
-
-#[path = "../../../src/crates/pvlog/src/reporting.rs"]
-mod reporting;
-
+use pvlog::reporting;
 use pvlog_domain::SystemId;
 
 #[test]
