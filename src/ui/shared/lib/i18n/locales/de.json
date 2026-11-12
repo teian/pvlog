@@ -1059,6 +1059,11 @@
         "description": "Keine deiner Anlagen hat bisher einen Messwert erhalten. Öffne eine Anlage, um eine Datenquelle zu verbinden.",
         "action": "Anlagen öffnen"
       }
+    },
+    "dataState": {
+      "current": "Empfängt Daten",
+      "stale": "Keine aktuellen Daten",
+      "none": "Noch keine Daten"
     }
   },
   "setup": {

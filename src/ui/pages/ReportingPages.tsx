@@ -1,5 +1,9 @@
 /* eslint-disable react/no-multi-comp, max-lines -- Cohesive reporting route family with shared empty, metric, and header renderers. */
-import { NoDataNotice, NoSystemNotice } from "@/entities/system";
+import {
+  DataStateBadge,
+  NoDataNotice,
+  NoSystemNotice,
+} from "@/entities/system";
 import { useSession } from "@/features/auth";
 import {
   SystemSelector,
@@ -14,6 +18,7 @@ import {
   Alert,
   AlertDescription,
   AlertTitle,
+  Badge,
   Button,
   Card,
   CardContent,
@@ -164,12 +169,15 @@ export function SystemsPage() {
                       })}
                     </TableCell>
                     <TableCell>
-                      <span className="inline-flex items-center gap-2 font-medium uppercase text-success">
-                        <span className="size-2 rounded-full bg-success" />
-                        {t(`reporting.lifecycle.${system.lifecycle}`, {
-                          defaultValue: system.lifecycle,
-                        })}
-                      </span>
+                      {system.lifecycle === "active" ? (
+                        <DataStateBadge state={system.dataState} />
+                      ) : (
+                        <Badge variant="outline">
+                          {t(`reporting.lifecycle.${system.lifecycle}`, {
+                            defaultValue: system.lifecycle,
+                          })}
+                        </Badge>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}

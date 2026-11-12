@@ -79,7 +79,15 @@ export function AppSidebar({ onClose, open, systemIds }: AppSidebarProps) {
             {t("nav.allSystems")}
           </NavLink>
           {systemIds.map((id, index) => {
-            const name = overviews[index]?.data?.name;
+            const overview = overviews[index]?.data;
+            const name = overview?.name;
+            // Only an active system that is not delivering is marked; a
+            // working one needs no decoration.
+            const missing =
+              overview?.lifecycle === "active" &&
+              overview.dataState !== "current"
+                ? overview.dataState
+                : null;
             return (
               <NavLink
                 className={({ isActive }) =>
@@ -93,6 +101,17 @@ export function AppSidebar({ onClose, open, systemIds }: AppSidebarProps) {
                 <span className="truncate">
                   {name ?? t("nav.system", { id: id.slice(0, 8) })}
                 </span>
+                {missing ? (
+                  <>
+                    <span
+                      aria-hidden="true"
+                      className="ml-auto size-2 shrink-0 rounded-full bg-warning"
+                    />
+                    <span className="sr-only">
+                      {t(`system.dataState.${missing}`)}
+                    </span>
+                  </>
+                ) : null}
               </NavLink>
             );
           })}

@@ -1,3 +1,4 @@
+export { DataStateBadge } from "./DataStateBadge";
 export { LocationAutocomplete } from "./LocationAutocomplete";
 export { NoDataNotice } from "./NoDataNotice";
 export { NoSystemNotice } from "./NoSystemNotice";

@@ -1059,6 +1059,11 @@
         "description": "None of your systems has received a reading yet. Open a system to connect a data source.",
         "action": "Open systems"
       }
+    },
+    "dataState": {
+      "current": "Receiving data",
+      "stale": "No recent data",
+      "none": "No data yet"
     }
   },
   "setup": {

@@ -7,7 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SetupChecklist } from "@/features/systemSetup";
 import { DashboardPage } from "@/pages/DashboardPage";
-import { StatisticsPage } from "@/pages/ReportingPages";
+import { StatisticsPage, SystemsPage } from "@/pages/ReportingPages";
 import i18n from "@/shared/lib/i18n";
 
 const accountId = "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70";
@@ -306,5 +306,36 @@ describe("setup checklist", () => {
     });
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(screen.queryByText("Finish setting up")).not.toBeInTheDocument();
+  });
+});
+
+describe("system list status", () => {
+  it.each([
+    ["current", "Receiving data"],
+    ["stale", "No recent data"],
+    ["none", "No data yet"],
+  ])("derives the %s status from telemetry", async (dataState, label) => {
+    installBackend({ dataState, permissions: ["system_read"] });
+    renderWithApp(<SystemsPage />);
+
+    const table = within(await screen.findByRole("table"));
+    const row = table.getByRole("link", { name: "Roof" }).closest("tr");
+    expect(within(row as HTMLElement).getByText(label)).toBeVisible();
+    // A lifecycle of "active" says nothing about whether data arrives.
+    expect(
+      within(row as HTMLElement).queryByText("Active"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("marks a system without current data in the navigation only", async () => {
+    installBackend({ dataState: "stale", permissions: ["system_read"] });
+    renderWithApp(<SystemsPage />);
+
+    const navigation = within(
+      screen.getByRole("navigation", { name: "Primary navigation" }),
+    );
+    expect(
+      await navigation.findByRole("link", { name: /Roof\s*No recent data/ }),
+    ).toBeVisible();
   });
 });
