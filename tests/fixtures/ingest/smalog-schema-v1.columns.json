@@ -1,0 +1,88 @@
+{
+  "schemaVersion": 1,
+  "tables": {
+    "inverters": [
+      "inverter_id",
+      "serial_number",
+      "susy_id",
+      "configured_name",
+      "device_name",
+      "model",
+      "firmware_version",
+      "transport",
+      "first_seen_at",
+      "last_seen_at"
+    ],
+    "inverter_measurements": [
+      "measurement_id",
+      "inverter_id",
+      "measured_at",
+      "ac_power_l1_w",
+      "ac_power_l2_w",
+      "ac_power_l3_w",
+      "ac_current_l1_ma",
+      "ac_current_l2_ma",
+      "ac_current_l3_ma",
+      "ac_voltage_l1_mv",
+      "ac_voltage_l2_mv",
+      "ac_voltage_l3_mv",
+      "grid_frequency_mhz",
+      "grid_import_power_w",
+      "grid_export_power_w",
+      "energy_today_wh",
+      "energy_total_wh",
+      "operating_time_s",
+      "feed_in_time_s",
+      "device_status_code",
+      "grid_relay_status_code",
+      "temperature_millicelsius",
+      "bluetooth_signal_permille"
+    ],
+    "mppt_measurements": [
+      "measurement_id",
+      "tracker_number",
+      "dc_power_w",
+      "dc_current_ma",
+      "dc_voltage_mv"
+    ],
+    "battery_measurements": [
+      "measurement_id",
+      "state_of_charge_permille",
+      "voltage_mv",
+      "current_ma",
+      "temperature_millicelsius"
+    ],
+    "inverter_energy_samples": [
+      "inverter_id",
+      "measured_at",
+      "total_energy_wh",
+      "power_w"
+    ],
+    "inverter_daily_yields": [
+      "inverter_id",
+      "yield_date",
+      "total_energy_wh",
+      "daily_energy_wh",
+      "is_complete",
+      "updated_at"
+    ],
+    "inverter_events": [
+      "inverter_id",
+      "device_event_id",
+      "occurred_at",
+      "event_code",
+      "event_type",
+      "category",
+      "event_group",
+      "tag",
+      "old_value",
+      "new_value",
+      "user_group"
+    ],
+    "site_consumption_measurements": [
+      "measured_at",
+      "consumed_energy_wh",
+      "consumed_power_w"
+    ]
+  }
+}

@@ -121,6 +121,8 @@ pub struct IngestSource {
 pub struct IngestDevice {
     pub id: String,
     pub kind: Option<String>,
+    /// Device family identifier; a number is read as its digits.
+    #[serde(default, deserialize_with = "text_or_integer")]
     pub family_id: Option<String>,
     pub configured_name: Option<String>,
     pub reported_name: Option<String>,

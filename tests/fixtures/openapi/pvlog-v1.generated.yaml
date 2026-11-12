@@ -4961,7 +4961,7 @@ components:
           type: array
           maxItems: 64
           description: Identity of the devices the logger reads. The latest identity is kept per device; an inverter whose serial matches takes the reported firmware and model, and a device that matches no inverter becomes a discovery proposal.
-          items: { $ref: "#/components/schemas/ReportedDevice" }
+          items: { $ref: "#/components/schemas/IngestDevice" }
         measurements:
           type: array
           maxItems: 5000
@@ -4999,6 +4999,33 @@ components:
       maxLength: 64
       pattern: "^[A-Za-z0-9_-]+$"
       description: The device as the logger names it; for an inverter its serial number.
+    IngestDevice:
+      type: object
+      additionalProperties: false
+      required: [id]
+      description: What a logger reports about one of its devices. An absent member leaves the value reported before untouched.
+      properties:
+        id: { $ref: "#/components/schemas/IngestDeviceId" }
+        kind: { type: string, maxLength: 120, default: inverter }
+        familyId:
+          oneOf:
+            - { type: string, minLength: 1, maxLength: 120 }
+            - { type: integer, format: int64 }
+          description: Device family identifier, such as SMA's SUSy ID. It may be sent as the number a logger stores.
+        configuredName:
+          type: string
+          maxLength: 120
+          description: Name the operator gave the device in the logger.
+        reportedName:
+          type: string
+          maxLength: 120
+          description: Name the device reports for itself.
+        model: { type: string, maxLength: 120 }
+        firmware: { type: string, maxLength: 120 }
+        transport:
+          type: string
+          maxLength: 120
+          description: How the logger reaches the device, for example bluetooth or ethernet.
     IngestMeasurement:
       type: object
       additionalProperties: false

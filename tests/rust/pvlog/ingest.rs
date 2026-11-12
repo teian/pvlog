@@ -944,6 +944,274 @@ async fn history_arrives_in_bulk(fixture: Fixture) -> Result<(), Box<dyn Error>>
     Ok(())
 }
 
+/// The request smalog's export builds from its schema version 1. Both
+/// repositories test against this one file.
+const CONTRACT_FIXTURE: &str = include_str!("../../fixtures/ingest/smalog-schema-v1.request.json");
+
+#[allow(clippy::too_many_lines)]
+async fn the_contract_fixture_reads_back(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    let body: Value = serde_json::from_str(CONTRACT_FIXTURE)?;
+    let request: IngestRequest = serde_json::from_value(body.clone())?;
+    let response = fixture.send(body.clone()).await?;
+    assert_eq!(
+        counts(&response),
+        [(3, 0), (6, 0), (4, 0), (3, 0)],
+        "every item of the fixture is accepted"
+    );
+    assert_eq!(response.measurements.rejected, Vec::new());
+
+    // Device values: every value the fixture carries reads back unchanged
+    // under its key, and nothing is stored that the fixture does not carry,
+    // so a value a device did not report is missing rather than zero.
+    let channels = pvlog::channels::channel_repository(
+        &fixture.target,
+        fixture.management.as_ref(),
+        fixture.system_id,
+    )
+    .await
+    .ok_or("channel storage is unavailable")?;
+    let registered = channels.channels(fixture.system_id).await?;
+    let stored_at = |at: i64| {
+        let (channels, registered) = (&channels, &registered);
+        async move {
+            let mut stored = std::collections::BTreeMap::new();
+            for channel in registered {
+                if let Some(value) = channels
+                    .channel_values(channel.id, at, at + 1)
+                    .await?
+                    .first()
+                {
+                    stored.insert(channel.channel_key.clone(), value.value);
+                }
+            }
+            Ok::<_, Box<dyn Error>>(stored)
+        }
+    };
+    let mut values = 0;
+    for measurement in &request.measurements {
+        let mut expected = std::collections::BTreeMap::new();
+        for device in &measurement.devices {
+            for (key, reading) in pvlog_application::device_channel_readings(device) {
+                let channel = registered
+                    .iter()
+                    .find(|channel| channel.channel_key == key)
+                    .ok_or_else(|| format!("{key} is not registered"))?;
+                let scale = u8::try_from(channel.scale)?;
+                let value = reading
+                    .value
+                    .and_then(|value| value.at_scale(scale))
+                    .ok_or_else(|| format!("{key} does not fit its channel"))?;
+                expected.insert(key, value);
+            }
+        }
+        values += expected.len();
+        assert_eq!(
+            stored_at(measurement.measured_at * 1_000).await?,
+            expected,
+            "measurement at {}",
+            measurement.measured_at
+        );
+    }
+    assert!(values > 100, "the fixture exercises {values} device values");
+    // Keys carry the unit of the profile; the extra value brings its own.
+    let unit = |key: &str| {
+        registered
+            .iter()
+            .find(|channel| channel.channel_key == key)
+            .map(|channel| channel.unit.as_str())
+    };
+    assert_eq!(unit(&format!("inv.{ROOF}.mppt.3.voltage")), Some("mV"));
+    assert_eq!(unit(&format!("inv.{ROOF}.battery.soc")), Some("‰"));
+    assert_eq!(unit(&format!("inv.{GARAGE}.signal")), Some("‰"));
+    assert_eq!(unit(&format!("inv.{ROOF}.x.dc.isolation")), Some("MΩ"));
+    assert_eq!(
+        unit(&format!("inv.{ROOF}.mppt.2.power")),
+        None,
+        "trackers keep their gap"
+    );
+
+    // System values: site consumption as sent, generation derived from the inverters.
+    let first = fixture.reading(0).await?;
+    assert_eq!(first.consumption_power_watts, Some(420));
+    assert_eq!(first.measurements.consumption_lifetime_wh, Some(8_400_000));
+    assert_eq!(first.generation_power_watts, Some(800 + 790 + 810 + 600));
+    assert_eq!(first.measurements.generation_lifetime_wh, Some(12_000_000));
+    assert_eq!(
+        first.generation_energy_wh,
+        Some(200 + 50),
+        "the archive samples before the first poll give its interval a start"
+    );
+    assert_eq!(first.measurements.battery_state_basis_points, Some(8_150));
+    assert_eq!(first.measurements.grid_export_power_watts, Some(1_900));
+    let second = fixture.reading(1).await?;
+    assert_eq!(second.generation_energy_wh, Some(200 + 50));
+    assert_eq!(second.consumption_energy_wh, Some(36));
+    let third = fixture.reading(2).await?;
+    assert_eq!(third.generation_power_watts, Some(820 + 810 + 830));
+    assert_eq!(
+        third.generation_energy_wh, None,
+        "the garage inverter is silent"
+    );
+    assert_eq!(third.consumption_power_watts, Some(390));
+    assert_eq!(third.measurements.consumption_lifetime_wh, None);
+
+    // Archive samples: each as sent, and those without a live measurement
+    // as readings of their own.
+    let samples = fixture
+        .stored
+        .energy_samples(
+            fixture.system_id,
+            EnergySampleFilter {
+                device_key: None,
+                from: None,
+                to: None,
+                limit: 100,
+            },
+        )
+        .await?;
+    let mut sent: Vec<_> = request
+        .energy_samples
+        .iter()
+        .map(|sample| {
+            (
+                sample.measured_at * 1_000,
+                sample.device_id.clone(),
+                sample.energy_lifetime_wh,
+                sample.power_w,
+            )
+        })
+        .collect();
+    sent.sort();
+    assert_eq!(
+        samples
+            .into_iter()
+            .map(|sample| (
+                sample.measured_at,
+                sample.device_key,
+                sample.energy_lifetime_wh,
+                sample.power_watts
+            ))
+            .collect::<Vec<_>>(),
+        sent
+    );
+    let archived = fixture.reading(-1).await?;
+    assert_eq!(archived.generation_power_watts, Some(2_390 + 595));
+    assert_eq!(archived.generation_energy_wh, Some(200 + 50));
+    assert_eq!(fixture.readings(-2, 3).await?.len(), 5);
+
+    // Daily yields per inverter, with lifetime counter and completeness.
+    let days = StorageDailySummaryApi::new(fixture.target.clone(), clock())
+        .list(
+            fixture.account_id,
+            fixture.system_id,
+            "2027-01-14".to_owned(),
+            "2027-01-15".to_owned(),
+        )
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(
+        days.iter()
+            .map(|day| (day.date.as_str(), day.basis, day.generation_energy_wh))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                "2027-01-14",
+                DayBasis::SuppliedComplete,
+                Some(5_200 + 1_300)
+            ),
+            (
+                "2027-01-15",
+                DayBasis::SuppliedIncomplete,
+                Some(4_600 + 1_550)
+            ),
+        ]
+    );
+    for summary in &request.daily_summaries {
+        let day = days
+            .iter()
+            .find(|day| day.date == summary.date)
+            .ok_or("the day is listed")?;
+        let device = day
+            .supplied_devices
+            .iter()
+            .find(|device| Some(&device.device_id) == summary.device_id.as_ref())
+            .ok_or("the device's yield is listed")?;
+        assert_eq!(device.generation_energy_wh, summary.energy_wh);
+        assert_eq!(device.generation_lifetime_wh, summary.energy_lifetime_wh);
+        assert_eq!(device.complete, summary.complete);
+    }
+
+    // Events with everything the device said about them.
+    let events =
+        StorageDeviceEventApi::new(fixture.target.clone(), fixture.management.clone(), clock())
+            .list(fixture.system_id, DeviceEventQuery::default())
+            .await
+            .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(events.len(), request.events.len());
+    for sent in &request.events {
+        let stored = events
+            .iter()
+            .find(|event| event.device_id == sent.device_id && event.event_id == sent.event_id)
+            .ok_or("the event is listed")?;
+        assert_eq!(stored.occurred_at_epoch_millis, sent.occurred_at * 1_000);
+        assert_eq!(stored.code, sent.code);
+        assert_eq!(stored.message, sent.message);
+        assert_eq!(stored.details.event_type, sent.event_type);
+        assert_eq!(stored.details.category, sent.category);
+        assert_eq!(stored.details.group, sent.group);
+        assert_eq!(stored.details.old_value, sent.old_value);
+        assert_eq!(stored.details.new_value, sent.new_value);
+        assert_eq!(stored.details.user_group, sent.user_group);
+    }
+
+    // Inverter identity.
+    let discovery = pvlog::discovery::discovery_repository(
+        &fixture.target,
+        fixture.management.as_ref(),
+        fixture.system_id,
+    )
+    .await
+    .ok_or("discovery storage is unavailable")?;
+    let reported = discovery.reported_devices(fixture.system_id).await?;
+    assert_eq!(reported.len(), request.devices.len());
+    for (stored, sent) in reported.iter().zip(&request.devices) {
+        let identity = &stored.identity;
+        assert_eq!(identity.device_serial, sent.id);
+        assert_eq!(identity.family_id, sent.family_id);
+        assert_eq!(identity.configured_name, sent.configured_name);
+        assert_eq!(identity.reported_name, sent.reported_name);
+        assert_eq!(identity.model, sent.model);
+        assert_eq!(identity.firmware, sent.firmware);
+        assert_eq!(identity.transport, sent.transport);
+    }
+    assert_eq!(reported[0].identity.family_id.as_deref(), Some("9360"));
+
+    // The cursor a logger continues from, and nothing new on a second run.
+    assert_eq!(
+        response.marks.devices,
+        vec![
+            IngestMark {
+                device_id: Some(ROOF.to_owned()),
+                measured_at: Some(START + 2 * STEP),
+                sample_at: Some(START),
+                summary_date: Some("2027-01-15".to_owned()),
+                event_at: Some(START - 1_800),
+            },
+            IngestMark {
+                device_id: Some(GARAGE.to_owned()),
+                measured_at: Some(START + STEP),
+                sample_at: Some(START),
+                summary_date: Some("2027-01-15".to_owned()),
+                event_at: Some(START - 900),
+            },
+        ]
+    );
+    let again = fixture.send(body).await?;
+    assert_eq!(counts(&again), [(0, 3), (0, 6), (0, 4), (0, 3)]);
+    assert_eq!(fixture.readings(-2, 3).await?.len(), 5);
+    Ok(())
+}
+
 macro_rules! on_both_databases {
     ($($scenario:ident => $sqlite:ident, $postgres:ident;)*) => {$(
         #[tokio::test]
@@ -980,6 +1248,9 @@ on_both_databases! {
     extra_values_become_channels =>
         sqlite_stores_extra_device_values_as_channels,
         postgres_stores_extra_device_values_as_channels_when_configured;
+    the_contract_fixture_reads_back =>
+        sqlite_reads_back_every_value_of_the_contract_fixture,
+        postgres_reads_back_every_value_of_the_contract_fixture_when_configured;
     history_arrives_in_bulk =>
         sqlite_accepts_years_old_history_in_bulk,
         postgres_accepts_years_old_history_in_bulk_when_configured;

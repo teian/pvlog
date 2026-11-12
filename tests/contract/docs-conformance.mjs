@@ -11,6 +11,8 @@ const documents = [
   "docs/guides/operator-recovery.md",
   "docs/guides/system-setup.md",
   "docs/guides/uploader-integration.md",
+  "docs/guides/ingestion-api.md",
+  "docs/guides/smalog-export.md",
   "docs/reference/api-domain-reference.md",
   "docs/reference/pvoutput-field-mapping.md",
   "docs/architecture/telemetry-segment-format.md",
@@ -170,5 +172,64 @@ for (const [, field] of mapping.matchAll(
       `pvoutput-field-mapping.md names ${field}, which the API contract does not define`,
     );
 }
+
+// The smalog mapping has to name every plant column of smalog's schema
+// version 1, and every member it maps a column to has to be a member of the
+// ingestion request in the API contract.
+const smalogMapping = await readFile("docs/guides/smalog-export.md", "utf8");
+const smalogSchema = JSON.parse(
+  await readFile("tests/fixtures/ingest/smalog-schema-v1.columns.json", "utf8"),
+);
+const mappedMembers = new Set();
+for (const [table, columns] of Object.entries(smalogSchema.tables)) {
+  for (const column of columns) {
+    const row = smalogMapping
+      .split("\n")
+      .find((line) => line.startsWith(`| \`${table}.${column}\` `));
+    if (!row)
+      throw new Error(`smalog-export.md: column ${table}.${column} is missing`);
+    const target = row.split("|")[2].trim();
+    if (target === "not sent") continue;
+    for (const [, member] of target.matchAll(/`([^`]+)`/g))
+      mappedMembers.add(member.split(".").at(-1).replace(/\[.*$/, ""));
+  }
+}
+const ingestSchemas = contract.slice(
+  contract.indexOf("\n    IngestRequest:"),
+  contract.indexOf("\n    IngestRejection:"),
+);
+for (const member of mappedMembers) {
+  if (
+    !new RegExp(`\\b${member}:`).test(ingestSchemas) &&
+    !contract.includes(`\n        ${member}:`)
+  )
+    throw new Error(
+      `smalog-export.md maps a column to ${member}, which the ingestion request does not define`,
+    );
+}
+
+// The contract fixture is the request both repositories test against, so it
+// has to be a valid request of the documented schema.
+const { default: Ajv2020 } = await import("ajv/dist/2020.js");
+const { default: addFormats } = await import("ajv-formats");
+const { parse } = await import("yaml");
+const ajv = new Ajv2020({ strict: false, allErrors: true });
+addFormats(ajv);
+const validateIngest = ajv.compile({
+  $ref: "#/components/schemas/IngestRequest",
+  components: parse(contract).components,
+});
+const ingestFixture = JSON.parse(
+  await readFile("tests/fixtures/ingest/smalog-schema-v1.request.json", "utf8"),
+);
+if (!validateIngest(ingestFixture))
+  throw new Error(
+    `smalog-schema-v1.request.json does not match IngestRequest: ${ajv.errorsText(validateIngest.errors)}`,
+  );
+// The schema refuses what the server refuses: a member it does not define.
+const withUnknownMember = structuredClone(ingestFixture);
+withUnknownMember.measurements[0].devices[0].powerWatts = 1;
+if (validateIngest(withUnknownMember))
+  throw new Error("IngestRequest accepts a member it does not define");
 
 console.log(`Documentation conformance: ${documents.length} documents`);

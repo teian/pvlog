@@ -8,6 +8,8 @@ Documentation version: 1.0
 - [Operator and recovery guide](guides/operator-recovery.md)
 - [Setting up a system](guides/system-setup.md)
 - [Uploader integration and coverage](guides/uploader-integration.md)
+- [Ingestion API](guides/ingestion-api.md)
+- [smalog export and column mapping](guides/smalog-export.md)
 - [SBFspot push service](guides/sbfspot-push-service.md)
 - [Equipment catalog and custom equipment](guides/equipment-catalog.md)
 - [PV yield forecasting and performance](guides/pv-yield-forecasting.md)

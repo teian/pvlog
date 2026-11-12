@@ -1,0 +1,373 @@
+{
+  "schemaVersion": 1,
+  "source": {
+    "name": "smalog",
+    "version": "0.3.0"
+  },
+  "devices": [
+    {
+      "id": "2000123456",
+      "kind": "inverter",
+      "familyId": 9360,
+      "configuredName": "Dach",
+      "reportedName": "SN: 2000123456",
+      "model": "STP 6.0-3SE-40",
+      "firmware": "3.10.18.R",
+      "transport": "ethernet"
+    },
+    {
+      "id": "3000654321",
+      "kind": "inverter",
+      "familyId": 9303,
+      "reportedName": "SN: 3000654321",
+      "model": "SB 1.5-1VL-40",
+      "firmware": "2.4.6.R",
+      "transport": "bluetooth"
+    }
+  ],
+  "measurements": [
+    {
+      "measuredAt": 1800000000,
+      "system": {
+        "consumptionPowerW": 420,
+        "consumptionLifetimeWh": 8400000
+      },
+      "devices": [
+        {
+          "id": "2000123456",
+          "ac": [
+            {
+              "phase": 1,
+              "powerW": 800,
+              "currentMa": 3478,
+              "voltageMv": 230100
+            },
+            {
+              "phase": 2,
+              "powerW": 790,
+              "currentMa": 3434,
+              "voltageMv": 229900
+            },
+            {
+              "phase": 3,
+              "powerW": 810,
+              "currentMa": 3521,
+              "voltageMv": 230400
+            }
+          ],
+          "gridFrequencyMhz": 49980,
+          "gridImportPowerW": 0,
+          "gridExportPowerW": 1900,
+          "energyTodayWh": 4200,
+          "energyLifetimeWh": 10000000,
+          "operatingTimeS": 86400000,
+          "feedInTimeS": 80000000,
+          "statusCode": 307,
+          "gridRelayStatusCode": 51,
+          "temperatureMillicelsius": 41500,
+          "trackers": [
+            {
+              "number": 1,
+              "powerW": 1300,
+              "currentMa": 3400,
+              "voltageMv": 384120
+            },
+            {
+              "number": 3,
+              "powerW": 1150,
+              "currentMa": 3050,
+              "voltageMv": 377000
+            }
+          ],
+          "battery": {
+            "stateOfChargePermille": 815,
+            "voltageMv": 51200,
+            "currentMa": -4300,
+            "temperatureMillicelsius": 24000
+          },
+          "extra": {
+            "dc.isolation": {
+              "value": 1.25,
+              "unit": "MΩ"
+            }
+          }
+        },
+        {
+          "id": "3000654321",
+          "ac": [
+            {
+              "phase": 1,
+              "powerW": 600,
+              "currentMa": 2609,
+              "voltageMv": 230000
+            }
+          ],
+          "gridFrequencyMhz": 49981,
+          "energyTodayWh": 1500,
+          "energyLifetimeWh": 2000000,
+          "operatingTimeS": 40000000,
+          "feedInTimeS": 38000000,
+          "statusCode": 307,
+          "gridRelayStatusCode": 51,
+          "signalPermille": 730,
+          "trackers": [
+            {
+              "number": 1,
+              "powerW": 640,
+              "currentMa": 1700,
+              "voltageMv": 376500
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "measuredAt": 1800000300,
+      "system": {
+        "consumptionPowerW": 455,
+        "consumptionLifetimeWh": 8400036
+      },
+      "devices": [
+        {
+          "id": "2000123456",
+          "ac": [
+            {
+              "phase": 1,
+              "powerW": 810,
+              "currentMa": 3479,
+              "voltageMv": 230100
+            },
+            {
+              "phase": 2,
+              "powerW": 800,
+              "currentMa": 3435,
+              "voltageMv": 229900
+            },
+            {
+              "phase": 3,
+              "powerW": 820,
+              "currentMa": 3522,
+              "voltageMv": 230400
+            }
+          ],
+          "gridFrequencyMhz": 49981,
+          "gridImportPowerW": 0,
+          "gridExportPowerW": 1920,
+          "energyTodayWh": 4400,
+          "energyLifetimeWh": 10000200,
+          "operatingTimeS": 86400300,
+          "feedInTimeS": 80000300,
+          "statusCode": 307,
+          "gridRelayStatusCode": 51,
+          "temperatureMillicelsius": 41750,
+          "trackers": [
+            {
+              "number": 1,
+              "powerW": 1315,
+              "currentMa": 3401,
+              "voltageMv": 384120
+            },
+            {
+              "number": 3,
+              "powerW": 1165,
+              "voltageMv": 377000
+            }
+          ],
+          "battery": {
+            "stateOfChargePermille": 810,
+            "voltageMv": 51200,
+            "currentMa": -4200,
+            "temperatureMillicelsius": 24000
+          }
+        },
+        {
+          "id": "3000654321",
+          "ac": [
+            {
+              "phase": 1,
+              "powerW": 605,
+              "currentMa": 2610,
+              "voltageMv": 230000
+            }
+          ],
+          "gridFrequencyMhz": 49981,
+          "energyTodayWh": 1550,
+          "energyLifetimeWh": 2000050,
+          "operatingTimeS": 40000300,
+          "feedInTimeS": 38000300,
+          "statusCode": 307,
+          "gridRelayStatusCode": 51,
+          "signalPermille": 720,
+          "trackers": [
+            {
+              "number": 1,
+              "powerW": 645,
+              "currentMa": 1701,
+              "voltageMv": 376500
+            }
+          ],
+          "temperatureMillicelsius": 35100
+        }
+      ]
+    },
+    {
+      "measuredAt": 1800000600,
+      "system": {
+        "consumptionPowerW": 390
+      },
+      "devices": [
+        {
+          "id": "2000123456",
+          "ac": [
+            {
+              "phase": 1,
+              "powerW": 820,
+              "currentMa": 3480,
+              "voltageMv": 230100
+            },
+            {
+              "phase": 2,
+              "powerW": 810,
+              "currentMa": 3436,
+              "voltageMv": 229900
+            },
+            {
+              "phase": 3,
+              "powerW": 830,
+              "currentMa": 3523,
+              "voltageMv": 230400
+            }
+          ],
+          "gridFrequencyMhz": 49982,
+          "gridImportPowerW": 0,
+          "gridExportPowerW": 1940,
+          "energyTodayWh": 4600,
+          "energyLifetimeWh": 10000400,
+          "operatingTimeS": 86400600,
+          "feedInTimeS": 80000600,
+          "statusCode": 307,
+          "gridRelayStatusCode": 51,
+          "temperatureMillicelsius": 42000,
+          "trackers": [
+            {
+              "number": 1,
+              "powerW": 1330,
+              "currentMa": 3402,
+              "voltageMv": 384120
+            },
+            {
+              "number": 3,
+              "powerW": 1180,
+              "currentMa": 3052,
+              "voltageMv": 377000
+            }
+          ],
+          "battery": {
+            "stateOfChargePermille": 805,
+            "voltageMv": 51200,
+            "currentMa": -4100,
+            "temperatureMillicelsius": 24000
+          }
+        }
+      ]
+    }
+  ],
+  "energySamples": [
+    {
+      "deviceId": "2000123456",
+      "measuredAt": 1799999400,
+      "energyLifetimeWh": 9999600,
+      "powerW": 2380
+    },
+    {
+      "deviceId": "3000654321",
+      "measuredAt": 1799999400,
+      "energyLifetimeWh": 1999900,
+      "powerW": 590
+    },
+    {
+      "deviceId": "2000123456",
+      "measuredAt": 1799999700,
+      "energyLifetimeWh": 9999800,
+      "powerW": 2390
+    },
+    {
+      "deviceId": "3000654321",
+      "measuredAt": 1799999700,
+      "energyLifetimeWh": 1999950,
+      "powerW": 595
+    },
+    {
+      "deviceId": "2000123456",
+      "measuredAt": 1800000000,
+      "energyLifetimeWh": 10000000,
+      "powerW": 2400
+    },
+    {
+      "deviceId": "3000654321",
+      "measuredAt": 1800000000,
+      "energyLifetimeWh": 2000000
+    }
+  ],
+  "dailySummaries": [
+    {
+      "deviceId": "2000123456",
+      "date": "2027-01-14",
+      "energyWh": 5200,
+      "energyLifetimeWh": 9995800,
+      "complete": true
+    },
+    {
+      "deviceId": "3000654321",
+      "date": "2027-01-14",
+      "energyWh": 1300,
+      "energyLifetimeWh": 1998500,
+      "complete": true
+    },
+    {
+      "deviceId": "2000123456",
+      "date": "2027-01-15",
+      "energyWh": 4600,
+      "energyLifetimeWh": 10000400,
+      "complete": false
+    },
+    {
+      "deviceId": "3000654321",
+      "date": "2027-01-15",
+      "energyWh": 1550,
+      "energyLifetimeWh": 2000050,
+      "complete": false
+    }
+  ],
+  "events": [
+    {
+      "deviceId": "2000123456",
+      "eventId": 8812,
+      "occurredAt": 1799996400,
+      "code": 10100,
+      "type": "Event",
+      "category": "Info",
+      "group": "Parameter",
+      "message": "Grid voltage setpoint",
+      "oldValue": "230.0 V",
+      "newValue": "235.0 V",
+      "userGroup": "Installer"
+    },
+    {
+      "deviceId": "2000123456",
+      "eventId": 8813,
+      "occurredAt": 1799998200,
+      "code": 3501,
+      "type": "Event",
+      "category": "Error",
+      "group": "Insulation",
+      "message": "Insulation failure"
+    },
+    {
+      "deviceId": "3000654321",
+      "eventId": 17,
+      "occurredAt": 1799999100,
+      "code": 104
+    }
+  ]
+}
