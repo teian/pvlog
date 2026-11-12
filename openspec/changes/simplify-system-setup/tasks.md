@@ -79,6 +79,9 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 - [x] 8.9 Make `sbfspot-push` read `SpotData`, `Inverters` and `EventData` per serial and send the shared keys while keeping system totals in the first-class fields; verify with the fixture database that two serials produce per-inverter and per-tracker values whose sum equals the system totals and that a second run uploads no duplicate event.
 - [x] 8.10 Detect absent optional SBFspot tables and a replaced inverter, report unavailable groups, and derive no energy across a serial change; verify both scenarios with fixture tests.
 - [x] 8.11 Document SBFspot backfill, the SBFspot column mapping and the move from SBFspot to smalog in the guides; verify `test:docs` passes and that the uploader runs in dry-run mode with a generated configuration.
+- [x] 8.12 List the stored archive energy samples of a system by device and time range for readers of its telemetry; verify with an API test of the scope, limit and range checks and a service test on both databases that lists the samples oldest first.
+- [ ] 8.13 Re-derive the interval energy of stored readings that follow or lie between the moments of a request, so that history delivered after live readings neither leaves the first live reading without energy nor counts the energy of a gap twice, while energy the logger stated is never replaced; verify the seam and the interleaved case with tests on both databases.
+- [ ] 8.14 Show an inverter's reported firmware with its change time and label device and grid-relay status codes from the source profile in the user interface; verify with component tests.
 
 ## 9. History import
 

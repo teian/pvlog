@@ -4,6 +4,9 @@
 //! changed setting. An event is identified by its device and by the source's
 //! event identifier, or by its time and code when the source has none, so
 //! uploading it again stores nothing new.
+//!
+//! The archive energy samples a logger delivered through the ingestion API
+//! are read here as well, since they are kept per device like its events.
 
 use axum::{
     Extension, Json, Router,
@@ -28,6 +31,10 @@ pub const MAXIMUM_DEVICE_EVENTS_PER_REQUEST: usize = 1_000;
 pub const DEFAULT_DEVICE_EVENT_LIMIT: u32 = 100;
 /// Most events one listing returns.
 pub const MAXIMUM_DEVICE_EVENT_LIMIT: u32 = 1_000;
+/// Energy samples returned when a listing names no limit.
+pub const DEFAULT_ENERGY_SAMPLE_LIMIT: u32 = 1_000;
+/// Most energy samples one listing returns.
+pub const MAXIMUM_ENERGY_SAMPLE_LIMIT: u32 = 10_000;
 
 const MAXIMUM_DEVICE_ID_CHARACTERS: usize = 64;
 const MAXIMUM_EVENT_ID_CHARACTERS: usize = 128;
@@ -118,6 +125,21 @@ pub struct DeviceEventQuery {
     pub limit: Option<u32>,
 }
 
+/// One stored archive energy sample of a device.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EnergySampleResponse {
+    /// The device as the source names it; for an inverter its serial.
+    pub device_id: String,
+    pub measured_at_epoch_millis: i64,
+    /// The device's lifetime energy counter; absent when the sample has none.
+    pub energy_lifetime_wh: Option<i64>,
+    /// Mean power of the sample interval; absent when the sample has none.
+    pub power_watts: Option<i64>,
+    pub data_source_id: Option<Uuid>,
+    pub received_at_epoch_millis: i64,
+}
+
 #[async_trait::async_trait]
 pub trait DeviceEventApiUseCases: Send + Sync {
     /// Stores uploaded events, attributing them to the data source of the credential.
@@ -141,6 +163,12 @@ pub trait DeviceEventApiUseCases: Send + Sync {
         inverter_id: Uuid,
         query: DeviceEventQuery,
     ) -> Result<Vec<DeviceEventResponse>, DeviceEventApiError>;
+    /// Lists the archive energy samples of a system, oldest first.
+    async fn list_energy_samples(
+        &self,
+        system_id: SystemId,
+        query: DeviceEventQuery,
+    ) -> Result<Vec<EnergySampleResponse>, DeviceEventApiError>;
 }
 
 #[derive(Clone)]
@@ -162,6 +190,10 @@ pub fn device_events_router(
         .route(
             "/api/v1/systems/{system_id}/inverters/{inverter_id}/device-events",
             get(list_for_inverter),
+        )
+        .route(
+            "/api/v1/systems/{system_id}/energy-samples",
+            get(list_energy_samples),
         )
         .with_state(DeviceEventState {
             service,
@@ -245,6 +277,30 @@ async fn list_for_inverter(
     ))
 }
 
+/// Handles the energy sample listing of a system after a read authorization check.
+async fn list_energy_samples(
+    State(state): State<DeviceEventState>,
+    principal: Option<Extension<RequestPrincipal>>,
+    Path(system_id): Path<SystemId>,
+    Query(query): Query<DeviceEventQuery>,
+) -> Result<Json<Vec<EnergySampleResponse>>, DeviceEventApiError> {
+    authorize_read(
+        &state,
+        principal,
+        system_id,
+        "telemetry.energy_samples.list",
+    )
+    .await?;
+    let query = bounded_by(
+        query,
+        DEFAULT_ENERGY_SAMPLE_LIMIT,
+        MAXIMUM_ENERGY_SAMPLE_LIMIT,
+    )?;
+    Ok(Json(
+        state.service.list_energy_samples(system_id, query).await?,
+    ))
+}
+
 /// Checks an upload and trims what it carries. A blank message or event
 /// identifier counts as absent.
 fn validated(events: Vec<DeviceEventInput>) -> Result<Vec<DeviceEventInput>, DeviceEventApiError> {
@@ -320,8 +376,21 @@ fn validated(events: Vec<DeviceEventInput>) -> Result<Vec<DeviceEventInput>, Dev
 
 /// Applies the default limit and refuses a limit or range that cannot be served.
 fn bounded(query: DeviceEventQuery) -> Result<DeviceEventQuery, DeviceEventApiError> {
-    let limit = query.limit.unwrap_or(DEFAULT_DEVICE_EVENT_LIMIT);
-    if limit == 0 || limit > MAXIMUM_DEVICE_EVENT_LIMIT {
+    bounded_by(
+        query,
+        DEFAULT_DEVICE_EVENT_LIMIT,
+        MAXIMUM_DEVICE_EVENT_LIMIT,
+    )
+}
+
+/// Applies a default limit and refuses a limit above `maximum` or an empty range.
+fn bounded_by(
+    query: DeviceEventQuery,
+    default: u32,
+    maximum: u32,
+) -> Result<DeviceEventQuery, DeviceEventApiError> {
+    let limit = query.limit.unwrap_or(default);
+    if limit == 0 || limit > maximum {
         return Err(DeviceEventApiError::InvalidInput("limit"));
     }
     if query

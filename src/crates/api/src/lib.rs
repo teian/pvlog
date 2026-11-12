@@ -100,9 +100,10 @@ pub use data_sources::{
     data_sources_router,
 };
 pub use device_events::{
-    DEFAULT_DEVICE_EVENT_LIMIT, DeviceEventApiError, DeviceEventApiUseCases, DeviceEventDetails,
-    DeviceEventInput, DeviceEventQuery, DeviceEventResponse, DeviceEventsAccepted,
-    MAXIMUM_DEVICE_EVENT_LIMIT, MAXIMUM_DEVICE_EVENTS_PER_REQUEST, device_events_router,
+    DEFAULT_DEVICE_EVENT_LIMIT, DEFAULT_ENERGY_SAMPLE_LIMIT, DeviceEventApiError,
+    DeviceEventApiUseCases, DeviceEventDetails, DeviceEventInput, DeviceEventQuery,
+    DeviceEventResponse, DeviceEventsAccepted, EnergySampleResponse, MAXIMUM_DEVICE_EVENT_LIMIT,
+    MAXIMUM_DEVICE_EVENTS_PER_REQUEST, MAXIMUM_ENERGY_SAMPLE_LIMIT, device_events_router,
 };
 pub use discovery::{
     AdoptProposalInput, AdoptedEquipmentResponse, AdoptedStringInput, AdoptedStringResponse,

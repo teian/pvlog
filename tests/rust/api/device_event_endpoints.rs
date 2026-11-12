@@ -16,7 +16,8 @@ use axum::{
 use pvlog_api::{
     AuthorizedRequest, DeviceEventApiError, DeviceEventApiUseCases, DeviceEventDetails,
     DeviceEventInput, DeviceEventQuery, DeviceEventResponse, DeviceEventsAccepted,
-    ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal, device_events_router,
+    EnergySampleResponse, ModernRequestAuthorizer, RequestAuthorizationError, RequestPrincipal,
+    device_events_router,
 };
 use pvlog_domain::{
     AccountId, ApiCredentialId, ApiScope, Permission, PrincipalId, SystemId, UserId,
@@ -29,6 +30,7 @@ use uuid::Uuid;
 enum Call {
     Store(Option<ApiCredentialId>, Vec<DeviceEventInput>),
     List(Option<Uuid>, DeviceEventQuery),
+    Samples(DeviceEventQuery),
 }
 
 type Calls = Arc<Mutex<Vec<Call>>>;
@@ -281,6 +283,73 @@ async fn events_are_listed_per_system_and_per_inverter() -> Result<(), Box<dyn E
     Ok(())
 }
 
+#[tokio::test]
+async fn energy_samples_are_listed_for_readers() -> Result<(), Box<dyn Error>> {
+    let system = SystemId::new();
+    let calls = Calls::default();
+    let uri = format!("/api/v1/systems/{system}/energy-samples");
+    let reader = || api_key(ApiScope::TelemetryRead, None).1;
+
+    let (status, body) = send(
+        app(reader(), &calls),
+        Method::GET,
+        format!("{uri}?deviceId=2000123456&from=10&to=20&limit=5"),
+        None,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body[0]["deviceId"], "2000123456");
+    assert_eq!(body[0]["measuredAtEpochMillis"], 15);
+    assert_eq!(body[0]["energyLifetimeWh"], 1_234_567);
+    // A value the sample does not carry is null, never zero.
+    assert!(body[0]["powerWatts"].is_null());
+
+    let (status, _) = send(app(reader(), &calls), Method::GET, uri.clone(), None).await?;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        calls.lock().map_err(|_| "poisoned")?.clone(),
+        vec![
+            Call::Samples(DeviceEventQuery {
+                device_id: Some("2000123456".to_owned()),
+                from: Some(10),
+                to: Some(20),
+                limit: Some(5),
+            }),
+            // Without a limit the default of the samples applies.
+            Call::Samples(DeviceEventQuery {
+                limit: Some(1_000),
+                ..DeviceEventQuery::default()
+            }),
+        ]
+    );
+
+    for (query, field) in [
+        ("limit=0", "limit"),
+        ("limit=10001", "limit"),
+        ("from=20&to=10", "to"),
+    ] {
+        let (status, body) = send(
+            app(reader(), &calls),
+            Method::GET,
+            format!("{uri}?{query}"),
+            None,
+        )
+        .await?;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{query}");
+        assert_eq!(body["detail"], field);
+    }
+    let (status, _) = send(
+        app(api_key(ApiScope::TelemetryWrite, None).1, &calls),
+        Method::GET,
+        uri,
+        None,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::FORBIDDEN, "a write key cannot list");
+    assert_eq!(calls.lock().map_err(|_| "poisoned")?.len(), 2);
+    Ok(())
+}
+
 struct Authorizer;
 
 #[async_trait]
@@ -386,5 +455,21 @@ impl DeviceEventApiUseCases for Stub {
     ) -> Result<Vec<DeviceEventResponse>, DeviceEventApiError> {
         self.record(Call::List(Some(inverter_id), query))?;
         Ok(Vec::new())
+    }
+
+    async fn list_energy_samples(
+        &self,
+        _system_id: SystemId,
+        query: DeviceEventQuery,
+    ) -> Result<Vec<EnergySampleResponse>, DeviceEventApiError> {
+        self.record(Call::Samples(query))?;
+        Ok(vec![EnergySampleResponse {
+            device_id: "2000123456".to_owned(),
+            measured_at_epoch_millis: 15,
+            energy_lifetime_wh: Some(1_234_567),
+            power_watts: None,
+            data_source_id: None,
+            received_at_epoch_millis: 16,
+        }])
     }
 }

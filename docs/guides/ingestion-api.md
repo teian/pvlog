@@ -119,6 +119,11 @@ measurement, the samples of that time supply the system's power and interval
 energy. A measurement that arrives later for the same time replaces what the
 samples supplied; samples never replace a measurement.
 
+The stored samples are listed, oldest first, by
+`GET /api/v1/systems/{id}/energy-samples` for whoever may read the system's
+telemetry, optionally narrowed with `deviceId`, `from` and `to` in epoch
+milliseconds and `limit` (at most 10 000).
+
 ## Sending again is safe
 
 Items are identified by what they describe, not by a key the client invents:

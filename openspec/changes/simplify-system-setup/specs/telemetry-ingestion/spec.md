@@ -230,7 +230,7 @@ The system SHALL accept and store every plant value of smalog's canonical schema
 #### Scenario: Archive sample without live measurement
 
 - **WHEN** an archive energy sample exists for a time at which no live measurement was stored
-- **THEN** the sample's lifetime energy and power are stored for that inverter and contribute to derived interval energy
+- **THEN** the sample's lifetime energy and power are stored for that inverter, contribute to derived interval energy and are listed for that inverter to readers of the system's telemetry
 
 ### Requirement: SBFspot data parity
 

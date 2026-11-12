@@ -662,32 +662,53 @@ async fn archive_samples_fill_gaps(fixture: Fixture) -> Result<(), Box<dyn Error
     let response = fixture.send(body.clone()).await?;
     assert_eq!(counts(&response)[..2], [(2, 0), (5, 0)]);
 
-    // The samples are stored for their inverter as they were sent.
-    let samples = fixture
-        .stored
-        .energy_samples(
-            fixture.system_id,
-            EnergySampleFilter {
-                device_key: Some(GARAGE),
-                from: None,
-                to: None,
-                limit: 100,
-            },
-        )
-        .await?;
+    // The samples are stored for their inverter as they were sent and are
+    // listed, oldest first, to whoever may read the system's telemetry.
+    let samples =
+        StorageDeviceEventApi::new(fixture.target.clone(), fixture.management.clone(), clock())
+            .list_energy_samples(
+                fixture.system_id,
+                DeviceEventQuery {
+                    device_id: Some(GARAGE.to_owned()),
+                    ..DeviceEventQuery::default()
+                },
+            )
+            .await
+            .map_err(|error| format!("{error:?}"))?;
     assert_eq!(
         samples
             .iter()
             .map(|sample| (
-                sample.measured_at,
+                sample.device_id.as_str(),
+                sample.measured_at_epoch_millis,
                 sample.energy_lifetime_wh,
                 sample.power_watts
             ))
             .collect::<Vec<_>>(),
         vec![
-            ((START + STEP) * 1_000, Some(2_040), Some(480)),
-            ((START + 2 * STEP) * 1_000, Some(2_080), Some(470)),
+            (GARAGE, (START + STEP) * 1_000, Some(2_040), Some(480)),
+            (GARAGE, (START + 2 * STEP) * 1_000, Some(2_080), Some(470)),
         ]
+    );
+    let window =
+        StorageDeviceEventApi::new(fixture.target.clone(), fixture.management.clone(), clock())
+            .list_energy_samples(
+                fixture.system_id,
+                DeviceEventQuery {
+                    from: Some((START + STEP) * 1_000),
+                    to: Some((START + 2 * STEP) * 1_000),
+                    limit: Some(10),
+                    ..DeviceEventQuery::default()
+                },
+            )
+            .await
+            .map_err(|error| format!("{error:?}"))?;
+    assert_eq!(
+        window
+            .iter()
+            .map(|sample| sample.device_id.as_str())
+            .collect::<Vec<_>>(),
+        vec![ROOF, GARAGE]
     );
 
     // Where no live measurement exists, the samples contribute the energy of

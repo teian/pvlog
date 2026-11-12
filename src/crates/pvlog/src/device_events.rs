@@ -6,12 +6,13 @@ use async_trait::async_trait;
 use pvlog_api::{
     DEFAULT_DEVICE_EVENT_LIMIT, DeviceEventApiError, DeviceEventApiUseCases, DeviceEventDetails,
     DeviceEventInput, DeviceEventQuery, DeviceEventResponse, DeviceEventsAccepted,
+    EnergySampleResponse,
 };
 use pvlog_application::Clock;
 use pvlog_domain::{AccountId, ApiCredentialId, DataSourceId, SystemId};
 use pvlog_storage::{
     DataSourceRepository, DatabaseTarget, DeviceEventFilter, DeviceEventRecord,
-    DeviceEventRepository, ManagementRepository,
+    DeviceEventRepository, EnergySampleFilter, IngestRepository, ManagementRepository,
 };
 use uuid::Uuid;
 
@@ -22,6 +23,7 @@ const SOURCE_IDENTIFIER: &str = "id:";
 struct Repositories {
     events: Box<dyn DeviceEventRepository>,
     data_sources: Box<dyn DataSourceRepository>,
+    samples: Box<dyn IngestRepository>,
 }
 
 /// Serves the device event endpoints from account storage.
@@ -60,7 +62,7 @@ impl StorageDeviceEventApi {
             .ok_or(DeviceEventApiError::Unavailable)
     }
 
-    /// Opens the device event and data source repositories of an account.
+    /// Opens the device event, data source and energy sample repositories of an account.
     async fn account_repositories(&self, account_id: AccountId) -> Option<Repositories> {
         match &self.target {
             DatabaseTarget::Sqlite {
@@ -83,8 +85,9 @@ impl StorageDeviceEventApi {
                             account.clone(),
                         )),
                         data_sources: Box::new(pvlog_storage::SqliteDataSourceRepository::new(
-                            account,
+                            account.clone(),
                         )),
+                        samples: Box::new(pvlog_storage::SqliteIngestRepository::new(account)),
                     })
                 }
                 #[cfg(not(feature = "sqlite"))]
@@ -102,6 +105,10 @@ impl StorageDeviceEventApi {
                             account_id,
                         )),
                         data_sources: Box::new(pvlog_storage::PostgresDataSourceRepository::new(
+                            url.clone(),
+                            account_id,
+                        )),
+                        samples: Box::new(pvlog_storage::PostgresIngestRepository::new(
                             url.clone(),
                             account_id,
                         )),
@@ -288,5 +295,39 @@ impl DeviceEventApiUseCases for StorageDeviceEventApi {
             &query,
         )
         .await
+    }
+
+    /// Lists the archive energy samples of a system, oldest first.
+    async fn list_energy_samples(
+        &self,
+        system_id: SystemId,
+        query: DeviceEventQuery,
+    ) -> Result<Vec<EnergySampleResponse>, DeviceEventApiError> {
+        let repositories = self.repositories(system_id).await?;
+        Ok(repositories
+            .samples
+            .energy_samples(
+                system_id,
+                EnergySampleFilter {
+                    device_key: query.device_id.as_deref(),
+                    from: query.from,
+                    to: query.to,
+                    limit: query
+                        .limit
+                        .unwrap_or(pvlog_api::DEFAULT_ENERGY_SAMPLE_LIMIT),
+                },
+            )
+            .await
+            .map_err(|_| DeviceEventApiError::Unavailable)?
+            .into_iter()
+            .map(|sample| EnergySampleResponse {
+                device_id: sample.device_key,
+                measured_at_epoch_millis: sample.measured_at,
+                energy_lifetime_wh: sample.energy_lifetime_wh,
+                power_watts: sample.power_watts,
+                data_source_id: sample.data_source_id.map(DataSourceId::as_uuid),
+                received_at_epoch_millis: sample.received_at,
+            })
+            .collect())
     }
 }

@@ -1274,6 +1274,41 @@ paths:
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
         "404": { $ref: "#/components/responses/NotFoundProblem" }
         "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/systems/{system_id}/energy-samples:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: listEnergySamples
+      summary: List archive energy samples
+      description: Lists the archive energy samples a data source delivered through the ingestion API, oldest first. A sample keeps a device's lifetime energy counter and mean power as the device archived them; where no live measurement was stored for its time, it also contributes to the derived interval energy of the system.
+      tags: [Telemetry]
+      security: [{ sessionCookie: [] }, { bearerAuth: [telemetry:read] }]
+      parameters:
+        - name: deviceId
+          in: query
+          description: Only samples of this device.
+          schema: { type: string }
+        - name: from
+          in: query
+          description: Only samples measured at or after this instant, in epoch milliseconds.
+          schema: { type: integer, format: int64 }
+        - name: to
+          in: query
+          description: Only samples measured before this instant, in epoch milliseconds.
+          schema: { type: integer, format: int64 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 10000, default: 1000 }
+      responses:
+        "200":
+          description: Energy samples, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/EnergySample" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/systems/{system_id}/discovery-proposals:
     parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     get:
@@ -5355,6 +5390,36 @@ components:
             - $ref: "#/components/schemas/UuidV7"
             - type: "null"
           description: Data source the event was delivered through, when it is known.
+        receivedAtEpochMillis: { type: integer, format: int64 }
+    EnergySample:
+      type: object
+      required:
+        [
+          deviceId,
+          measuredAtEpochMillis,
+          energyLifetimeWh,
+          powerWatts,
+          dataSourceId,
+          receivedAtEpochMillis,
+        ]
+      properties:
+        deviceId:
+          type: string
+          description: The device as the source names it; for an inverter its serial.
+        measuredAtEpochMillis: { type: integer, format: int64 }
+        energyLifetimeWh:
+          type: [integer, "null"]
+          format: int64
+          description: The device's lifetime energy counter, null when the sample has none.
+        powerWatts:
+          type: [integer, "null"]
+          format: int64
+          description: Mean power of the sample interval, null when the sample has none.
+        dataSourceId:
+          oneOf:
+            - $ref: "#/components/schemas/UuidV7"
+            - type: "null"
+          description: Data source the sample was delivered through, when it is known.
         receivedAtEpochMillis: { type: integer, format: int64 }
     DiscoveryProposal:
       type: object
