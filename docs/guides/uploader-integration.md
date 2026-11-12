@@ -23,6 +23,17 @@ again; **Regenerate** issues a new one and invalidates the old one at once.
 | `generic` | A complete `curl` call and the raw HTTP request                                                                         |
 | `import`  | None; this profile is for history imports and needs no key                                                              |
 
+A logger that knows its devices delivers through the
+[ingestion API](ingestion-api.md): one request carries devices, measurements,
+archive samples, daily summaries and events. smalog's export uses it; the
+[column mapping](smalog-export.md) shows where each of its values ends up. The
+observation resources described below remain the minimal form for a script.
+
+Each profile also names the measurement channel keys it sends, with unit and
+target. `GET /api/v1/data-source-profiles` lists them in `channelKeys`. A key
+of that list is registered with the listed definition, so the values of an
+inverter arrive typed and are offered for adoption as equipment.
+
 The same can be done over the API:
 
 ```sh

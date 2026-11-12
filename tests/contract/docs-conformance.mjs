@@ -13,6 +13,7 @@ const documents = [
   "docs/guides/uploader-integration.md",
   "docs/guides/ingestion-api.md",
   "docs/guides/smalog-export.md",
+  "docs/guides/sbfspot-push-service.md",
   "docs/reference/api-domain-reference.md",
   "docs/reference/pvoutput-field-mapping.md",
   "docs/architecture/telemetry-segment-format.md",
