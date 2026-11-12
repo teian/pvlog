@@ -85,7 +85,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 
 ## 9. History import
 
-- [ ] 9.1 Parse PVOutput status and output export files into canonical readings and daily summaries with per-row rejection reasons; verify with fixture files covering valid rows, invalid timestamps and unit edge cases.
+- [x] 9.1 Parse PVOutput status and output export files into canonical readings and daily summaries with per-row rejection reasons; verify with fixture files covering valid rows, invalid timestamps and unit edge cases.
 - [ ] 9.2 Implement the import job with dry run, explicit commit, size limit, overlap handling and idempotent repetition, marking readings as imported; verify the dry-run, double-commit, overlap and size-limit scenarios with tests.
 - [ ] 9.3 Add the import flow to the Data sources section with the dry-run summary and progress, and document the import resources in OpenAPI and in a migration guide; verify with a component test of the dry-run and commit states and that the OpenAPI contract checks and `test:docs` pass.
 

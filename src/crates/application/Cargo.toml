@@ -169,3 +169,7 @@ path = "../../../tests/rust/application/equipment_catalog.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "pvoutput-import"
+path = "../../../tests/rust/application/pvoutput_import.rs"

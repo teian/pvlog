@@ -32,6 +32,7 @@ mod oidc;
 mod pagination;
 mod ports;
 mod provider_data;
+mod pvoutput_import;
 mod query_planner;
 mod rate_limit;
 mod rbac_management;
@@ -173,6 +174,10 @@ pub use provider_data::{
     ExternalDataCacheRepository, ExternalDataConfiguration, ExternalDataFreshness,
     ExternalDataKind, ExternalDataLicense, ExternalDataProvenance, ExternalDataRequest,
     ExternalDataResult, ProviderConfigurationError,
+};
+pub use pvoutput_import::{
+    PvOutputDay, PvOutputFile, PvOutputFileError, PvOutputFileKind, PvOutputRejection,
+    PvOutputStatus, parse_pvoutput_export,
 };
 pub use query_planner::{
     QueryPlan, QueryPlanError, QueryPlanRequest, QueryResolution, QuerySource, RawSources,
