@@ -82,13 +82,13 @@ describe("German and English translation completeness", () => {
     });
     expect(de.administration.navigation.label).toBe("Verwaltung");
     expect(en.administration.navigation.label).toBe("Administration");
-    expect(de.accountApiKeys.title).toBe("Konto-API-Keys");
+    expect(de.accountApiKeys.title).toBe("Konto-API-Schlüssel");
     expect(en.accountApiKeys.title).toBe("Account API keys");
   });
 
   it("localizes known backend metadata in both catalogs", () => {
     expect(de.administration.audit.actions.account_api_key_issue).toBe(
-      "API-Key erstellen",
+      "API-Schlüssel erstellen",
     );
     expect(en.administration.audit.actions.account_api_key_issue).toBe(
       "Create API key",

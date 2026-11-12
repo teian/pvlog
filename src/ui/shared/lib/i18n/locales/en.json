@@ -22,74 +22,9 @@
       "x": {
         "description": "Use an X confidential client with OAuth2 Authorization Code and PKCE."
       }
-    },
-    "equipmentCatalog": {
-      "title": "Equipment templates",
-      "description": "Optionally prefill editable equipment values from the bundled offline catalog, or enter every value manually.",
-      "inverterTitle": "Inverter catalog",
-      "moduleTitle": "Solar-module catalog",
-      "search": "Search manufacturer or model",
-      "inverterPlaceholder": "For example SMA, Fronius or Huawei",
-      "modulePlaceholder": "For example manufacturer or 450 W model",
-      "moduleOption": "{{manufacturer}} {{model}} · {{watts}} W",
-      "loading": "Loading catalog…",
-      "error": "The equipment catalog could not be loaded. Manual entry remains available.",
-      "empty": "No matching catalog entry. Continue with manual entry.",
-      "results": "Matching templates",
-      "choose": "Choose a template",
-      "manualInverter": "Enter inverter manually",
-      "manualModule": "Enter solar module manually",
-      "manufacturer": "Manufacturer",
-      "model": "Model",
-      "inverterData": "Confirmed inverter technical data",
-      "moduleData": "Confirmed module and string technical data",
-      "moduleCount": "Modules in string",
-      "modulePower": "Peak power per module (W)",
-      "totalPower": "Calculated string peak power: {{watts}} W",
-      "no": "No",
-      "confirmTitle": "Confirm equipment snapshot",
-      "inverterSnapshot": "Editable inverter specification snapshot (JSON)",
-      "moduleSnapshot": "Editable module specification snapshot (JSON)",
-      "snapshotGuidance": "Every prefilled field remains editable. Saving stores this confirmed snapshot; later catalog releases do not change it.",
-      "provenanceLegend": "Provenance: manual, copied, customized, or an older template revision.",
-      "save": "Save confirmed equipment",
-      "saved": "Equipment configuration saved.",
-      "validationError": "The confirmed values are invalid. Review the marked snapshot values.",
-      "customInverter": "Manual inverter",
-      "customManufacturer": "Manual manufacturer",
-      "customModel": "Manual model",
-      "defaultString": "PV string 1",
-      "fields": {
-        "revision": "Catalog revision",
-        "topology": "Topology",
-        "mppts": "MPPT trackers",
-        "strings": "String inputs",
-        "mpptAllocation": "Strings per MPPT",
-        "dcVoltage": "MPPT voltage range",
-        "dcCurrent": "Maximum DC current",
-        "acPower": "Rated AC power",
-        "phases": "AC phases",
-        "communications": "Communications",
-        "temperature": "Operating temperature",
-        "source": "Source",
-        "cellTechnology": "Cell technology",
-        "pmax": "Pmax per module",
-        "stringTotal": "String peak power",
-        "voc": "Open-circuit voltage (Voc)",
-        "vmp": "Maximum-power voltage (Vmp)",
-        "isc": "Short-circuit current (Isc)",
-        "imp": "Maximum-power current (Imp)",
-        "efficiency": "Efficiency",
-        "bifaciality": "Bifaciality",
-        "temperatureCoefficients": "Isc / Voc / Pmax temperature coefficients",
-        "dimensions": "Dimensions (L × W × H)",
-        "weight": "Weight",
-        "loads": "Front / rear static load"
-      }
     }
   },
   "home": {
-    "description": "Self-hosted photovoltaic monitoring.",
     "title": "PVLog"
   },
   "auth": {
@@ -116,13 +51,12 @@
       }
     },
     "brandDescription": "Real-time production monitoring, fault detection, and reporting for your PV installations.",
-    "continueWith": "Continue with {{name}}",
     "displayName": "Display name",
     "email": "Email address",
     "forgotPassword": "Forgot password?",
     "emailPlaceholder": "you@company.com",
     "loginDescription": "Access your PVLog account.",
-    "loginFailed": "The credentials could not be verified.",
+    "loginFailed": "The sign-in details could not be verified.",
     "loginTitle": "Sign in",
     "newPassword": "New password",
     "or": "or",
@@ -149,7 +83,7 @@
       "battery": "Battery",
       "consumption": "Consumption",
       "environment": "Environment",
-      "extended": "Extended channels",
+      "extended": "Extended values",
       "generation": "Generation",
       "grid": "Grid"
     },
@@ -168,7 +102,7 @@
       "battery_state_of_charge": "Battery state of charge",
       "consumption_energy": "Consumption energy",
       "consumption_power": "Consumption power",
-      "extended": "Extended channel",
+      "extended": "Extended value",
       "generation_energy": "Generation energy",
       "generation_power": "Generation power",
       "grid_power": "Grid power",
@@ -233,7 +167,6 @@
     },
     "alertsDescription": "Recent alert state changes.",
     "alertsTitle": "Recent alerts",
-    "battery": "Battery",
     "coverageDescription": "{{value}}% of expected intervals are available.",
     "coverageLabel": "Data coverage",
     "coverageTitle": "Data coverage",
@@ -252,7 +185,7 @@
     "noAlerts": "No recent alerts.",
     "rejected": "{{count}} rejected today",
     "stale": "Last data arrived {{age}} seconds ago; live values are withheld.",
-    "staleDescription": "Check the uploader and ingestion health before acting on these values.",
+    "staleDescription": "Check the data source and ingestion health before acting on these values.",
     "staleTitle": "Live data is stale",
     "systemSummary_one": "{{count}} system · Today · {{date}}",
     "systemSummary_other": "{{count}} systems · Today · {{date}}",
@@ -426,7 +359,7 @@
       "description": "Provider-neutral weather input used for forecasting.",
       "enabled": "Enable weather feed",
       "endpoint": "Endpoint",
-      "secretRef": "Credential secret reference"
+      "secretRef": "Secret reference"
     },
     "email": {
       "title": "Email — SMTP settings",
@@ -436,7 +369,7 @@
       "host": "Host",
       "port": "Port",
       "username": "Username",
-      "credentialSecretRef": "Credential secret reference",
+      "credentialSecretRef": "Password secret reference",
       "encryption": "Encryption",
       "starttls": "STARTTLS",
       "tls": "TLS",
@@ -470,12 +403,11 @@
       }
     },
     "notifications": {
-      "title": "Notification Channels",
+      "title": "Notification targets",
       "description": "Where alerts get delivered.",
-      "empty": "No webhook notification channels are configured.",
+      "empty": "No webhook notification targets are configured.",
       "events_one": "{{count}} subscribed event",
       "events_other": "{{count}} subscribed events",
-      "smtpUnavailable": "Email and SMTP settings are deployment-owned and are not exposed by the browser API.",
       "states": {
         "pending_verification": "Pending verification",
         "active": "Active",
@@ -504,11 +436,11 @@
       "create": "Create invitation",
       "error": "The invitation could not be created.",
       "tokenTitle": "One-time activation token",
-      "tokenDescription": "Share this token only through an approved secure channel. It will not be shown again after you leave this page."
+      "tokenDescription": "Share this token only by an approved secure means. It will not be shown again after you leave this page."
     },
     "connectors": {
       "title": "Authentication connectors",
-      "description": "Configured sign-in connectors. Secrets and client credentials are not displayed.",
+      "description": "Configured sign-in connectors. Client secrets are not displayed.",
       "empty": "No external authentication connectors are configured.",
       "enabled": "Enabled",
       "disabled": "Disabled",
@@ -540,7 +472,7 @@
       "role": "Role",
       "principalType": "Principal type",
       "user": "User",
-      "apiCredential": "API credential",
+      "apiCredential": "API key",
       "principalId": "Principal ID",
       "systemId": "System ID (optional)",
       "create": "Assign role",
@@ -554,7 +486,7 @@
       "actors": {
         "anonymous": "Anonymous",
         "user": "User",
-        "api_credential": "API credential",
+        "api_credential": "API key",
         "system": "System",
         "worker": "Worker"
       },
@@ -567,7 +499,7 @@
         "account": "Account",
         "instance": "Instance",
         "system": "System",
-        "api_credential": "API credential",
+        "api_credential": "API key",
         "external_identity": "External identity",
         "observation": "Observation"
       },
@@ -599,22 +531,6 @@
       "available_one": "{{count}} available",
       "available_other": "{{count}} available"
     },
-    "resources": {
-      "title": "System resources",
-      "description": "Review the active system aggregate and account-scoped resources.",
-      "noSystem": "Select a system to review its configuration.",
-      "inverters": "Inverters",
-      "equipment": "Auxiliary equipment",
-      "tariffs": "Tariffs",
-      "channels": "Channels",
-      "memberships": "Members",
-      "credentials": "Credentials",
-      "stringCount_one": "{{count}} PV string",
-      "stringCount_other": "{{count}} PV strings",
-      "strings": "PV strings",
-      "panels_one": "{{count}} panel",
-      "panels_other": "{{count}} panels"
-    },
     "permissions": {
       "instance_read": "Read instance",
       "instance_manage": "Manage instance",
@@ -626,32 +542,15 @@
       "system_manage": "Manage systems",
       "telemetry_read": "Read telemetry",
       "telemetry_write": "Write telemetry",
-      "credential_manage": "Manage credentials",
+      "credential_manage": "Manage API keys",
       "integration_manage": "Manage integrations",
       "audit_read": "Read audit trail"
     },
     "moved": {
       "title": "System equipment has moved",
-      "description": "Inverters, strings and the equipment catalogue are now edited in each system's settings, under Equipment.",
+      "description": "Inverters, strings and the equipment catalog are now edited in each system's settings, under Equipment.",
       "link": "Open equipment settings"
     }
-  },
-  "onboarding": {
-    "awaitingVerification": "Send a test observation to verify ingestion.",
-    "back": "Back",
-    "capacity": "Installed capacity in watts",
-    "create": "Create system and credential",
-    "equipment": "Primary inverter or equipment",
-    "instanceName": "Installation name",
-    "next": "Next",
-    "progress": "Step {{current}} of {{total}}",
-    "secretGuidance": "Copy this credential now. It will not be shown again.",
-    "systemName": "First system name",
-    "test": "Send and verify test data",
-    "timezone": "IANA timezone",
-    "title": "Set up PVLog",
-    "verified": "Test ingestion was accepted and verified.",
-    "verifyTitle": "Verify ingestion"
   },
   "forecasting": {
     "notAvailable": "Not available",
@@ -780,51 +679,16 @@
     "footer": "Open source · self-hosted",
     "openNavigation": "Open navigation",
     "primaryNavigation": "Primary navigation",
-    "skip": "Skip to main content",
-    "theme": "Change colour theme",
-    "title": "Photovoltaic operations"
+    "skip": "Skip to main content"
   },
   "systemManagement": {
     "actions": {
-      "addSystem": "Add system",
-      "backToManagement": "Back to system management",
-      "cancel": "Cancel",
-      "createSystem": "Create system",
-      "decreaseInverters": "Decrease inverter count",
       "delete": "Delete",
       "deleteInverter": "Delete inverter {{number}}",
       "deleteShading": "Delete shading period",
       "deleteString": "Delete string {{name}}",
-      "deleteSystem": "Delete system {{name}}",
-      "edit": "Edit",
-      "increaseInverters": "Increase inverter count",
-      "saving": "Saving…",
-      "search": "Search",
-      "toggle": "Toggle details for {{name}}",
-      "updateSystem": "Save changes"
+      "search": "Search"
     },
-    "delete": {
-      "description": "{{name}} and its configuration will be permanently deleted. This action cannot be undone.",
-      "title": "Delete this system?"
-    },
-    "description": "Manage systems, inverters, and PV strings in one place.",
-    "empty": {
-      "description": "Create your first system to configure inverters and strings.",
-      "title": "No systems yet"
-    },
-    "emptyInverter": "No strings configured yet.",
-    "errors": {
-      "loadDescription": "The system configuration is temporarily unavailable. Please try again.",
-      "loadTitle": "Could not load systems",
-      "saveConflictDescription": "The system was changed in the meantime. Reload the page and apply your changes again.",
-      "saveDescription": "The changes could not be saved. Check your input and try again.",
-      "saveForbiddenDescription": "You do not have permission to save systems in this account.",
-      "saveTitle": "Save failed",
-      "saveUnavailableDescription": "The save service is currently unavailable. Try again later.",
-      "saveValidationDescription": "The server rejected the system data. Check the system name and time zone and try again."
-    },
-    "inverterSummary": "{{count}} strings · {{kwp}} kWp",
-    "noLocation": "No location saved yet",
     "orientation": {
       "east": "East",
       "north": "North",
@@ -836,25 +700,7 @@
       "unknown": "Unknown",
       "west": "West"
     },
-    "status": {
-      "active": "Active",
-      "activeUpper": "ACTIVE",
-      "inactive": "Inactive",
-      "inactiveUpper": "INACTIVE",
-      "offline": "OFFLINE",
-      "online": "ONLINE"
-    },
-    "stringDescription": "{{count}} × {{watts}} Wp · {{orientation}}",
-    "subtitle": "{{count}} systems configured",
-    "success": {
-      "created": "System created successfully",
-      "description": "{{name}} is now available in system management.",
-      "updated": "System updated successfully"
-    },
-    "summary": "{{inverters}} inverters · {{strings}} strings",
-    "title": "System management",
     "units": {
-      "kwMax": "kW max.",
       "kwp": "kWp"
     },
     "wizard": {
@@ -864,17 +710,11 @@
       "advanced": "Advanced settings",
       "azimuth": "Azimuth (°)",
       "catalogPlaceholder": "Search manufacturer or model",
-      "catalogLoading": "Loading catalogue…",
-      "createTitle": "Create new system",
-      "editTitle": "Edit system",
-      "footerHint": "All changes are saved together.",
-      "inverterCatalog": "Inverter catalogue",
+      "catalogLoading": "Loading catalog…",
+      "inverterCatalog": "Inverter catalog",
       "inverterOptionDetails": "{{power}} W · {{mppts}} MPPT · {{phases}}-phase",
       "inverterSearchPlaceholder": "Search manufacturer or type",
-      "inverterCount": "Number of inverters",
-      "inverterDescription": "Choose models from the catalogue or enter technical values manually.",
       "inverterNumber": "Inverter {{number}}",
-      "inverters": "Inverters",
       "location": "Location",
       "locationError": "The address could not be resolved right now. Please try again.",
       "locationNotFound": "No matching location was found for this address.",
@@ -883,42 +723,26 @@
       "manualInverterDescription": "Enter technical specifications yourself",
       "manualModuleDescription": "Enter module specifications yourself",
       "modelName": "Model / name",
-      "moduleCatalog": "Module catalogue",
+      "moduleCatalog": "Module catalog",
       "moduleCount": "Modules",
       "modulePlaceholder": "Search module manufacturer or model",
       "moduleOptionDetails": "{{power}} Wp · {{temperatureCoefficient}} %/°C",
       "moduleSearchPlaceholder": "Search module manufacturer or type",
       "modulePower": "Power (Wp)",
-      "mppts": "MPPTs",
-      "noCatalogMatches": "No matching catalogue entry.",
+      "noCatalogMatches": "No matching catalog entry.",
       "orientation": "Orientation",
-      "overrideCatalog": "Override catalogue values manually",
-      "phases": "Phases",
+      "overrideCatalog": "Override catalog values manually",
       "shading": {
         "degree": "Shading (%)",
         "from": "From",
         "label": "Description",
         "to": "To"
       },
-      "status": "Status",
       "stringName": "String name",
       "strings": "PV strings",
       "stringsDescription": "Assign module groups, orientation, and detailed parameters to each inverter.",
-      "stringsForInverter": "Strings for inverter {{number}}",
-      "subtitle": "Configure system details and technical components in one step.",
-      "systemData": "System data",
-      "systemName": "System name",
       "temperatureCoefficient": "Temperature coefficient (%/°C)",
-      "tilt": "Tilt (°)",
-      "validation": {
-        "blocked": "Cannot save: {{reason}}",
-        "inverterName": "The name for inverter {{number}} is missing.",
-        "moduleCount": "The module count for string {{string}} on inverter {{inverter}} must be greater than 0.",
-        "modulePower": "The module power for string {{string}} on inverter {{inverter}} must be greater than 0.",
-        "stringName": "The name for string {{string}} on inverter {{inverter}} is missing.",
-        "strings": "Inverter {{number}} requires at least one PV string.",
-        "systemName": "The system name is missing."
-      }
+      "tilt": "Tilt (°)"
     }
   },
   "account": {
@@ -963,7 +787,7 @@
     "createError": "The API key could not be created. Check the name, permissions, and expiry.",
     "createTitle": "Create API key",
     "creating": "Creating…",
-    "description": "Create separate, revocable credentials for integrations without sharing your password or granting unnecessary system access.",
+    "description": "Create separate, revocable API keys for integrations without sharing your password or granting unnecessary system access.",
     "empty": "No account API keys have been created yet.",
     "expiry": "Expiry (optional)",
     "expiryHint": "Leave empty for a key without automatic expiry.",
@@ -973,7 +797,6 @@
     "loadErrorTitle": "Loading failed",
     "name": "Name",
     "nameRequired": "Enter a name for the API key.",
-    "navigation": "Manage account API keys",
     "never": "Never",
     "permissionRequired": "Select at least one permission.",
     "permissions": "Permissions",
@@ -1142,7 +965,7 @@
       "generationEnergy": "Generation energy",
       "consumptionPower": "Consumption power",
       "consumptionEnergy": "Consumption energy",
-      "docsLink": "Uploader and troubleshooting documentation"
+      "docsLink": "Integration and troubleshooting documentation"
     },
     "checklist": {
       "title": "Finish setting up",
@@ -1199,7 +1022,7 @@
         "description": "An existing SBFspot database, uploaded by the sbfspot-push service."
       },
       "generic": {
-        "name": "Other uploader",
+        "name": "Other logger",
         "description": "A script, Home Assistant or any tool that can send HTTP requests."
       },
       "import": {
@@ -1340,7 +1163,7 @@
     }
   },
   "channels": {
-    "nameOf": "Name of channel {{key}}",
+    "nameOf": "Name of measurement channel {{key}}",
     "targetOf": "What {{name}} measures",
     "saveName": "Save",
     "noValue": "No value yet",
@@ -1363,13 +1186,13 @@
     },
     "empty": {
       "title": "No measurement channels yet",
-      "description": "Channels appear here as soon as a data source delivers values per inverter or string."
+      "description": "Measurement channels appear here as soon as a data source delivers values per inverter or string."
     },
     "retire": {
       "action": "Retire",
       "title": "Retire this measurement channel?",
       "description": "“{{name}}” is no longer listed or included in any view. Values already stored are kept.",
-      "confirm": "Retire channel"
+      "confirm": "Retire measurement channel"
     },
     "errors": {
       "loadTitle": "Measurement channels could not be loaded",

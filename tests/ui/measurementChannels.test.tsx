@@ -184,7 +184,9 @@ describe("measurement channels section", () => {
     const user = userEvent.setup();
     renderChannels();
 
-    const name = await screen.findByLabelText("Name of channel mppt-1");
+    const name = await screen.findByLabelText(
+      "Name of measurement channel mppt-1",
+    );
     await user.clear(name);
     await user.type(name, "East roof");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -208,7 +210,9 @@ describe("measurement channels section", () => {
     expect(within(dialog).getByText(/already stored are kept/)).toBeVisible();
     expect(backend.requests).toHaveLength(0);
     await user.click(
-      within(dialog).getByRole("button", { name: "Retire channel" }),
+      within(dialog).getByRole("button", {
+        name: "Retire measurement channel",
+      }),
     );
 
     expect(backend.requests[0]).toMatchObject({
@@ -226,7 +230,7 @@ describe("measurement channels section", () => {
       screen.queryByRole("button", { name: "Retire" }),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByLabelText("Name of channel mppt-1"),
+      screen.queryByLabelText("Name of measurement channel mppt-1"),
     ).not.toBeInTheDocument();
   });
 });

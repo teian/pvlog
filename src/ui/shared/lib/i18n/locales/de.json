@@ -22,74 +22,9 @@
       "x": {
         "description": "Verwende einen vertraulichen X-Client mit OAuth2 Authorization Code und PKCE."
       }
-    },
-    "equipmentCatalog": {
-      "title": "Gerätevorlagen",
-      "description": "Fülle bearbeitbare Gerätedaten optional aus dem gebündelten Offline-Katalog vor oder erfasse alle Werte manuell.",
-      "inverterTitle": "Wechselrichterkatalog",
-      "moduleTitle": "Solarmodulkatalog",
-      "search": "Hersteller oder Modell suchen",
-      "inverterPlaceholder": "Zum Beispiel SMA, Fronius oder Huawei",
-      "modulePlaceholder": "Zum Beispiel Hersteller oder 450-W-Modell",
-      "moduleOption": "{{manufacturer}} {{model}} · {{watts}} W",
-      "loading": "Katalog wird geladen…",
-      "error": "Der Gerätekatalog konnte nicht geladen werden. Die manuelle Eingabe bleibt verfügbar.",
-      "empty": "Kein passender Katalogeintrag. Fahre mit der manuellen Eingabe fort.",
-      "results": "Passende Vorlagen",
-      "choose": "Vorlage auswählen",
-      "manualInverter": "Wechselrichter manuell erfassen",
-      "manualModule": "Solarmodul manuell erfassen",
-      "manufacturer": "Hersteller",
-      "model": "Modell",
-      "inverterData": "Bestätigte technische Wechselrichterdaten",
-      "moduleData": "Bestätigte technische Modul- und Stringdaten",
-      "moduleCount": "Module im String",
-      "modulePower": "Peakleistung je Modul (W)",
-      "totalPower": "Berechnete String-Peakleistung: {{watts}} W",
-      "no": "Nein",
-      "confirmTitle": "Geräte-Snapshot bestätigen",
-      "inverterSnapshot": "Bearbeitbarer Wechselrichter-Snapshot (JSON)",
-      "moduleSnapshot": "Bearbeitbarer Modul-Snapshot (JSON)",
-      "snapshotGuidance": "Jedes vorausgefüllte Feld bleibt bearbeitbar. Gespeichert wird dieser bestätigte Snapshot; spätere Katalogversionen ändern ihn nicht.",
-      "provenanceLegend": "Herkunft: manuell, kopiert, angepasst oder ältere Vorlagenrevision.",
-      "save": "Bestätigte Geräte speichern",
-      "saved": "Gerätekonfiguration wurde gespeichert.",
-      "validationError": "Die bestätigten Werte sind ungültig. Prüfe die Snapshot-Werte.",
-      "customInverter": "Manueller Wechselrichter",
-      "customManufacturer": "Manueller Hersteller",
-      "customModel": "Manuelles Modell",
-      "defaultString": "PV-String 1",
-      "fields": {
-        "revision": "Katalogrevision",
-        "topology": "Topologie",
-        "mppts": "MPPT-Tracker",
-        "strings": "Stringeingänge",
-        "mpptAllocation": "Strings je MPPT",
-        "dcVoltage": "MPPT-Spannungsbereich",
-        "dcCurrent": "Maximaler DC-Strom",
-        "acPower": "AC-Nennleistung",
-        "phases": "AC-Phasen",
-        "communications": "Kommunikation",
-        "temperature": "Betriebstemperatur",
-        "source": "Quelle",
-        "cellTechnology": "Zelltechnologie",
-        "pmax": "Pmax je Modul",
-        "stringTotal": "String-Peakleistung",
-        "voc": "Leerlaufspannung (Voc)",
-        "vmp": "MPP-Spannung (Vmp)",
-        "isc": "Kurzschlussstrom (Isc)",
-        "imp": "MPP-Strom (Imp)",
-        "efficiency": "Wirkungsgrad",
-        "bifaciality": "Bifazialität",
-        "temperatureCoefficients": "Isc- / Voc- / Pmax-Temperaturkoeffizienten",
-        "dimensions": "Abmessungen (L × B × H)",
-        "weight": "Gewicht",
-        "loads": "Statische Last vorne / hinten"
-      }
     }
   },
   "home": {
-    "description": "Selbst gehostete Photovoltaik-Überwachung.",
     "title": "PVLog"
   },
   "auth": {
@@ -116,7 +51,6 @@
       }
     },
     "brandDescription": "Echtzeitüberwachung der Produktion, Fehlererkennung und Berichte für deine PV-Anlagen.",
-    "continueWith": "Weiter mit {{name}}",
     "displayName": "Anzeigename",
     "email": "E-Mail-Adresse",
     "forgotPassword": "Passwort vergessen?",
@@ -149,7 +83,7 @@
       "battery": "Batterie",
       "consumption": "Verbrauch",
       "environment": "Umgebung",
-      "extended": "Erweiterte Kanäle",
+      "extended": "Erweiterte Werte",
       "generation": "Erzeugung",
       "grid": "Netz"
     },
@@ -168,7 +102,7 @@
       "battery_state_of_charge": "Batterieladezustand",
       "consumption_energy": "Verbrauchsenergie",
       "consumption_power": "Verbrauchsleistung",
-      "extended": "Erweiterter Kanal",
+      "extended": "Erweiterter Wert",
       "generation_energy": "Erzeugungsenergie",
       "generation_power": "Erzeugungsleistung",
       "grid_power": "Netzleistung",
@@ -233,7 +167,6 @@
     },
     "alertsDescription": "Letzte Änderungen des Warnungsstatus.",
     "alertsTitle": "Letzte Warnungen",
-    "battery": "Batterie",
     "coverageDescription": "{{value}} % der erwarteten Intervalle sind verfügbar.",
     "coverageLabel": "Datenabdeckung",
     "coverageTitle": "Datenabdeckung",
@@ -252,7 +185,7 @@
     "noAlerts": "Keine aktuellen Warnungen.",
     "rejected": "{{count}} heute abgelehnt",
     "stale": "Die letzten Daten sind {{age}} Sekunden alt; Live-Werte werden nicht angezeigt.",
-    "staleDescription": "Prüfe Uploader und Erfassungszustand, bevor du anhand dieser Werte handelst.",
+    "staleDescription": "Prüfe Datenquelle und Erfassungszustand, bevor du anhand dieser Werte handelst.",
     "staleTitle": "Live-Daten sind veraltet",
     "systemSummary_one": "{{count}} Anlage · Heute · {{date}}",
     "systemSummary_other": "{{count}} Anlagen · Heute · {{date}}",
@@ -426,7 +359,7 @@
       "description": "Provider-neutrale Wetterdaten für die Prognose.",
       "enabled": "Wetterdatenquelle aktivieren",
       "endpoint": "Endpunkt",
-      "secretRef": "Secret-Referenz für Zugangsdaten"
+      "secretRef": "Secret-Referenz"
     },
     "email": {
       "title": "E-Mail — SMTP-Einstellungen",
@@ -436,7 +369,7 @@
       "host": "Host",
       "port": "Port",
       "username": "Benutzername",
-      "credentialSecretRef": "Secret-Referenz für Zugangsdaten",
+      "credentialSecretRef": "Secret-Referenz für das Passwort",
       "encryption": "Verschlüsselung",
       "starttls": "STARTTLS",
       "tls": "TLS",
@@ -470,12 +403,11 @@
       }
     },
     "notifications": {
-      "title": "Benachrichtigungskanäle",
+      "title": "Benachrichtigungsziele",
       "description": "Wohin Alarme zugestellt werden.",
-      "empty": "Es sind keine Webhook-Benachrichtigungskanäle konfiguriert.",
+      "empty": "Es sind keine Webhook-Benachrichtigungsziele konfiguriert.",
       "events_one": "{{count}} abonniertes Ereignis",
       "events_other": "{{count}} abonnierte Ereignisse",
-      "smtpUnavailable": "E-Mail- und SMTP-Einstellungen gehören zum Deployment und werden von der Browser-API nicht bereitgestellt.",
       "states": {
         "pending_verification": "Bestätigung ausstehend",
         "active": "Aktiv",
@@ -504,11 +436,11 @@
       "create": "Einladung erstellen",
       "error": "Die Einladung konnte nicht erstellt werden.",
       "tokenTitle": "Einmaliger Aktivierungstoken",
-      "tokenDescription": "Gib diesen Token nur über einen freigegebenen sicheren Kanal weiter. Nach dem Verlassen dieser Seite wird er nicht erneut angezeigt."
+      "tokenDescription": "Gib diesen Token nur auf einem freigegebenen sicheren Weg weiter. Nach dem Verlassen dieser Seite wird er nicht erneut angezeigt."
     },
     "connectors": {
       "title": "Anmelde-Connectoren",
-      "description": "Konfigurierte Anmelde-Connectoren. Secrets und Client-Zugänge werden nicht angezeigt.",
+      "description": "Konfigurierte Anmelde-Connectoren. Client-Secrets werden nicht angezeigt.",
       "empty": "Es sind keine externen Anmelde-Connectoren konfiguriert.",
       "enabled": "Aktiv",
       "disabled": "Inaktiv",
@@ -540,7 +472,7 @@
       "role": "Rolle",
       "principalType": "Prinzipaltyp",
       "user": "Benutzer",
-      "apiCredential": "API-Zugang",
+      "apiCredential": "API-Schlüssel",
       "principalId": "Prinzipal-ID",
       "systemId": "Anlagen-ID (optional)",
       "create": "Rolle zuweisen",
@@ -554,7 +486,7 @@
       "actors": {
         "anonymous": "Anonym",
         "user": "Benutzer",
-        "api_credential": "API-Zugang",
+        "api_credential": "API-Schlüssel",
         "system": "System",
         "worker": "Hintergrunddienst"
       },
@@ -567,14 +499,14 @@
         "account": "Konto",
         "instance": "Instanz",
         "system": "Anlage",
-        "api_credential": "API-Zugang",
+        "api_credential": "API-Schlüssel",
         "external_identity": "Externe Identität",
         "observation": "Messwert"
       },
       "actions": {
-        "account_api_key_list": "API-Keys anzeigen",
-        "account_api_key_issue": "API-Key erstellen",
-        "account_api_key_revoke": "API-Key widerrufen",
+        "account_api_key_list": "API-Schlüssel anzeigen",
+        "account_api_key_issue": "API-Schlüssel erstellen",
+        "account_api_key_revoke": "API-Schlüssel widerrufen",
         "administration_email_read": "E-Mail-Einstellungen anzeigen",
         "administration_retention_read": "Aufbewahrungseinstellungen anzeigen",
         "administration_weather_read": "Wettereinstellungen anzeigen",
@@ -599,22 +531,6 @@
       "available_one": "{{count}} verfügbar",
       "available_other": "{{count}} verfügbar"
     },
-    "resources": {
-      "title": "Anlagenressourcen",
-      "description": "Prüfe das aktive Anlagenaggregat und kontobezogene Ressourcen.",
-      "noSystem": "Wähle eine Anlage aus, um ihre Konfiguration zu prüfen.",
-      "inverters": "Wechselrichter",
-      "equipment": "Zusatzgeräte",
-      "tariffs": "Tarife",
-      "channels": "Kanäle",
-      "memberships": "Mitglieder",
-      "credentials": "Zugänge",
-      "stringCount_one": "{{count}} PV-String",
-      "stringCount_other": "{{count}} PV-Strings",
-      "strings": "PV-Strings",
-      "panels_one": "{{count}} Modul",
-      "panels_other": "{{count}} Module"
-    },
     "permissions": {
       "instance_read": "Instanz lesen",
       "instance_manage": "Instanz verwalten",
@@ -626,7 +542,7 @@
       "system_manage": "Anlagen verwalten",
       "telemetry_read": "Telemetrie lesen",
       "telemetry_write": "Telemetrie schreiben",
-      "credential_manage": "Zugänge verwalten",
+      "credential_manage": "API-Schlüssel verwalten",
       "integration_manage": "Integrationen verwalten",
       "audit_read": "Audit-Protokoll lesen"
     },
@@ -635,23 +551,6 @@
       "description": "Wechselrichter, Strings und der Gerätekatalog werden jetzt in den Einstellungen der jeweiligen Anlage unter „Geräte“ bearbeitet.",
       "link": "Geräte-Einstellungen öffnen"
     }
-  },
-  "onboarding": {
-    "awaitingVerification": "Sende einen Testmesswert, um die Erfassung zu prüfen.",
-    "back": "Zurück",
-    "capacity": "Installierte Leistung in Watt",
-    "create": "Anlage und Zugang erstellen",
-    "equipment": "Primärer Wechselrichter oder Gerät",
-    "instanceName": "Name der Installation",
-    "next": "Weiter",
-    "progress": "Schritt {{current}} von {{total}}",
-    "secretGuidance": "Kopiere diesen Zugang jetzt. Er wird nicht erneut angezeigt.",
-    "systemName": "Name der ersten Anlage",
-    "test": "Testdaten senden und prüfen",
-    "timezone": "IANA-Zeitzone",
-    "title": "PVLog einrichten",
-    "verified": "Die Testdaten wurden angenommen und bestätigt.",
-    "verifyTitle": "Datenerfassung prüfen"
   },
   "forecasting": {
     "notAvailable": "Nicht verfügbar",
@@ -780,51 +679,16 @@
     "footer": "Open Source · selbst gehostet",
     "openNavigation": "Navigation öffnen",
     "primaryNavigation": "Hauptnavigation",
-    "skip": "Zum Hauptinhalt springen",
-    "theme": "Farbschema ändern",
-    "title": "Photovoltaik-Betrieb"
+    "skip": "Zum Hauptinhalt springen"
   },
   "systemManagement": {
     "actions": {
-      "addSystem": "Anlage hinzufügen",
-      "backToManagement": "Zurück zur Anlagenverwaltung",
-      "cancel": "Abbrechen",
-      "createSystem": "Anlage anlegen",
-      "decreaseInverters": "Wechselrichteranzahl verringern",
       "delete": "Löschen",
       "deleteInverter": "Wechselrichter {{number}} löschen",
       "deleteShading": "Verschattungszeitraum löschen",
       "deleteString": "String {{name}} löschen",
-      "deleteSystem": "Anlage {{name}} löschen",
-      "edit": "Bearbeiten",
-      "increaseInverters": "Wechselrichteranzahl erhöhen",
-      "saving": "Wird gespeichert…",
-      "search": "Suchen",
-      "toggle": "Details für {{name}} ein- oder ausblenden",
-      "updateSystem": "Änderungen speichern"
+      "search": "Suchen"
     },
-    "delete": {
-      "description": "{{name}} und die zugehörige Konfiguration werden dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
-      "title": "Anlage wirklich löschen?"
-    },
-    "description": "Verwalte Anlagen, Wechselrichter und PV-Strings an einem Ort.",
-    "empty": {
-      "description": "Lege deine erste Anlage an, um Wechselrichter und Strings zu konfigurieren.",
-      "title": "Noch keine Anlage vorhanden"
-    },
-    "emptyInverter": "Noch keine Strings konfiguriert.",
-    "errors": {
-      "loadDescription": "Die Anlagenkonfiguration ist derzeit nicht verfügbar. Bitte versuche es erneut.",
-      "loadTitle": "Anlagen konnten nicht geladen werden",
-      "saveConflictDescription": "Die Anlage wurde zwischenzeitlich geändert. Lade die Seite neu und übernimm deine Änderungen erneut.",
-      "saveDescription": "Die Änderungen konnten nicht gespeichert werden. Prüfe deine Eingaben und versuche es erneut.",
-      "saveForbiddenDescription": "Du hast keine Berechtigung, Anlagen in diesem Konto zu speichern.",
-      "saveTitle": "Speichern fehlgeschlagen",
-      "saveUnavailableDescription": "Der Speicherdienst ist derzeit nicht verfügbar. Versuche es später erneut.",
-      "saveValidationDescription": "Der Server hat die Anlagendaten abgelehnt. Prüfe Anlagenname und Zeitzone und versuche es erneut."
-    },
-    "inverterSummary": "{{count}} Strings · {{kwp}} kWp",
-    "noLocation": "Standort noch nicht hinterlegt",
     "orientation": {
       "east": "Ost",
       "north": "Nord",
@@ -836,25 +700,7 @@
       "unknown": "Unbekannt",
       "west": "West"
     },
-    "status": {
-      "active": "Aktiv",
-      "activeUpper": "AKTIV",
-      "inactive": "Inaktiv",
-      "inactiveUpper": "INAKTIV",
-      "offline": "OFFLINE",
-      "online": "ONLINE"
-    },
-    "stringDescription": "{{count}} × {{watts}} Wp · {{orientation}}",
-    "subtitle": "{{count}} Anlagen konfiguriert",
-    "success": {
-      "created": "Anlage erfolgreich angelegt",
-      "description": "{{name}} ist jetzt in der Anlagenverwaltung verfügbar.",
-      "updated": "Anlage erfolgreich aktualisiert"
-    },
-    "summary": "{{inverters}} Wechselrichter · {{strings}} Strings",
-    "title": "Anlagenverwaltung",
     "units": {
-      "kwMax": "kW max.",
       "kwp": "kWp"
     },
     "wizard": {
@@ -865,16 +711,10 @@
       "azimuth": "Azimut (°)",
       "catalogPlaceholder": "Hersteller oder Modell suchen",
       "catalogLoading": "Katalog wird geladen…",
-      "createTitle": "Neue Anlage anlegen",
-      "editTitle": "Anlage bearbeiten",
-      "footerHint": "Alle Änderungen werden gemeinsam gespeichert.",
       "inverterCatalog": "Wechselrichterkatalog",
       "inverterOptionDetails": "{{power}} W · {{mppts}} MPPT · {{phases}}-phasig",
       "inverterSearchPlaceholder": "Hersteller oder Typ suchen",
-      "inverterCount": "Anzahl Wechselrichter",
-      "inverterDescription": "Wähle Modelle aus dem Katalog oder trage die technischen Werte manuell ein.",
       "inverterNumber": "Wechselrichter {{number}}",
-      "inverters": "Wechselrichter",
       "location": "Standort",
       "locationError": "Die Adresse konnte derzeit nicht aufgelöst werden. Bitte versuche es erneut.",
       "locationNotFound": "Für diese Adresse wurde kein passender Standort gefunden.",
@@ -889,40 +729,24 @@
       "moduleOptionDetails": "{{power}} Wp · {{temperatureCoefficient}} %/°C",
       "moduleSearchPlaceholder": "Modulhersteller oder Typ suchen",
       "modulePower": "Leistung (Wp)",
-      "mppts": "MPPTs",
       "noCatalogMatches": "Kein passender Katalogeintrag.",
       "orientation": "Ausrichtung",
       "overrideCatalog": "Katalogwerte manuell überschreiben",
-      "phases": "Phasen",
       "shading": {
         "degree": "Verschattung (%)",
         "from": "Von",
         "label": "Beschreibung",
         "to": "Bis"
       },
-      "status": "Status",
       "stringName": "String-Bezeichnung",
       "strings": "PV-Strings",
       "stringsDescription": "Ordne jedem Wechselrichter seine Modulgruppen, Ausrichtung und Detailparameter zu.",
-      "stringsForInverter": "Strings für Wechselrichter {{number}}",
-      "subtitle": "Konfiguriere Stammdaten und technische Komponenten in einem Schritt.",
-      "systemData": "Anlagendaten",
-      "systemName": "Anlagenname",
       "temperatureCoefficient": "Temperaturkoeffizient (%/°C)",
-      "tilt": "Neigung (°)",
-      "validation": {
-        "blocked": "Speichern nicht möglich: {{reason}}",
-        "inverterName": "Die Bezeichnung für Wechselrichter {{number}} fehlt.",
-        "moduleCount": "Die Modulanzahl für String {{string}} an Wechselrichter {{inverter}} muss größer als 0 sein.",
-        "modulePower": "Die Modulleistung für String {{string}} an Wechselrichter {{inverter}} muss größer als 0 sein.",
-        "stringName": "Die Bezeichnung für String {{string}} an Wechselrichter {{inverter}} fehlt.",
-        "strings": "Wechselrichter {{number}} benötigt mindestens einen PV-String.",
-        "systemName": "Der Anlagenname fehlt."
-      }
+      "tilt": "Neigung (°)"
     }
   },
   "account": {
-    "description": "Verwalte deine persönlichen Daten, dein Passwort und die Zugänge für Integrationen.",
+    "description": "Verwalte deine persönlichen Daten, dein Passwort und die API-Schlüssel für Integrationen.",
     "password": {
       "confirm": "Neues Passwort bestätigen",
       "current": "Aktuelles Passwort",
@@ -957,30 +781,29 @@
   "accountApiKeys": {
     "active": "Aktiv",
     "cancel": "Abbrechen",
-    "confirmRevoke": "API-Key widerrufen",
-    "create": "API-Key erstellen",
+    "confirmRevoke": "API-Schlüssel widerrufen",
+    "create": "API-Schlüssel erstellen",
     "createDescription": "Wähle nur die Berechtigungen, die diese Integration benötigt. Berechtigungen schließen einander nicht automatisch ein.",
-    "createError": "Der API-Key konnte nicht erstellt werden. Prüfe Name, Berechtigungen und Ablaufdatum.",
-    "createTitle": "API-Key erstellen",
+    "createError": "Der API-Schlüssel konnte nicht erstellt werden. Prüfe Name, Berechtigungen und Ablaufdatum.",
+    "createTitle": "API-Schlüssel erstellen",
     "creating": "Wird erstellt…",
-    "description": "Erstelle getrennte, widerrufbare Zugangsdaten für Integrationen, ohne dein Passwort oder unnötige Anlagenrechte weiterzugeben.",
-    "empty": "Es wurden noch keine Konto-API-Keys erstellt.",
+    "description": "Erstelle getrennte, widerrufbare API-Schlüssel für Integrationen, ohne dein Passwort oder unnötige Anlagenrechte weiterzugeben.",
+    "empty": "Es wurden noch keine Konto-API-Schlüssel erstellt.",
     "expiry": "Ablaufzeitpunkt (optional)",
     "expiryHint": "Leer lassen, wenn der Key nicht automatisch ablaufen soll.",
-    "listDescription": "Es werden nur sichere Metadaten angezeigt. API-Key-Secrets können nicht erneut angezeigt werden.",
-    "listTitle": "Vorhandene API-Keys",
-    "loadErrorDescription": "Die Konto-API-Keys konnten nicht geladen werden. Versuche es erneut.",
+    "listDescription": "Es werden nur sichere Metadaten angezeigt. Der geheime Teil eines API-Schlüssels kann nicht erneut angezeigt werden.",
+    "listTitle": "Vorhandene API-Schlüssel",
+    "loadErrorDescription": "Die Konto-API-Schlüssel konnten nicht geladen werden. Versuche es erneut.",
     "loadErrorTitle": "Laden fehlgeschlagen",
     "name": "Name",
-    "nameRequired": "Gib einen Namen für den API-Key ein.",
-    "navigation": "Konto-API-Keys verwalten",
+    "nameRequired": "Gib einen Namen für den API-Schlüssel ein.",
     "never": "Nie",
     "permissionRequired": "Wähle mindestens eine Berechtigung aus.",
     "permissions": "Berechtigungen",
     "revoke": "Widerrufen",
-    "revokeDescription": "Diese Integration verliert sofort den Zugriff. Andere API-Keys bleiben unverändert.",
-    "revokeError": "Der API-Key konnte nicht widerrufen werden. Versuche es erneut.",
-    "revokeSuccess": "Der API-Key wurde widerrufen.",
+    "revokeDescription": "Diese Integration verliert sofort den Zugriff. Andere API-Schlüssel bleiben unverändert.",
+    "revokeError": "Der API-Schlüssel konnte nicht widerrufen werden. Versuche es erneut.",
+    "revokeSuccess": "Der API-Schlüssel wurde widerrufen.",
     "revokeTitle": "{{name}} widerrufen?",
     "revoked": "Widerrufen",
     "scopes": {
@@ -1006,12 +829,12 @@
       }
     },
     "secret": {
-      "close": "Einmaligen API-Key schließen",
+      "close": "Einmaligen API-Schlüssel schließen",
       "copied": "Kopiert",
-      "copy": "API-Key kopieren",
-      "description": "Kopiere diesen API-Key jetzt. PVLog speichert aus Sicherheitsgründen nur seinen Hash und kann ihn später nicht erneut anzeigen.",
-      "label": "Neuer API-Key",
-      "title": "Dein neuer API-Key"
+      "copy": "API-Schlüssel kopieren",
+      "description": "Kopiere diesen API-Schlüssel jetzt. PVLog speichert aus Sicherheitsgründen nur seinen Hash und kann ihn später nicht erneut anzeigen.",
+      "label": "Neuer API-Schlüssel",
+      "title": "Dein neuer API-Schlüssel"
     },
     "table": {
       "actions": "Aktionen",
@@ -1021,7 +844,7 @@
       "permissions": "Berechtigungen",
       "status": "Status"
     },
-    "title": "Konto-API-Keys",
+    "title": "Konto-API-Schlüssel",
     "uploaderHint": "Um einen Logger zu verbinden, brauchst du keinen Schlüssel von hier: Eine Datenquelle stellt ihren eigenen Schlüssel aus, der nur für eine Anlage gilt.",
     "uploaderHintLink": "Datenquelle zu einer Anlage hinzufügen",
     "managed": {
@@ -1142,7 +965,7 @@
       "generationEnergy": "Erzeugte Energie",
       "consumptionPower": "Verbrauchsleistung",
       "consumptionEnergy": "Verbrauchte Energie",
-      "docsLink": "Dokumentation zu Uploadern und Fehlersuche"
+      "docsLink": "Dokumentation zu Anbindung und Fehlersuche"
     },
     "checklist": {
       "title": "Einrichtung abschließen",
@@ -1199,7 +1022,7 @@
         "description": "Eine bestehende SBFspot-Datenbank, hochgeladen vom Dienst sbfspot-push."
       },
       "generic": {
-        "name": "Anderer Uploader",
+        "name": "Anderer Logger",
         "description": "Ein Skript, Home Assistant oder jedes Werkzeug, das HTTP-Anfragen senden kann."
       },
       "import": {
