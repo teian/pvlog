@@ -33,6 +33,10 @@ struct Fixture {
     telemetry: StorageTelemetryApi,
     stored: Box<dyn TelemetryRepository>,
     system_id: SystemId,
+    target: DatabaseTarget,
+    management: Arc<dyn ManagementRepository>,
+    /// The account database, where aggregates can be read directly.
+    sqlite: Option<pvlog_storage::RoutedSqliteAccount>,
     _directory: Option<TempDir>,
 }
 
@@ -65,11 +69,14 @@ impl Fixture {
             .save_system_registry(&registry(system_id, account_id))
             .await?;
         Ok(Self {
-            telemetry: StorageTelemetryApi::new(target, management, clock()),
+            telemetry: StorageTelemetryApi::new(target.clone(), management.clone(), clock()),
             stored: Box::new(SqliteTelemetryRepository::new(
                 router.route(account_id).await?,
             )),
             system_id,
+            target,
+            management,
+            sqlite: Some(router.route(account_id).await?),
             _directory: Some(directory),
         })
     }
@@ -88,9 +95,12 @@ impl Fixture {
             .save_system_registry(&registry(system_id, account_id))
             .await?;
         Ok(Self {
-            telemetry: StorageTelemetryApi::new(target, management, clock()),
+            telemetry: StorageTelemetryApi::new(target.clone(), management.clone(), clock()),
             stored: Box::new(PostgresTelemetryRepository::new(url, account_id)),
             system_id,
+            target,
+            management,
+            sqlite: None,
             _directory: None,
         })
     }
@@ -249,6 +259,102 @@ async fn postgres_derives_interval_energy_from_lifetime_counters_when_configured
         return Ok(());
     };
     lifetime_counters(Fixture::postgres(url).await?).await
+}
+
+async fn grid_flows(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    // Feeding in: export power and energy, and what the meter imported meanwhile.
+    let mut exporting = fixture.reading(0);
+    exporting.supplements.grid_export_power_watts = Some(800);
+    exporting.supplements.grid_export_energy_wh = Some(60);
+    exporting.supplements.grid_import_energy_wh = Some(5);
+    fixture.telemetry.ingest(exporting).await?;
+    let stored = fixture.at(0).await?.measurements;
+    assert_eq!(stored.grid_export_power_watts, Some(800));
+    assert_eq!(stored.grid_export_energy_wh, Some(60));
+    assert_eq!(stored.grid_import_energy_wh, Some(5));
+    assert_eq!(stored.grid_import_power_watts, None);
+    assert_eq!(
+        stored.net_grid_power_watts, None,
+        "the net flow is unknown while one direction is missing"
+    );
+
+    // Drawing from the grid, with the other direction reported as zero.
+    let mut importing = fixture.reading(1);
+    importing.supplements.grid_import_power_watts = Some(300);
+    importing.supplements.grid_export_power_watts = Some(0);
+    importing.supplements.grid_import_energy_wh = Some(25);
+    fixture.telemetry.ingest(importing).await?;
+    let stored = fixture.at(1).await?.measurements;
+    assert_eq!(stored.grid_import_power_watts, Some(300));
+    assert_eq!(stored.net_grid_power_watts, Some(300));
+
+    // Both directions at once contradict each other.
+    let mut contradicting = fixture.reading(2);
+    contradicting.supplements.grid_import_power_watts = Some(100);
+    contradicting.supplements.grid_export_power_watts = Some(100);
+    assert!(matches!(
+        fixture.telemetry.ingest(contradicting).await,
+        Err(ModernTelemetryError::InvalidField("gridExportPowerWatts"))
+    ));
+    let mut negative = fixture.reading(2);
+    negative.supplements.grid_import_energy_wh = Some(-1);
+    assert!(matches!(
+        fixture.telemetry.ingest(negative).await,
+        Err(ModernTelemetryError::InvalidField("gridImportEnergyWh"))
+    ));
+    assert!(
+        fixture.at(2).await.is_err(),
+        "a rejected reading is not stored"
+    );
+
+    // Aggregates exist on SQLite only; PostgreSQL has no aggregation cycle yet.
+    let Some(account) = &fixture.sqlite else {
+        return Ok(());
+    };
+    pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
+    let mut connection = account.acquire().await?;
+    let system = fixture.system_id.as_uuid().as_bytes().to_vec();
+    for resolution in ["fifteen_minute", "hour", "day", "month", "year"] {
+        let sums: (Option<i64>, Option<i64>) = sqlx::query_as(
+            "SELECT SUM(grid_import_energy_sum_wh),SUM(grid_export_energy_sum_wh) \
+             FROM telemetry_rollups WHERE system_id=? AND scope_kind='system' AND resolution=?",
+        )
+        .bind(system.clone())
+        .bind(resolution)
+        .fetch_one(&mut *connection)
+        .await?;
+        assert_eq!(sums, (Some(30), Some(60)), "{resolution} rollups");
+    }
+    let daily: (Option<i64>, Option<i64>) = sqlx::query_as(
+        "SELECT grid_import_energy_wh,grid_export_energy_wh FROM system_daily_summaries \
+         WHERE system_id=?",
+    )
+    .bind(system.clone())
+    .fetch_one(&mut *connection)
+    .await?;
+    assert_eq!(daily, (Some(30), Some(60)));
+    let lifetime: (Option<i64>, Option<i64>) = sqlx::query_as(
+        "SELECT grid_import_energy_wh,grid_export_energy_wh FROM system_lifetime_summaries \
+         WHERE system_id=?",
+    )
+    .bind(system)
+    .fetch_one(&mut *connection)
+    .await?;
+    assert_eq!(lifetime, (Some(30), Some(60)));
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_stores_and_aggregates_grid_flows() -> Result<(), Box<dyn Error>> {
+    grid_flows(Fixture::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_stores_grid_flows_when_configured() -> Result<(), Box<dyn Error>> {
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    grid_flows(Fixture::postgres(url).await?).await
 }
 
 fn clock() -> Arc<dyn Clock> {

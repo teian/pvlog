@@ -55,6 +55,8 @@ struct Sample {
     generation_power_watts: Option<i64>,
     generation_energy_wh: Option<i64>,
     consumption_energy_wh: Option<i64>,
+    grid_import_energy_wh: Option<i64>,
+    grid_export_energy_wh: Option<i64>,
     quality_flags: i64,
 }
 
@@ -65,6 +67,10 @@ struct Bucket {
     end: i64,
     generation_energy_wh: i64,
     consumption_energy_wh: i64,
+    /// Grid sums stay absent until a sample reports them: a system without a
+    /// grid meter imported an unknown amount, not zero.
+    grid_import_energy_wh: Option<i64>,
+    grid_export_energy_wh: Option<i64>,
     minimum_watts: Option<i64>,
     maximum_watts: Option<i64>,
     first_watts: Option<i64>,
@@ -80,6 +86,14 @@ impl Bucket {
         self.generation_energy_wh += sample.generation_energy_wh.unwrap_or_default();
         self.consumption_energy_wh += sample.consumption_energy_wh.unwrap_or_default();
         self.quality_flags |= sample.quality_flags;
+        add(
+            &mut self.grid_import_energy_wh,
+            sample.grid_import_energy_wh,
+        );
+        add(
+            &mut self.grid_export_energy_wh,
+            sample.grid_export_energy_wh,
+        );
         if let Some(watts) = sample.generation_power_watts {
             self.minimum_watts = Some(self.minimum_watts.map_or(watts, |value| value.min(watts)));
             self.maximum_watts = Some(self.maximum_watts.map_or(watts, |value| value.max(watts)));
@@ -102,6 +116,13 @@ impl Bucket {
         i32::try_from((self.points * 10_000) / expected)
             .unwrap_or(10_000)
             .clamp(0, 10_000)
+    }
+}
+
+/// Adds a reported value to a sum that is absent until something is reported.
+fn add(sum: &mut Option<i64>, value: Option<i64>) {
+    if let Some(value) = value {
+        *sum = Some(sum.unwrap_or_default() + value);
     }
 }
 
@@ -335,7 +356,7 @@ async fn plant_samples(
 ) -> Result<Option<Vec<Sample>>, AggregationError> {
     let rows = sqlx::query(
         "SELECT measured_at,generation_power_watts,generation_energy_wh,consumption_energy_wh,\
-         quality_flags FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? \
+         grid_import_energy_wh,grid_export_energy_wh,quality_flags FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? \
          ORDER BY measured_at",
     )
     .bind(system.to_vec())
@@ -354,6 +375,8 @@ async fn plant_samples(
                 generation_power_watts: row.try_get("generation_power_watts").ok(),
                 generation_energy_wh: row.try_get("generation_energy_wh").ok(),
                 consumption_energy_wh: row.try_get("consumption_energy_wh").ok(),
+                grid_import_energy_wh: row.try_get("grid_import_energy_wh").ok().flatten(),
+                grid_export_energy_wh: row.try_get("grid_export_energy_wh").ok().flatten(),
                 quality_flags: row.try_get("quality_flags").unwrap_or_default(),
             })
             .collect(),
@@ -395,6 +418,8 @@ async fn metered_scopes(
             generation_power_watts: power,
             generation_energy_wh: power.map(|watts| interval_energy(watts, interval_millis)),
             consumption_energy_wh: None,
+            grid_import_energy_wh: None,
+            grid_export_energy_wh: None,
             quality_flags: row.try_get("quality_flags").unwrap_or_default(),
         };
         strings.entry(string_id).or_default().push(sample);
@@ -404,6 +429,8 @@ async fn metered_scopes(
             generation_power_watts: Some(0),
             generation_energy_wh: Some(0),
             consumption_energy_wh: None,
+            grid_import_energy_wh: None,
+            grid_export_energy_wh: None,
             quality_flags: 0,
         });
         merged.generation_power_watts =
@@ -487,8 +514,9 @@ async fn write_rollup(
          bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,\
          generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,\
          generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,\
-         quality_flags,coverage_basis_points,calculated_at) \
-         VALUES (?,?,?,?,?,?,?,1,1,?,?,?,?,?,?,?,?,?,?,?) \
+         quality_flags,coverage_basis_points,calculated_at,\
+         grid_import_energy_sum_wh,grid_export_energy_sum_wh) \
+         VALUES (?,?,?,?,?,?,?,1,1,?,?,?,?,?,?,?,?,?,?,?,?,?) \
          ON CONFLICT(system_id,scope_kind,scope_id,resolution,bucket_start,generation) DO UPDATE SET \
          bucket_end=excluded.bucket_end,point_count=excluded.point_count,\
          expected_count=excluded.expected_count,\
@@ -500,7 +528,9 @@ async fn write_rollup(
          generation_power_last_watts=excluded.generation_power_last_watts,\
          quality_flags=excluded.quality_flags,\
          coverage_basis_points=excluded.coverage_basis_points,\
-         calculated_at=excluded.calculated_at",
+         calculated_at=excluded.calculated_at,\
+         grid_import_energy_sum_wh=excluded.grid_import_energy_sum_wh,\
+         grid_export_energy_sum_wh=excluded.grid_export_energy_sum_wh",
     )
     .bind(context.blob.clone())
     .bind(context.scope_kind)
@@ -520,6 +550,8 @@ async fn write_rollup(
     .bind(bucket.quality_flags)
     .bind(bucket.coverage(context.interval_millis))
     .bind(context.calculated_at)
+    .bind(bucket.grid_import_energy_wh)
+    .bind(bucket.grid_export_energy_wh)
     .execute(connection)
     .await
     .map_err(|_| AggregationError::Unavailable)?;
@@ -537,8 +569,11 @@ async fn write_daily_summary(
     sqlx::query(
         "INSERT INTO system_daily_summaries (system_id,local_date,timezone,generation,\
          generation_energy_wh,consumption_energy_wh,peak_generation_power_watts,\
-         coverage_basis_points,quality_flags,calculated_at) VALUES (?,?,?,1,?,?,?,?,?,?) \
+         coverage_basis_points,quality_flags,calculated_at,\
+         grid_import_energy_wh,grid_export_energy_wh) VALUES (?,?,?,1,?,?,?,?,?,?,?,?) \
          ON CONFLICT(system_id,local_date,generation) DO UPDATE SET \
+         grid_import_energy_wh=excluded.grid_import_energy_wh,\
+         grid_export_energy_wh=excluded.grid_export_energy_wh,\
          generation_energy_wh=excluded.generation_energy_wh,\
          consumption_energy_wh=excluded.consumption_energy_wh,\
          peak_generation_power_watts=excluded.peak_generation_power_watts,\
@@ -554,6 +589,8 @@ async fn write_daily_summary(
     .bind(bucket.coverage(context.interval_millis))
     .bind(bucket.quality_flags)
     .bind(context.calculated_at)
+    .bind(bucket.grid_import_energy_wh)
+    .bind(bucket.grid_export_energy_wh)
     .execute(connection)
     .await
     .map_err(|_| AggregationError::Unavailable)?;
@@ -569,6 +606,7 @@ async fn rebuild_lifetime(
 ) -> Result<(), AggregationError> {
     let Some(totals) = sqlx::query(
         "SELECT SUM(generation_energy_wh) AS generation,SUM(consumption_energy_wh) AS consumption,\
+         SUM(grid_import_energy_wh) AS grid_import,SUM(grid_export_energy_wh) AS grid_export,\
          AVG(coverage_basis_points) AS coverage FROM system_daily_summaries WHERE system_id=?",
     )
     .bind(blob.to_vec())
@@ -597,8 +635,11 @@ async fn rebuild_lifetime(
     sqlx::query(
         "INSERT INTO system_lifetime_summaries (system_id,generation,first_observation_at,\
          last_observation_at,generation_energy_wh,consumption_energy_wh,\
-         peak_generation_power_watts,coverage_basis_points,calculated_at) \
-         VALUES (?,1,?,?,?,?,?,?,?) ON CONFLICT(system_id) DO UPDATE SET \
+         peak_generation_power_watts,coverage_basis_points,calculated_at,\
+         grid_import_energy_wh,grid_export_energy_wh) \
+         VALUES (?,1,?,?,?,?,?,?,?,?,?) ON CONFLICT(system_id) DO UPDATE SET \
+         grid_import_energy_wh=excluded.grid_import_energy_wh,\
+         grid_export_energy_wh=excluded.grid_export_energy_wh,\
          first_observation_at=excluded.first_observation_at,\
          last_observation_at=excluded.last_observation_at,\
          generation_energy_wh=excluded.generation_energy_wh,\
@@ -615,6 +656,18 @@ async fn rebuild_lifetime(
     .bind(observed.try_get::<i64, _>("peak").ok())
     .bind(coverage)
     .bind(calculated_at)
+    .bind(
+        totals
+            .try_get::<Option<i64>, _>("grid_import")
+            .ok()
+            .flatten(),
+    )
+    .bind(
+        totals
+            .try_get::<Option<i64>, _>("grid_export")
+            .ok()
+            .flatten(),
+    )
     .execute(connection)
     .await
     .map_err(|_| AggregationError::Unavailable)?;

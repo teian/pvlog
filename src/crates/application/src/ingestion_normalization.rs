@@ -47,6 +47,14 @@ pub struct ObservationSupplements {
     pub generation_lifetime_wh: Option<i64>,
     /// Lifetime consumption counter in watt-hours.
     pub consumption_lifetime_wh: Option<i64>,
+    /// Power drawn from the grid in watts.
+    pub grid_import_power_watts: Option<i64>,
+    /// Power fed into the grid in watts.
+    pub grid_export_power_watts: Option<i64>,
+    /// Energy drawn from the grid during the interval, in watt-hours.
+    pub grid_import_energy_wh: Option<i64>,
+    /// Energy fed into the grid during the interval, in watt-hours.
+    pub grid_export_energy_wh: Option<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -116,6 +124,17 @@ pub fn normalize_observation(
         })
     })
     .transpose()?;
+    let supplements = &input.supplements;
+    // A grid connection carries power in one direction at a time. Both
+    // directions above zero in one reading mean the source mixed up its
+    // registers, and storing it would count the same energy twice.
+    if supplements.grid_import_power_watts.is_some_and(|w| w > 0)
+        && supplements.grid_export_power_watts.is_some_and(|w| w > 0)
+    {
+        return Err(IngestionNormalizationError::InvalidField(
+            "gridExportPowerWatts",
+        ));
+    }
     let values = MeasurementValues {
         generation_power: input.generation_power.map(power).transpose()?,
         generation_energy: input.generation_energy.map(energy).transpose()?,
@@ -133,6 +152,12 @@ pub fn normalize_observation(
             input.supplements.consumption_lifetime_wh,
             "consumptionLifetimeWh",
         )?,
+        grid_import_power: counter(supplements.grid_import_power_watts, "gridImportPowerWatts")?
+            .map(|value| Watts::new(value.value())),
+        grid_export_power: counter(supplements.grid_export_power_watts, "gridExportPowerWatts")?
+            .map(|value| Watts::new(value.value())),
+        grid_import_energy: counter(supplements.grid_import_energy_wh, "gridImportEnergyWh")?,
+        grid_export_energy: counter(supplements.grid_export_energy_wh, "gridExportEnergyWh")?,
         battery,
         extended: input.extended,
         ..MeasurementValues::default()
@@ -181,7 +206,7 @@ fn energy(input: EnergyInput) -> Result<EnergyReading, IngestionNormalizationErr
         EnergyReading::Interval(value)
     })
 }
-/// Accepts a counter that cannot run backwards past zero.
+/// Accepts a quantity that cannot be negative, such as a counter or a one-directional flow.
 fn counter(
     value: Option<i64>,
     field: &'static str,

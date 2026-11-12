@@ -56,6 +56,11 @@ struct ObservationBody {
     /// Lifetime counters; interval energy is derived from them when it is not supplied.
     generation_lifetime_wh: Option<i64>,
     consumption_lifetime_wh: Option<i64>,
+    /// Grid flows, each in its own direction and never negative.
+    grid_import_power_watts: Option<i64>,
+    grid_export_power_watts: Option<i64>,
+    grid_import_energy_wh: Option<i64>,
+    grid_export_energy_wh: Option<i64>,
     voltage_millivolts: Option<u32>,
     temperature_millidegrees_celsius: Option<i32>,
     source_reference: Option<String>,
@@ -328,6 +333,10 @@ fn command(
         supplements: ObservationSupplements {
             generation_lifetime_wh: body.generation_lifetime_wh,
             consumption_lifetime_wh: body.consumption_lifetime_wh,
+            grid_import_power_watts: body.grid_import_power_watts,
+            grid_export_power_watts: body.grid_export_power_watts,
+            grid_import_energy_wh: body.grid_import_energy_wh,
+            grid_export_energy_wh: body.grid_export_energy_wh,
         },
         source: ObservationSource {
             kind: ObservationSourceKind::ModernApi,

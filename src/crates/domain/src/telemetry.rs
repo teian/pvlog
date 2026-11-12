@@ -68,6 +68,18 @@ pub struct MeasurementValues {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub consumption_lifetime: Option<WattHours>,
     pub grid: Option<GridFlow>,
+    /// Power drawn from the grid; never negative.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grid_import_power: Option<Watts>,
+    /// Power fed into the grid; never negative.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grid_export_power: Option<Watts>,
+    /// Energy drawn from the grid during the interval.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grid_import_energy: Option<WattHours>,
+    /// Energy fed into the grid during the interval.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grid_export_energy: Option<WattHours>,
     pub voltage: Option<MilliVolts>,
     pub temperature: Option<MilliDegreesCelsius>,
     pub battery: Option<BatteryReading>,

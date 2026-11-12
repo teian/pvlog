@@ -562,6 +562,14 @@ fn stored_observation(
 ) -> Result<StoredObservation, ModernTelemetryError> {
     let measured_at = i64::try_from(observation.observed_at.epoch_millis())
         .map_err(|_| ModernTelemetryError::Invalid)?;
+    let grid_import = observation
+        .values
+        .grid_import_power
+        .map(pvlog_domain::Watts::value);
+    let grid_export = observation
+        .values
+        .grid_export_power
+        .map(pvlog_domain::Watts::value);
     Ok(StoredObservation {
         id: observation.id,
         system_id: observation.system_id,
@@ -597,6 +605,18 @@ fn stored_observation(
                 .values
                 .consumption_lifetime
                 .map(pvlog_domain::WattHours::value),
+            grid_import_power_watts: grid_import,
+            grid_export_power_watts: grid_export,
+            grid_import_energy_wh: observation
+                .values
+                .grid_import_energy
+                .map(pvlog_domain::WattHours::value),
+            grid_export_energy_wh: observation
+                .values
+                .grid_export_energy
+                .map(pvlog_domain::WattHours::value),
+            // The net flow is only known when both directions were reported.
+            net_grid_power_watts: grid_import.zip(grid_export).map(|(i, e)| i - e),
             ..StoredMeasurements::default()
         },
     })
