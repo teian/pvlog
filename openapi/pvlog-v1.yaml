@@ -1101,6 +1101,79 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/MeasurementChannel" }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/ingest/capabilities:
+    get:
+      operationId: getIngestCapabilities
+      summary: Read what the ingestion API accepts
+      description: Returns the schema versions, the limits of one request and the content encodings the ingestion API accepts, so that a logger can adapt to the server instead of assuming them. Any authenticated client may ask.
+      tags: [Telemetry]
+      security: [{ sessionCookie: [] }, { bearerAuth: [] }]
+      responses:
+        "200":
+          description: Capabilities of the ingestion API
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IngestCapabilities" }
+        "401": { $ref: "#/components/responses/UnauthorizedProblem" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/systems/{system_id}/ingest:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    post:
+      operationId: ingest
+      summary: Deliver what a logger has
+      description: |-
+        Accepts in one request the devices a logger reads, their measurements, archive energy samples, daily summaries and events. Values are integers in the unit their member name states, times are epoch seconds, and an absent member means that the value is missing; it is never read as zero.
+
+        Items are identified by what they describe: a measurement by its time, an energy sample by device and time, a daily summary by device and date, an event by device and event identifier. Sending an item again stores nothing; sending it with other values replaces what was stored. No idempotency key is needed.
+
+        The request is checked completely before anything is stored. A member the schema version does not define, a list longer than its limit or an item that cannot be stored refuses the whole request, and the problem names the member, the limit, or every such item by list, position and reason.
+
+        Values of devices are stored as measurement channels under the key scheme of the source profiles. The system's generation power, lifetime and interval energy, grid power and battery state are derived from the devices that reported them; a value stated in `system` wins. Interval energy is not derived across a counter reset or a change in the set of reporting devices.
+
+        The body may be compressed with gzip or zstd, named in Content-Encoding. The limits are published by the capabilities resource.
+      tags: [Telemetry]
+      security: [{ sessionCookie: [] }, { bearerAuth: [telemetry:write] }]
+      parameters:
+        - name: Content-Encoding
+          in: header
+          description: Encoding of the request body.
+          schema: { type: string, enum: [identity, gzip, zstd] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IngestRequest" }
+      responses:
+        "200":
+          description: What became of the items, and the marks to continue from
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IngestResponse" }
+        "400": { $ref: "#/components/responses/IngestProblem" }
+        "401": { $ref: "#/components/responses/UnauthorizedProblem" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "413": { $ref: "#/components/responses/IngestProblem" }
+        "415": { $ref: "#/components/responses/IngestProblem" }
+        "422": { $ref: "#/components/responses/IngestProblem" }
+        "503": { $ref: "#/components/responses/IngestProblem" }
+  /api/v1/systems/{system_id}/ingest/state:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: getIngestState
+      summary: Read how far a logger has delivered
+      description: Returns, for the data source of the calling credential, the latest measurement time, sample time, summary date and event time PVLog holds per device. A logger that lost its own state continues from these marks. The marks of another data source of the same system are not included.
+      tags: [Telemetry]
+      security: [{ sessionCookie: [] }, { bearerAuth: [telemetry:write] }]
+      responses:
+        "200":
+          description: Marks of the calling data source
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IngestMarks" }
+        "401": { $ref: "#/components/responses/UnauthorizedProblem" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
   /api/v1/systems/{system_id}/device-events:
     parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     post:
@@ -3707,6 +3780,11 @@ components:
       content:
         application/problem+json:
           schema: { $ref: "#/components/schemas/Problem" }
+    IngestProblem:
+      description: The request was refused and nothing of it was stored. The detail names the member or limit; rejected lists every item that cannot be stored.
+      content:
+        application/problem+json:
+          schema: { $ref: "#/components/schemas/IngestProblem" }
     IssuedDataSource:
       description: Data source with its one-time uploader configuration. The response must not be cached.
       headers:
@@ -4825,6 +4903,366 @@ components:
       type: string
       enum: [mean, sum, min, max, last, counter_delta]
       description: How the values of a period are reduced to one value. counter_delta is the growth of a counter, ignoring resets.
+    IngestCapabilities:
+      type: object
+      required: [schemaVersions, contentEncodings, limits]
+      properties:
+        schemaVersions:
+          type: array
+          items: { type: integer }
+          description: Values of schemaVersion the server accepts.
+        contentEncodings:
+          type: array
+          items: { type: string }
+          description: Content encodings a request body may use.
+        limits:
+          type: object
+          required:
+            [
+              measurements,
+              energySamples,
+              dailySummaries,
+              events,
+              devices,
+              extraValuesPerDevice,
+              bodyBytes,
+              decodedBodyBytes,
+            ]
+          properties:
+            measurements:
+              { type: integer, description: Most measurements of one request. }
+            energySamples: { type: integer }
+            dailySummaries: { type: integer }
+            events: { type: integer }
+            devices:
+              type: integer
+              description: Most devices one request, and one measurement, may describe.
+            extraValuesPerDevice: { type: integer }
+            bodyBytes:
+              type: integer
+              description: Largest body as it is sent, compressed or not.
+            decodedBodyBytes:
+              type: integer
+              description: Largest body after decompression.
+    IngestRequest:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion]
+      properties:
+        schemaVersion: { type: integer, const: 1 }
+        source:
+          type: object
+          additionalProperties: false
+          description: The software that sends the request.
+          properties:
+            name: { type: string, maxLength: 64, example: smalog }
+            version: { type: string, maxLength: 64 }
+        devices:
+          type: array
+          maxItems: 64
+          description: Identity of the devices the logger reads. The latest identity is kept per device; an inverter whose serial matches takes the reported firmware and model, and a device that matches no inverter becomes a discovery proposal.
+          items: { $ref: "#/components/schemas/ReportedDevice" }
+        measurements:
+          type: array
+          maxItems: 5000
+          items: { $ref: "#/components/schemas/IngestMeasurement" }
+        energySamples:
+          type: array
+          maxItems: 20000
+          description: Energy samples from the archive of a device. Where no measurement exists for the time of a sample, the samples of that time supply the system's power and interval energy; a measurement that arrives later replaces what they supplied.
+          items:
+            type: object
+            additionalProperties: false
+            required: [deviceId, measuredAt]
+            properties:
+              deviceId: { $ref: "#/components/schemas/IngestDeviceId" }
+              measuredAt: { $ref: "#/components/schemas/EpochSeconds" }
+              energyLifetimeWh: { type: integer, format: int64, minimum: 0 }
+              powerW: { type: integer, format: int64 }
+        dailySummaries:
+          type: array
+          maxItems: 5000
+          items: { $ref: "#/components/schemas/IngestDailySummary" }
+        events:
+          type: array
+          maxItems: 5000
+          items: { $ref: "#/components/schemas/IngestEvent" }
+    EpochSeconds:
+      type: integer
+      format: int64
+      minimum: 0
+      maximum: 4102444800
+      description: Seconds since 1970-01-01T00:00:00Z.
+    IngestDeviceId:
+      type: string
+      minLength: 1
+      maxLength: 64
+      pattern: "^[A-Za-z0-9_-]+$"
+      description: The device as the logger names it; for an inverter its serial number.
+    IngestMeasurement:
+      type: object
+      additionalProperties: false
+      required: [measuredAt]
+      description: What was measured at one time. It needs values of the system, of devices, or both.
+      properties:
+        measuredAt: { $ref: "#/components/schemas/EpochSeconds" }
+        system:
+          type: object
+          additionalProperties: false
+          description: Values of the whole system. A value stated here wins over the one derived from the devices of the same measurement.
+          properties:
+            generationPowerW: { type: integer, format: int64 }
+            generationEnergyWh: { type: integer, format: int64 }
+            generationLifetimeWh: { type: integer, format: int64, minimum: 0 }
+            consumptionPowerW: { type: integer, format: int64 }
+            consumptionEnergyWh: { type: integer, format: int64 }
+            consumptionLifetimeWh: { type: integer, format: int64, minimum: 0 }
+            gridImportPowerW: { type: integer, format: int64, minimum: 0 }
+            gridExportPowerW:
+              type: integer
+              format: int64
+              minimum: 0
+              description: Import and export power must not both be above zero.
+            gridImportEnergyWh: { type: integer, format: int64, minimum: 0 }
+            gridExportEnergyWh: { type: integer, format: int64, minimum: 0 }
+            batteryStateOfChargePermille:
+              { type: integer, minimum: 0, maximum: 1000 }
+            batteryPowerW:
+              type: integer
+              format: int64
+              description: Positive while the battery charges.
+            batteryEnergyWh: { type: integer, format: int64, minimum: 0 }
+            temperatureMillicelsius: { type: integer, format: int32 }
+            voltageMv: { type: integer, format: int32, minimum: 0 }
+            message: { type: string, maxLength: 30 }
+        devices:
+          type: array
+          maxItems: 64
+          items: { $ref: "#/components/schemas/IngestDeviceValues" }
+    IngestDeviceValues:
+      type: object
+      additionalProperties: false
+      required: [id]
+      description: Values of one device at one time. Each becomes a measurement channel of the device under the key scheme of the source profiles.
+      properties:
+        id: { $ref: "#/components/schemas/IngestDeviceId" }
+        ac:
+          type: array
+          maxItems: 3
+          items:
+            type: object
+            additionalProperties: false
+            required: [phase]
+            properties:
+              phase: { type: integer, minimum: 1, maximum: 3 }
+              powerW: { type: integer, format: int64 }
+              currentMa: { type: integer, format: int64 }
+              voltageMv: { type: integer, format: int64 }
+        gridFrequencyMhz: { type: integer, format: int64, minimum: 0 }
+        gridImportPowerW: { type: integer, format: int64, minimum: 0 }
+        gridExportPowerW: { type: integer, format: int64, minimum: 0 }
+        energyTodayWh: { type: integer, format: int64, minimum: 0 }
+        energyLifetimeWh: { type: integer, format: int64, minimum: 0 }
+        operatingTimeS: { type: integer, format: int64, minimum: 0 }
+        feedInTimeS: { type: integer, format: int64, minimum: 0 }
+        statusCode:
+          type: integer
+          format: int64
+          description: Numeric status as the device reports it. It is labelled from the source profile when shown.
+        gridRelayStatusCode: { type: integer, format: int64 }
+        temperatureMillicelsius: { type: integer, format: int64 }
+        signalPermille: { type: integer, minimum: 0, maximum: 1000 }
+        trackers:
+          type: array
+          description: DC inputs by the number the device gives them. Numbers may have gaps and are not renumbered.
+          items:
+            type: object
+            additionalProperties: false
+            required: [number]
+            properties:
+              number: { type: integer, minimum: 1, maximum: 255 }
+              powerW: { type: integer, format: int64 }
+              currentMa: { type: integer, format: int64 }
+              voltageMv: { type: integer, format: int64 }
+        battery:
+          type: object
+          additionalProperties: false
+          properties:
+            stateOfChargePermille: { type: integer, minimum: 0, maximum: 1000 }
+            voltageMv: { type: integer, format: int64 }
+            currentMa: { type: integer, format: int64 }
+            temperatureMillicelsius: { type: integer, format: int64 }
+        extra:
+          type: object
+          maxProperties: 32
+          description: "Values PVLog has no member for, by a name the logger chooses from lower-case letters, digits, dot, hyphen and underscore. Each becomes the measurement channel inv.<serial>.x.<name> with the unit it states. A value that contradicts the channel's unit is left out and named in rejected."
+          additionalProperties:
+            type: object
+            additionalProperties: false
+            required: [value]
+            properties:
+              value:
+                type: number
+                description: Plain decimal notation with at most nine decimal places; stored without rounding.
+              unit: { type: string, minLength: 1, maxLength: 16 }
+    IngestDailySummary:
+      type: object
+      additionalProperties: false
+      required: [date]
+      description: The summary of one local day. Summaries of devices are added up to the day's value; see the daily summary resource for which value a day reports.
+      properties:
+        deviceId:
+          allOf: [{ $ref: "#/components/schemas/IngestDeviceId" }]
+          description: Absent for a summary of the whole system.
+        date: { type: string, format: date }
+        energyWh: { type: integer, format: int64, minimum: 0 }
+        energyLifetimeWh:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Lifetime counter at the end of the day.
+        complete:
+          type: boolean
+          default: false
+          description: True once the day will not change any more.
+        exportEnergyWh: { type: integer, format: int64, minimum: 0 }
+        consumptionEnergyWh: { type: integer, format: int64, minimum: 0 }
+        peakPowerW: { type: integer, format: int64, minimum: 0 }
+        peakTime:
+          type: string
+          pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+        weatherCondition: { type: string, maxLength: 40 }
+        temperatureMinMillicelsius: { type: integer, format: int64 }
+        temperatureMaxMillicelsius: { type: integer, format: int64 }
+        importEnergyWhByBand:
+          type: object
+          additionalProperties: false
+          properties:
+            peak: { type: integer, format: int64, minimum: 0 }
+            offPeak: { type: integer, format: int64, minimum: 0 }
+            shoulder: { type: integer, format: int64, minimum: 0 }
+            highShoulder: { type: integer, format: int64, minimum: 0 }
+    IngestEvent:
+      type: object
+      additionalProperties: false
+      required: [deviceId, occurredAt]
+      properties:
+        deviceId: { type: string, minLength: 1, maxLength: 64 }
+        eventId:
+          oneOf:
+            - { type: string, minLength: 1, maxLength: 128 }
+            - { type: integer, format: int64 }
+          description: The device's own identifier of the event. Without it the event is identified by its time and code.
+        occurredAt: { $ref: "#/components/schemas/EpochSeconds" }
+        code: { type: integer, format: int64 }
+        type: { type: string, maxLength: 500 }
+        category: { type: string, maxLength: 500 }
+        group: { type: string, maxLength: 500 }
+        message: { type: string, maxLength: 500 }
+        oldValue: { type: string, maxLength: 500 }
+        newValue: { type: string, maxLength: 500 }
+        userGroup: { type: string, maxLength: 500 }
+    IngestRejection:
+      type: object
+      required: [category, index, member, reason]
+      properties:
+        category:
+          type: string
+          enum:
+            [
+              source,
+              devices,
+              measurements,
+              energySamples,
+              dailySummaries,
+              events,
+            ]
+          description: The list the item is in.
+        index:
+          type: integer
+          minimum: 0
+          description: Position of the item in that list, counted from zero.
+        member:
+          type: string
+          description: Path of the member within the item, or the channel key of a value that was left out. Empty when the item as a whole is meant.
+        reason:
+          type: string
+          description: Stable code of what is wrong, for example out_of_range, negative, duplicate, empty or unit_mismatch.
+    IngestCounts:
+      type: object
+      required: [stored, unchanged, rejected]
+      properties:
+        stored:
+          type: integer
+          description: Items that were new, or replaced a stored item with other values.
+        unchanged:
+          type: integer
+          description: Items that were already stored as sent.
+        rejected:
+          type: array
+          description: Values that were left out while the rest of their item was stored.
+          items: { $ref: "#/components/schemas/IngestRejection" }
+    IngestMark:
+      type: object
+      description: How far a source has delivered for one device or for the system. An absent member means that nothing of that kind is held.
+      properties:
+        deviceId:
+          type: string
+          description: Absent in the marks of the system.
+        measuredAt: { $ref: "#/components/schemas/EpochSeconds" }
+        sampleAt: { $ref: "#/components/schemas/EpochSeconds" }
+        summaryDate: { type: string, format: date }
+        eventAt: { $ref: "#/components/schemas/EpochSeconds" }
+    IngestMarks:
+      type: object
+      required: [system, devices]
+      properties:
+        system: { $ref: "#/components/schemas/IngestMark" }
+        devices:
+          type: array
+          items: { $ref: "#/components/schemas/IngestMark" }
+    IngestResponse:
+      type: object
+      required: [measurements, energySamples, dailySummaries, events, marks]
+      properties:
+        measurements: { $ref: "#/components/schemas/IngestCounts" }
+        energySamples: { $ref: "#/components/schemas/IngestCounts" }
+        dailySummaries: { $ref: "#/components/schemas/IngestCounts" }
+        events: { $ref: "#/components/schemas/IngestCounts" }
+        marks: { $ref: "#/components/schemas/IngestMarks" }
+    IngestProblem:
+      allOf:
+        - { $ref: "#/components/schemas/Problem" }
+        - type: object
+          properties:
+            title:
+              type: string
+              enum:
+                [
+                  malformed_request,
+                  unknown_member,
+                  unsupported_schema_version,
+                  unsupported_content_encoding,
+                  limit_exceeded,
+                  items_rejected,
+                  service_unavailable,
+                ]
+            detail:
+              type: string
+              description: The path of an unknown member, the limit that was exceeded, or what the parser reported.
+            limit:
+              type: integer
+              description: The limit that was exceeded.
+            schemaVersions:
+              type: array
+              items: { type: integer }
+            contentEncodings:
+              type: array
+              items: { type: string }
+            rejected:
+              type: array
+              description: Every item that cannot be stored.
+              items: { $ref: "#/components/schemas/IngestRejection" }
     DeviceEventInput:
       type: object
       required: [deviceId, occurredAtEpochMillis]

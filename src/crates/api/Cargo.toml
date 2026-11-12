@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 async-trait.workspace = true
 axum.workspace = true
+flate2.workspace = true
 opentelemetry.workspace = true
 garde.workspace = true
 pvlog-application = { version = "0.1.0", path = "../application" }
@@ -26,9 +27,12 @@ url.workspace = true
 utoipa.workspace = true
 utoipa-axum.workspace = true
 uuid.workspace = true
+zstd.workspace = true
 
 [dev-dependencies]
 async-trait.workspace = true
+flate2.workspace = true
+zstd.workspace = true
 
 [lib]
 path = "src/lib.rs"
@@ -84,6 +88,10 @@ path = "../../../tests/rust/api/system_endpoints.rs"
 [[test]]
 name = "setup-endpoints"
 path = "../../../tests/rust/api/setup_endpoints.rs"
+
+[[test]]
+name = "ingest-endpoints"
+path = "../../../tests/rust/api/ingest_endpoints.rs"
 
 [[test]]
 name = "device-event-endpoints"

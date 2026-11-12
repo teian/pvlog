@@ -143,13 +143,12 @@ impl StorageDeviceEventApi {
 
 /// The identity of an event within its device: the source's identifier, or
 /// the event's time and code when the source has none.
-fn event_key(event: &DeviceEventInput) -> String {
-    event.event_id.as_ref().map_or_else(
+pub(crate) fn event_key(event_id: Option<&str>, occurred_at: i64, code: Option<i64>) -> String {
+    event_id.map_or_else(
         || {
             format!(
-                "at:{}:{}",
-                event.occurred_at_epoch_millis,
-                event.code.map(|code| code.to_string()).unwrap_or_default()
+                "at:{occurred_at}:{}",
+                code.map(|code| code.to_string()).unwrap_or_default()
             )
         },
         |id| format!("{SOURCE_IDENTIFIER}{id}"),
@@ -211,7 +210,11 @@ impl DeviceEventApiUseCases for StorageDeviceEventApi {
                 id: Uuid::now_v7(),
                 system_id,
                 device_key: event.device_id.clone(),
-                event_key: event_key(event),
+                event_key: event_key(
+                    event.event_id.as_deref(),
+                    event.occurred_at_epoch_millis,
+                    event.code,
+                ),
                 data_source_id,
                 occurred_at: event.occurred_at_epoch_millis,
                 code: event.code,

@@ -529,7 +529,7 @@ impl TelemetryRepository for PostgresTelemetryRepository {
 }
 
 #[cfg(feature = "sqlite")]
-async fn sqlite_insert_hot(
+pub(crate) async fn sqlite_insert_hot(
     c: &mut sqlx::SqliteConnection,
     o: &StoredObservation,
 ) -> Result<sqlx::sqlite::SqliteQueryResult, TelemetryRepositoryError> {
@@ -537,7 +537,7 @@ async fn sqlite_insert_hot(
 }
 
 #[cfg(feature = "postgres")]
-async fn pg_insert_hot(
+pub(crate) async fn pg_insert_hot(
     c: &mut PgConnection,
     account_id: AccountId,
     o: &StoredObservation,

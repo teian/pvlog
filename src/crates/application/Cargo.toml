@@ -120,6 +120,10 @@ name = "import-export"
 path = "../../../tests/rust/application/import_export.rs"
 
 [[test]]
+name = "ingest"
+path = "../../../tests/rust/application/ingest.rs"
+
+[[test]]
 name = "channel-values"
 path = "../../../tests/rust/application/channel_values.rs"
 

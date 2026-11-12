@@ -18,6 +18,7 @@ mod equipment_catalog;
 mod equipment_configuration;
 mod identity_linking;
 mod import_export;
+mod ingest;
 mod ingestion_admission;
 mod ingestion_counters;
 mod ingestion_normalization;
@@ -111,6 +112,17 @@ pub use identity_linking::{
 pub use import_export::{
     ExportJobResource, ImportExportError, ImportExportRepository, ImportExportService, ImportPlan,
     ImportValidationIssue,
+};
+pub use ingest::{
+    DerivedGeneration, DeviceTotals, INGEST_CONTENT_ENCODINGS, INGEST_SCHEMA_VERSION,
+    IngestBattery, IngestCapabilities, IngestDailySummary, IngestDevice, IngestDeviceValues,
+    IngestEnergySample, IngestEvent, IngestExtraValue, IngestLimits, IngestMeasurement,
+    IngestPhase, IngestRejection, IngestRequest, IngestRequestProblem, IngestSource,
+    IngestSystemValues, IngestTracker, LifetimeCounters, MAXIMUM_INGEST_BODY_BYTES,
+    MAXIMUM_INGEST_DAILY_SUMMARIES, MAXIMUM_INGEST_DECODED_BYTES, MAXIMUM_INGEST_DEVICES,
+    MAXIMUM_INGEST_ENERGY_SAMPLES, MAXIMUM_INGEST_EVENTS, MAXIMUM_INGEST_EXTRA_VALUES,
+    MAXIMUM_INGEST_MEASUREMENTS, check_ingest_request, derive_generation, device_channel_readings,
+    device_totals, ingest_capabilities, unknown_ingest_member, validate_ingest_request,
 };
 pub use ingestion_admission::{
     IngestionAdmission, IngestionAdmissionError, IngestionAdmissionMetrics, IngestionPermit,

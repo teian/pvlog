@@ -19,6 +19,7 @@ pub mod discovery;
 pub mod embedded_ui;
 pub mod forecasting;
 pub mod geocoding;
+pub mod ingest;
 pub mod insights;
 pub mod inverters;
 pub mod notifications;

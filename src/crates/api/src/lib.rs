@@ -43,6 +43,7 @@ mod equipment_catalog;
 mod forecasting;
 mod geocoding;
 mod identities;
+mod ingest;
 mod insights;
 mod inverters;
 mod local_password;
@@ -121,6 +122,10 @@ pub use forecasting::{
 pub use geocoding::{GeocodingApi, GeocodingError, GeocodingResult, geocoding_router};
 pub use identities::{
     IdentityApiError, IdentityApiUseCases, LinkedIdentityResponse, identities_router,
+};
+pub use ingest::{
+    IngestApiError, IngestApiUseCases, IngestCounts, IngestMark, IngestMarks, IngestResponse,
+    IngestWriter, ingest_router,
 };
 pub use insights::{
     BestBucket, InsightApiError, InsightApiUseCases, InsightRange, PreviousPeriod, RangeSummary,
