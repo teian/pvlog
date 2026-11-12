@@ -41,6 +41,8 @@ pub struct ChannelRecord {
     pub lifecycle: String,
     pub discovered_at: Option<i64>,
     pub last_value_at: Option<i64>,
+    /// When the channel first received a value other than zero.
+    pub first_nonzero_at: Option<i64>,
     /// Newest stored value by measurement time, as a scaled integer.
     pub last_value: Option<i64>,
     pub updated_at: i64,
@@ -318,7 +320,7 @@ macro_rules! sqlite_channel_select {
         concat!(
             "SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,",
             "c.unit,c.scale,c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,",
-            "c.last_value_at,c.updated_at,",
+            "c.last_value_at,c.first_nonzero_at,c.updated_at,",
             "(SELECT v.integer_value FROM telemetry_hot_extended_values v ",
             "JOIN telemetry_hot h ON h.observation_id=v.observation_id ",
             "WHERE v.channel_id=c.id ORDER BY h.measured_at DESC LIMIT 1) AS last_value ",
@@ -355,7 +357,8 @@ async fn sqlite_definitions(
     sqlx::query(
         "SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,c.unit,c.scale,\
          c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,c.last_value_at,\
-         c.updated_at,NULL AS last_value FROM channel_definitions c WHERE c.system_id=?",
+         c.first_nonzero_at,c.updated_at,NULL AS last_value \
+         FROM channel_definitions c WHERE c.system_id=?",
     )
     .bind(blob(system_id.as_uuid()))
     .fetch_all(connection)
@@ -396,6 +399,7 @@ fn sqlite_channel(row: &sqlx::sqlite::SqliteRow) -> Result<ChannelRecord, Accoun
         lifecycle: row.get("lifecycle"),
         discovered_at: row.get("discovered_at"),
         last_value_at: row.get("last_value_at"),
+        first_nonzero_at: row.get("first_nonzero_at"),
         last_value: row.get("last_value"),
         updated_at: row.get("updated_at"),
     })
@@ -622,11 +626,16 @@ impl ChannelRepository for SqliteChannelRepository {
             .bind(value)
             .execute(writer.connection())
             .await?;
-            sqlx::query("UPDATE channel_definitions SET last_value_at=? WHERE id=?")
-                .bind(received_at)
-                .bind(blob(channel.as_uuid()))
-                .execute(writer.connection())
-                .await?;
+            sqlx::query(
+                "UPDATE channel_definitions SET last_value_at=?,first_nonzero_at=\
+                 COALESCE(first_nonzero_at,CASE WHEN ?<>0 THEN ? END) WHERE id=?",
+            )
+            .bind(received_at)
+            .bind(value)
+            .bind(received_at)
+            .bind(blob(channel.as_uuid()))
+            .execute(writer.connection())
+            .await?;
         }
         Ok(())
     }
@@ -711,7 +720,7 @@ impl ChannelRepository for SqliteChannelRepository {
                GROUP BY v.channel_id) \
              SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,c.unit,c.scale,\
              c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,\
-             c.last_value_at,c.updated_at,NULL AS last_value,\
+             c.last_value_at,c.first_nonzero_at,c.updated_at,NULL AS last_value,\
              p.first_measured_at,p.last_measured_at,p.last_received_at,\
              (SELECT COUNT(*) FROM telemetry_hot_extended_values v \
               JOIN telemetry_hot h ON h.observation_id=v.observation_id \
@@ -904,7 +913,7 @@ macro_rules! postgres_channel_select {
         concat!(
             "SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,",
             "c.unit,c.scale,c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,",
-            "c.last_value_at,c.updated_at,",
+            "c.last_value_at,c.first_nonzero_at,c.updated_at,",
             "(SELECT v.integer_value FROM telemetry.hot_extended_values v ",
             "WHERE v.account_id=c.account_id AND v.channel_id=c.id ",
             "ORDER BY v.measured_at DESC LIMIT 1) AS last_value ",
@@ -931,6 +940,7 @@ fn postgres_channel(row: &sqlx::postgres::PgRow) -> Result<ChannelRecord, Accoun
         lifecycle: row.get("lifecycle"),
         discovered_at: row.get("discovered_at"),
         last_value_at: row.get("last_value_at"),
+        first_nonzero_at: row.get("first_nonzero_at"),
         last_value: row.get("last_value"),
         updated_at: row.get("updated_at"),
     })
@@ -966,7 +976,7 @@ impl PostgresChannelRepository {
         sqlx::query(
             "SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,c.unit,c.scale,\
              c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,\
-             c.last_value_at,c.updated_at,NULL::BIGINT AS last_value \
+             c.last_value_at,c.first_nonzero_at,c.updated_at,NULL::BIGINT AS last_value \
              FROM account_data.channel_definitions c WHERE c.account_id=$1 AND c.system_id=$2",
         )
         .bind(self.account_id.as_uuid())
@@ -1218,12 +1228,14 @@ impl ChannelRepository for PostgresChannelRepository {
             .execute(&mut connection)
             .await?;
             sqlx::query(
-                "UPDATE account_data.channel_definitions SET last_value_at=$3 \
+                "UPDATE account_data.channel_definitions SET last_value_at=$3,\
+                 first_nonzero_at=COALESCE(first_nonzero_at,CASE WHEN $4<>0 THEN $3 END) \
                  WHERE account_id=$1 AND id=$2",
             )
             .bind(self.account_id.as_uuid())
             .bind(channel.as_uuid())
             .bind(received_at)
+            .bind(value)
             .execute(&mut connection)
             .await?;
         }
@@ -1319,7 +1331,7 @@ impl ChannelRepository for PostgresChannelRepository {
                GROUP BY v.channel_id) \
              SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,c.unit,c.scale,\
              c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,\
-             c.last_value_at,c.updated_at,NULL::BIGINT AS last_value,\
+             c.last_value_at,c.first_nonzero_at,c.updated_at,NULL::BIGINT AS last_value,\
              p.first_measured_at,p.last_measured_at,p.last_received_at,\
              (SELECT COUNT(*) FROM telemetry.hot_extended_values v \
               JOIN telemetry.hot_observations h ON h.account_id=v.account_id \

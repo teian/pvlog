@@ -37,6 +37,7 @@ mod connectors;
 mod daily_summaries;
 mod dashboard;
 mod data_sources;
+mod discovery;
 mod equipment_catalog;
 mod forecasting;
 mod geocoding;
@@ -95,6 +96,10 @@ pub use data_sources::{
     CreateDataSourceInput, DataSourceApiError, DataSourceApiUseCases, DataSourceConfiguration,
     DataSourceResponse, IssuedDataSource, RenameDataSourceInput, TestReadingResponse,
     data_sources_router,
+};
+pub use discovery::{
+    AdoptProposalInput, AdoptedEquipmentResponse, AdoptedStringInput, AdoptedStringResponse,
+    DiscoveryApiError, DiscoveryApiUseCases, DiscoveryProposalResponse, discovery_router,
 };
 pub use equipment_catalog::{
     CatalogPageResponse, EquipmentCatalogApiError, equipment_catalog_router,

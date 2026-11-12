@@ -847,6 +847,14 @@ async fn run_server(config: &RuntimeConfig, target: &DatabaseTarget) -> Result<(
                 channels,
                 request_authorizer.clone(),
             ))
+            .merge(pvlog_api::discovery_router(
+                Arc::new(pvlog::discovery::StorageDiscoveryApi::new(
+                    target.clone(),
+                    compose_management_repository(target)?,
+                    Arc::new(SystemClock),
+                )),
+                request_authorizer.clone(),
+            ))
             .merge(pvlog_api::insights_router(
                 insights,
                 request_authorizer.clone(),

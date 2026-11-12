@@ -14,6 +14,7 @@ pub mod config;
 pub mod daily_summaries;
 pub mod dashboard;
 pub mod data_sources;
+pub mod discovery;
 pub mod embedded_ui;
 pub mod forecasting;
 pub mod geocoding;

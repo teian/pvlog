@@ -5,7 +5,7 @@
 //! batch outcomes. Aggregates are rebuilt asynchronously by the worker's
 //! aggregation cycle rather than inside the write path.
 
-use std::sync::Arc;
+use std::{collections::BTreeSet, sync::Arc};
 
 use async_trait::async_trait;
 use pvlog_application::{
@@ -13,8 +13,8 @@ use pvlog_application::{
     ChannelAggregation, ChannelTyping, ChannelValueType, Clock, CorrectObservation,
     CounterBaseline, IngestedObservation, IngestionNormalizationError, ModernTelemetryError,
     ModernTelemetryUseCases, NormalizeObservation, PortError, RejectedChannel,
-    VersionedObservation, channel_typing_for, derive_counter_energy, normalize_observation,
-    scaled_channel_value,
+    VersionedObservation, channel_typing_for, derive_counter_energy, device_channel,
+    normalize_observation, scaled_channel_value,
 };
 use pvlog_domain::{
     AccountId, ApiCredentialId, CanonicalObservation, ChannelId, DataSourceId, EnergyReading,
@@ -22,8 +22,8 @@ use pvlog_domain::{
 };
 use pvlog_storage::{
     ChannelRecord, ChannelRegistration, ChannelRepository, DataSourceRepository, DatabaseTarget,
-    ManagementRepository, ObservationInsertOutcome, StoredMeasurements, StoredObservation,
-    TelemetryRepository, TelemetryRepositoryError,
+    DiscoveredDeviceRecord, ManagementRepository, ObservationInsertOutcome, StoredMeasurements,
+    StoredObservation, TelemetryRepository, TelemetryRepositoryError,
 };
 
 const MAXIMUM_BATCH_ITEMS: usize = 1_000;
@@ -225,8 +225,9 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
             return Ok(observation.into());
         }
         let channels = self.channel_repository(system_id).await?;
-        let (command, rejected_channels) =
-            resolve_channels(channels.as_ref(), system_id, command, received_at).await?;
+        let (command, rejected_channels) = self
+            .resolve_channels(channels.as_ref(), system_id, command, received_at)
+            .await?;
         let mut observation = normalize_observation(command).map_err(invalid)?;
         let repository = self.repository(system_id).await?;
         apply_counters(repository.as_ref(), &mut observation, data_source, &[]).await?;
@@ -290,8 +291,9 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         let channels = self.channel_repository(system_id).await?;
         let mut outcomes = Vec::with_capacity(commands.len());
         for (index, command) in commands.into_iter().enumerate() {
-            let (command, rejected_channels) =
-                resolve_channels(channels.as_ref(), system_id, command, received_at).await?;
+            let (command, rejected_channels) = self
+                .resolve_channels(channels.as_ref(), system_id, command, received_at)
+                .await?;
             let status = match normalize_observation(command) {
                 Err(_) => BatchItemStatus::Invalid,
                 Ok(mut observation) => {
@@ -353,8 +355,9 @@ impl StorageTelemetryApi {
         let mut rejected = Vec::with_capacity(commands.len());
         let mut stored = Vec::with_capacity(commands.len());
         for command in commands {
-            let (command, rejected_channels) =
-                resolve_channels(channels.as_ref(), system_id, command, received_at).await?;
+            let (command, rejected_channels) = self
+                .resolve_channels(channels.as_ref(), system_id, command, received_at)
+                .await?;
             rejected.push(rejected_channels);
             let mut observation = normalize_observation(command).map_err(invalid)?;
             // Nothing of this batch is stored yet, so an earlier item is the
@@ -400,6 +403,43 @@ impl StorageTelemetryApi {
 }
 
 impl StorageTelemetryApi {
+    /// Resolves the channel values of a reading and records the devices whose
+    /// channels were seen for the first time.
+    async fn resolve_channels(
+        &self,
+        repository: &dyn ChannelRepository,
+        system_id: SystemId,
+        command: NormalizeObservation,
+        received_at: i64,
+    ) -> Result<(NormalizeObservation, Vec<RejectedChannel>), ModernTelemetryError> {
+        let (command, rejected, new_devices) =
+            resolve_channels(repository, system_id, command, received_at).await?;
+        if !new_devices.is_empty() {
+            let unavailable = || ModernTelemetryError::Repository(PortError::Unavailable);
+            let discovery = crate::discovery::discovery_repository(
+                &self.target,
+                self.management.as_ref(),
+                system_id,
+            )
+            .await
+            .ok_or_else(unavailable)?;
+            for device_serial in new_devices {
+                discovery
+                    .record_discovered_device(
+                        system_id,
+                        &DiscoveredDeviceRecord {
+                            device_serial,
+                            ..DiscoveredDeviceRecord::default()
+                        },
+                        received_at,
+                    )
+                    .await
+                    .map_err(|_| unavailable())?;
+            }
+        }
+        Ok((command, rejected))
+    }
+
     /// Opens the routed `SQLite` account database for a system, failing when the target is not `SQLite` or routing fails.
     #[cfg(feature = "sqlite")]
     async fn sqlite_account(
@@ -431,6 +471,10 @@ impl StorageTelemetryApi {
     }
 }
 
+/// A reading with its channel values resolved, the values that were left out,
+/// and the serials of devices whose channels were registered just now.
+type ResolvedChannels = (NormalizeObservation, Vec<RejectedChannel>, BTreeSet<String>);
+
 /// Resolves wire channel keys to channels and their values to scaled integers.
 ///
 /// A key never seen before is registered, so a newly wired meter is retained
@@ -441,9 +485,9 @@ async fn resolve_channels(
     system_id: SystemId,
     mut command: NormalizeObservation,
     received_at: i64,
-) -> Result<(NormalizeObservation, Vec<RejectedChannel>), ModernTelemetryError> {
+) -> Result<ResolvedChannels, ModernTelemetryError> {
     if command.channel_readings.is_empty() {
-        return Ok((command, Vec::new()));
+        return Ok((command, Vec::new(), BTreeSet::new()));
     }
     let unavailable = || ModernTelemetryError::Repository(PortError::Unavailable);
     let registrations: Vec<ChannelRegistration> = command
@@ -466,7 +510,16 @@ async fn resolve_channels(
         .await
         .map_err(|_| unavailable())?;
     let mut rejected = Vec::new();
+    let mut new_devices = BTreeSet::new();
     for ((key, reading), channel) in command.channel_readings.iter().zip(&channels) {
+        // A channel registered by this very reading belongs to a device that
+        // may be unknown; later readings need not ask again.
+        if channel.discovered_at == Some(received_at)
+            && channel.last_value_at.is_none()
+            && let Some(device) = device_channel(key)
+        {
+            new_devices.insert(device.target.serial().to_owned());
+        }
         let typing = channel_typing(channel).ok_or_else(unavailable)?;
         match scaled_channel_value(&typing, reading) {
             Ok(value) => {
@@ -484,7 +537,7 @@ async fn resolve_channels(
             }),
         }
     }
-    Ok((command, rejected))
+    Ok((command, rejected, new_devices))
 }
 
 /// Reads the stored definition of a channel.

@@ -21,6 +21,7 @@ mod channel_repository;
 mod compaction;
 mod daily_summary_repository;
 mod data_source_repository;
+mod discovery_repository;
 mod external_identity_repository;
 mod integrity_planner;
 mod job_dispatch;
@@ -86,6 +87,13 @@ pub use data_source_repository::PostgresDataSourceRepository;
 pub use data_source_repository::SqliteDataSourceRepository;
 pub use data_source_repository::{
     DataSourceActivity, DataSourceRecord, DataSourceRepository, TestReadingRecord,
+};
+#[cfg(feature = "postgres")]
+pub use discovery_repository::PostgresDiscoveryRepository;
+#[cfg(feature = "sqlite")]
+pub use discovery_repository::SqliteDiscoveryRepository;
+pub use discovery_repository::{
+    DiscoveredDeviceRecord, DiscoveryProposalRecord, DiscoveryRepository,
 };
 #[cfg(feature = "postgres")]
 pub use external_identity_repository::PostgresExternalIdentityRepository;

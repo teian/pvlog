@@ -1101,6 +1101,109 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/MeasurementChannel" }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/systems/{system_id}/discovery-proposals:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    get:
+      operationId: listDiscoveryProposals
+      summary: List equipment discovery proposals
+      description: Lists the devices a data source reported that match no inverter of the system. A device is proposed when a measurement channel of the device key scheme is first seen for its serial. No equipment is created until a proposal is adopted. Trackers are the DC inputs whose power has been other than zero at least once.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:read] }]
+      parameters:
+        - name: includeDismissed
+          in: query
+          description: Also lists dismissed proposals.
+          schema: { type: boolean, default: false }
+      responses:
+        "200":
+          description: Proposals, oldest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DiscoveryProposal" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+  /api/v1/systems/{system_id}/discovery-proposals/{proposal_id}/adopt:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - $ref: "#/components/parameters/DiscoveryProposalId"
+    post:
+      operationId: adoptDiscoveryProposal
+      summary: Adopt a discovery proposal
+      description: Creates an inverter with the device's serial and the requested strings, and binds the device's unassigned measurement channels. The channels of a tracker go to the string created for it; all other channels of the device go to the inverter. A channel that was bound by hand keeps its binding.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DiscoveryAdoption" }
+            example:
+              name: Roof inverter
+              strings:
+                - tracker: 1
+                  name: East
+                  capacityWatts: 4400
+                  orientationDegrees: 90
+                  tiltDegrees: 30
+                - tracker: 5
+                  capacityWatts: 3000
+      responses:
+        "201":
+          description: Created equipment
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdoptedEquipment" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "409":
+          description: The proposal is not open, or an inverter with the serial exists by now.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/systems/{system_id}/discovery-proposals/{proposal_id}/dismiss:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - $ref: "#/components/parameters/DiscoveryProposalId"
+    post:
+      operationId: dismissDiscoveryProposal
+      summary: Dismiss a discovery proposal
+      description: Dismisses an open proposal. The device is not proposed again, whatever it reports, until the dismissal is reset.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
+      responses:
+        "204": { description: Proposal dismissed }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "409":
+          description: The proposal is not open.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+  /api/v1/systems/{system_id}/discovery-proposals/{proposal_id}/reset:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - $ref: "#/components/parameters/DiscoveryProposalId"
+    post:
+      operationId: resetDiscoveryProposal
+      summary: Reset a dismissed discovery proposal
+      description: Opens a dismissed proposal again.
+      tags: [Systems]
+      security: [{ sessionCookie: [] }, { bearerAuth: [systems:write] }]
+      parameters: [{ $ref: "#/components/parameters/OptionalCsrfToken" }]
+      responses:
+        "204": { description: Proposal open again }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "409":
+          description: The proposal is not dismissed.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
   /api/v1/systems/{system_id}/channel-aggregates:
     parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     get:
@@ -3289,6 +3392,11 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/UuidV7" }
+    DiscoveryProposalId:
+      name: proposal_id
+      in: path
+      required: true
+      schema: { $ref: "#/components/schemas/UuidV7" }
     SystemId:
       {
         name: id,
@@ -4556,6 +4664,80 @@ components:
       type: string
       enum: [mean, sum, min, max, last, counter_delta]
       description: How the values of a period are reduced to one value. counter_delta is the growth of a counter, ignoring resets.
+    DiscoveryProposal:
+      type: object
+      required:
+        [
+          id,
+          deviceSerial,
+          state,
+          trackers,
+          channelCount,
+          firstSeenAtEpochMillis,
+          lastSeenAtEpochMillis,
+        ]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        deviceSerial: { type: string }
+        reportedName: { type: [string, "null"] }
+        model: { type: [string, "null"] }
+        firmware: { type: [string, "null"] }
+        state: { type: string, enum: [open, dismissed] }
+        trackers:
+          type: array
+          description: Tracker numbers of the DC inputs that have reported power. Numbers are kept as the device reports them and may have gaps.
+          items: { type: integer, minimum: 1, maximum: 255 }
+        channelCount:
+          type: integer
+          description: Measurement channels the device delivers.
+        firstSeenAtEpochMillis: { type: integer, format: int64 }
+        lastSeenAtEpochMillis: { type: integer, format: int64 }
+    DiscoveryAdoption:
+      type: object
+      required: [strings]
+      properties:
+        name:
+          type: [string, "null"]
+          maxLength: 120
+          description: Name of the inverter. The reported name, or else the serial, when absent.
+        strings:
+          type: array
+          minItems: 1
+          maxItems: 255
+          items:
+            type: object
+            required: [capacityWatts]
+            properties:
+              tracker:
+                type: [integer, "null"]
+                minimum: 1
+                maximum: 255
+                description: Tracker whose channels the string receives. It must be a tracker the device has a channel for, and may be named once. A string without a tracker receives no channels.
+              name: { type: [string, "null"], maxLength: 120 }
+              capacityWatts:
+                type: integer
+                minimum: 1
+                description: Installed capacity of the string in watts peak. Module details can be added later.
+              orientationDegrees:
+                { type: [integer, "null"], minimum: 0, maximum: 359 }
+              tiltDegrees: { type: [integer, "null"], minimum: 0, maximum: 90 }
+    AdoptedEquipment:
+      type: object
+      required: [inverterId, strings, boundChannels]
+      properties:
+        inverterId: { $ref: "#/components/schemas/UuidV7" }
+        strings:
+          type: array
+          items:
+            type: object
+            required: [stringId, name]
+            properties:
+              stringId: { $ref: "#/components/schemas/UuidV7" }
+              tracker: { type: [integer, "null"] }
+              name: { type: string }
+        boundChannels:
+          type: integer
+          description: Measurement channels that were bound to the new equipment.
     ChannelAggregate:
       type: object
       required: [channelKey, displayName, unit, scale, aggregation, buckets]
