@@ -28,6 +28,8 @@ describe("HomePage", () => {
                     connectors: [],
                   }
                 : {
+                    dataState: "current",
+                    systemCount: 1,
                     observedAtEpochMillis: Date.now(),
                     ageSeconds: 0,
                     freshnessThresholdSeconds: 60,

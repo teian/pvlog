@@ -48,6 +48,7 @@ describe("route permission mapping", () => {
                   inverterCount: 1,
                   stringCount: 2,
                   capacityWatts: 9200,
+                  dataState: "current",
                 }
               : session(["system_read"]),
           ),

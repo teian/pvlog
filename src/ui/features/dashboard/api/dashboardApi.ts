@@ -1,6 +1,9 @@
+import { dataStateSchema } from "@/entities/system";
 import { z } from "zod";
 
 const dashboardSchema = z.object({
+  dataState: dataStateSchema,
+  systemCount: z.number().int().min(0),
   observedAtEpochMillis: z.number().int(),
   ageSeconds: z.number().int().min(0),
   freshnessThresholdSeconds: z.number().int().positive(),

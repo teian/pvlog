@@ -1,8 +1,9 @@
 import { useSession } from "@/features/auth";
+import { SetupChecklist } from "@/features/systemSetup";
 import { cn } from "@/shared/lib/utils";
 import { AppShell } from "@/widgets";
 import { useTranslation } from "react-i18next";
-import { NavLink, Outlet } from "react-router";
+import { NavLink, Outlet, useParams } from "react-router";
 
 const tabClass = ({ isActive }: { isActive: boolean }) =>
   cn(
@@ -16,6 +17,7 @@ const tabClass = ({ isActive }: { isActive: boolean }) =>
 export function SystemLayoutPage() {
   const { t } = useTranslation();
   const session = useSession();
+  const { systemId } = useParams();
 
   return (
     <AppShell systemIds={session.data?.systemIds}>
@@ -39,6 +41,7 @@ export function SystemLayoutPage() {
             </NavLink>
           </nav>
         </header>
+        {systemId ? <SetupChecklist systemId={systemId} /> : null}
         <Outlet />
       </section>
     </AppShell>

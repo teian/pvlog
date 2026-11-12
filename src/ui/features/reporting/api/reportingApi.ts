@@ -1,3 +1,4 @@
+import { dataStateSchema } from "@/entities/system";
 import { z } from "zod";
 
 const id = z.uuid();
@@ -9,6 +10,7 @@ const overviewSchema = z.object({
   inverterCount: z.number().int().nonnegative(),
   stringCount: z.number().int().nonnegative(),
   capacityWatts: z.number().int().nullable(),
+  dataState: dataStateSchema,
 });
 const statisticsSchema = z.object({
   systemId: id,

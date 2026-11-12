@@ -1,4 +1,5 @@
 /* eslint-disable react/no-multi-comp, max-lines -- Cohesive reporting route family with shared empty, metric, and header renderers. */
+import { NoDataNotice, NoSystemNotice } from "@/entities/system";
 import { useSession } from "@/features/auth";
 import {
   SystemSelector,
@@ -35,9 +36,13 @@ function usePageContext() {
   const session = useSession();
   const systemIds = useOrderedSystemIds(session.data?.systemIds ?? []);
   const { systemId, selectSystem } = useSelectedSystem(systemIds);
+  const overviews = useSystemOverviews(systemIds);
   return {
     accountId: session.data?.accountId,
     canManage: session.data?.permissions.includes("system_manage") ?? false,
+    /** True once the selected system is known to have no reading at all. */
+    withoutData:
+      overviews[systemIds.indexOf(systemId)]?.data?.dataState === "none",
     systemId,
     systemIds,
     selectSystem,
@@ -59,19 +64,24 @@ function Header({
   );
 }
 
-function EmptyOrError({ error, empty }: { error: boolean; empty: boolean }) {
+function EmptyOrError({
+  canManage,
+  error,
+  empty,
+}: {
+  canManage: boolean;
+  error: boolean;
+  empty: boolean;
+}) {
   const { t } = useTranslation();
-  if (!error && !empty) return null;
-  return (
-    <Alert variant={error ? "destructive" : "default"}>
-      <AlertTitle>
-        {t(error ? "reporting.errorTitle" : "reporting.emptyTitle")}
-      </AlertTitle>
-      <AlertDescription>
-        {t(error ? "reporting.errorDescription" : "reporting.emptyDescription")}
-      </AlertDescription>
-    </Alert>
-  );
+  if (error)
+    return (
+      <Alert variant="destructive">
+        <AlertTitle>{t("reporting.errorTitle")}</AlertTitle>
+        <AlertDescription>{t("reporting.errorDescription")}</AlertDescription>
+      </Alert>
+    );
+  return empty ? <NoSystemNotice canManage={canManage} /> : null;
 }
 
 const energy = (value: number | null, locale: string) =>
@@ -104,6 +114,7 @@ export function SystemsPage() {
         ) : null}
       </div>
       <EmptyOrError
+        canManage={context.canManage}
         empty={!loading && context.systemIds.length === 0}
         error={failed}
       />
@@ -188,13 +199,20 @@ export function StatisticsPage() {
         selectedSystemId={context.systemId}
         systemIds={context.systemIds}
       />
-      <EmptyOrError empty={!context.systemId} error={report.isError} />
+      <EmptyOrError
+        canManage={context.canManage}
+        empty={!context.systemId}
+        error={report.isError}
+      />
       {report.isPending && context.systemId ? (
         <p className="text-sm text-muted-foreground">
           {t("reporting.loading")}
         </p>
       ) : null}
-      {values ? (
+      {context.withoutData ? (
+        <NoDataNotice systemId={context.systemId} />
+      ) : null}
+      {values && !context.withoutData ? (
         <>
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             <Metric
@@ -307,8 +325,15 @@ export function SeasonalPage() {
         selectedSystemId={context.systemId}
         systemIds={context.systemIds}
       />
-      <EmptyOrError empty={!context.systemId} error={report.isError} />
-      {report.data ? (
+      <EmptyOrError
+        canManage={context.canManage}
+        empty={!context.systemId}
+        error={report.isError}
+      />
+      {context.withoutData ? (
+        <NoDataNotice systemId={context.systemId} />
+      ) : null}
+      {report.data && !context.withoutData ? (
         <Card>
           <CardHeader>
             <CardTitle>{t("reporting.seasonal.cardTitle")}</CardTitle>
@@ -366,7 +391,11 @@ export function WeatherPage() {
         selectedSystemId={context.systemId}
         systemIds={context.systemIds}
       />
-      <EmptyOrError empty={!context.systemId} error={report.isError} />
+      <EmptyOrError
+        canManage={context.canManage}
+        empty={!context.systemId}
+        error={report.isError}
+      />
       {report.data ? (
         <Card>
           <CardHeader>

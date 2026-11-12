@@ -14,6 +14,8 @@ describe("DashboardPage", () => {
         async () =>
           new Response(
             JSON.stringify({
+              dataState: "stale",
+              systemCount: 1,
               observedAtEpochMillis: Date.now() - 120_000,
               ageSeconds: 120,
               freshnessThresholdSeconds: 60,

@@ -20,6 +20,8 @@ test.beforeEach(async ({ page }) => {
   await page.route("**/api/v1/dashboard", async (route) => {
     await route.fulfill({
       json: {
+        dataState: "current",
+        systemCount: 1,
         observedAtEpochMillis: Date.now(),
         ageSeconds: 0,
         freshnessThresholdSeconds: 60,

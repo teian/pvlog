@@ -19,6 +19,7 @@ function overview(id: string, name: string, lifecycle: string) {
     inverterCount: 2,
     stringCount: 3,
     capacityWatts: 19_520,
+    dataState: "current",
   };
 }
 

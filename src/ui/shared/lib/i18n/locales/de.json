@@ -314,8 +314,6 @@
     "loading": "Berichtsdaten werden geladen…",
     "errorTitle": "Berichtsdaten nicht verfügbar",
     "errorDescription": "Die angeforderten Anlagendaten konnten nicht geladen werden.",
-    "emptyTitle": "Keine Anlagen eingerichtet",
-    "emptyDescription": "Lege unter Verwalten eine Anlage an, um diese Ansicht zu verwenden.",
     "noMeasurements": "Es sind noch keine aggregierten Messwerte verfügbar.",
     "period": "Zeitraum",
     "generation": "Erzeugung",
@@ -1040,7 +1038,28 @@
       "dataQuality": "Datenqualität",
       "settings": "Einstellungen"
     },
-    "tabsLabel": "Anlagenbereiche"
+    "tabsLabel": "Anlagenbereiche",
+    "noSystem": {
+      "title": "Noch keine Anlage",
+      "description": "Füge deine Anlage hinzu, um ihre Daten aufzuzeichnen. Nur ein Name ist erforderlich.",
+      "descriptionReadOnly": "Für dich ist noch keine Anlage freigegeben. Bitte die Person, die die Anlagen verwaltet, um Zugriff.",
+      "add": "Anlage hinzufügen"
+    },
+    "noData": {
+      "title": "Noch keine Daten",
+      "connect": {
+        "description": "Diese Anlage hat noch keinen Messwert erhalten. Verbinde eine Datenquelle, damit dein Logger Daten liefern kann.",
+        "action": "Datenquelle verbinden"
+      },
+      "waiting": {
+        "description": "Eine Datenquelle ist eingerichtet, aber es ist noch kein Messwert angekommen. Prüfe, ob dein Logger läuft und die Konfiguration der Datenquelle verwendet.",
+        "action": "Datenquelle prüfen"
+      },
+      "systems": {
+        "description": "Keine deiner Anlagen hat bisher einen Messwert erhalten. Öffne eine Anlage, um eine Datenquelle zu verbinden.",
+        "action": "Anlagen öffnen"
+      }
+    }
   },
   "setup": {
     "title": "Anlage einrichten",
@@ -1119,6 +1138,36 @@
       "consumptionPower": "Verbrauchsleistung",
       "consumptionEnergy": "Verbrauchte Energie",
       "docsLink": "Dokumentation zu Uploadern und Fehlersuche"
+    },
+    "checklist": {
+      "title": "Einrichtung abschließen",
+      "description": "Offene Schritte für diese Anlage. Optionale Schritte verbessern Berichte und Prognosen; blende aus, was du nicht brauchst.",
+      "next": "Nächster Schritt",
+      "open": "Öffnen",
+      "openLabel": "Öffnen: {{item}}",
+      "hideLabel": "Ausblenden: {{item}}",
+      "items": {
+        "location": "Standort",
+        "capacity": "Installierte Leistung",
+        "data_source": "Datenquelle",
+        "first_data": "Erster Messwert",
+        "channels": "Messkanäle",
+        "equipment": "Wechselrichter und Strings",
+        "tariff": "Tarif",
+        "forecast": "Ertragsprognose"
+      },
+      "reasons": {
+        "location_missing": "Ohne Standort gibt es keine Wetterdaten und keine Prognose.",
+        "capacity_missing": "Ohne installierte Leistung lassen sich Erträge nicht pro kWp vergleichen.",
+        "data_source_missing": "Verbinde eine Datenquelle, damit die Anlage Daten erhält.",
+        "waiting_for_first_reading": "Eine Datenquelle ist eingerichtet; es ist noch kein Messwert angekommen.",
+        "unassigned_channels_one": "{{count}} Messkanal liefert Werte, ist aber keinem Gerät zugeordnet.",
+        "unassigned_channels_other": "{{count}} Messkanäle liefern Werte, sind aber keinem Gerät zugeordnet.",
+        "equipment_missing": "Füge Wechselrichter und Strings hinzu, um Diagramme je String und eine genauere Prognose zu erhalten.",
+        "tariff_missing": "Füge einen Tarif hinzu, um Erlöse und Ersparnisse zu sehen.",
+        "forecast_inputs_missing": "Die Prognose braucht einen Standort und die installierte Leistung oder Strings.",
+        "forecast_readiness_unknown": "Ob eine Prognose möglich ist, konnte nicht ermittelt werden."
+      }
     }
   },
   "dataSources": {

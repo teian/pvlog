@@ -1,3 +1,4 @@
+import type { DataState } from "@/entities/system";
 import {
   Alert,
   AlertDescription,
@@ -16,8 +17,8 @@ export interface DashboardHeaderProps {
   alertTitle?: string | undefined;
   /** Localized current date. */
   date: string;
-  /** Whether the latest telemetry is fresh enough to present as live. */
-  fresh: boolean;
+  /** Whether readings exist and are current; only current data is presented as live. */
+  dataState: DataState;
   /** Number of systems in the current account scope. */
   systemCount: number;
 }
@@ -27,10 +28,11 @@ export function DashboardHeader({
   ageSeconds,
   alertTitle,
   date,
-  fresh,
+  dataState,
   systemCount,
 }: DashboardHeaderProps) {
   const { t } = useTranslation();
+  const fresh = dataState === "current";
 
   return (
     <>
@@ -47,18 +49,20 @@ export function DashboardHeader({
           {t("dashboard.systemSummary", { count: systemCount, date })}
         </p>
       </header>
-      <p className="flex items-center gap-2 text-xs text-muted-foreground">
-        <span
-          aria-hidden="true"
-          className={cn(
-            "size-2 rounded-full",
-            fresh ? "bg-success motion-safe:animate-pulse" : "bg-destructive",
-          )}
-        />
-        {fresh
-          ? t("dashboard.live", { age: ageSeconds })
-          : t("dashboard.stale", { age: ageSeconds })}
-      </p>
+      {dataState === "none" ? null : (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <span
+            aria-hidden="true"
+            className={cn(
+              "size-2 rounded-full",
+              fresh ? "bg-success motion-safe:animate-pulse" : "bg-destructive",
+            )}
+          />
+          {fresh
+            ? t("dashboard.live", { age: ageSeconds })
+            : t("dashboard.stale", { age: ageSeconds })}
+        </p>
+      )}
       {fresh && alertTitle ? (
         <Alert variant="destructive">
           <TriangleAlertIcon aria-hidden="true" />

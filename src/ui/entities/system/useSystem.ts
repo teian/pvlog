@@ -30,12 +30,13 @@ export function useSystem(systemId: string) {
   });
 }
 
-/** Loads a system's setup status. @param systemId - System to inspect. @returns Query state of the setup status. */
+/** Loads a system's setup status. @param systemId - System to inspect; nothing is loaded for an empty identifier. @returns Query state of the setup status. */
 export function useSetupStatus(systemId: string) {
   return useQuery({
     queryKey: systemKeys.setupStatus(systemId),
     queryFn: () => fetchSetupStatus(systemId),
     staleTime: 0,
+    enabled: systemId.length > 0,
   });
 }
 

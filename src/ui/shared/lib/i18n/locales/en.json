@@ -314,8 +314,6 @@
     "loading": "Loading reporting data…",
     "errorTitle": "Reporting data unavailable",
     "errorDescription": "The requested system data could not be loaded.",
-    "emptyTitle": "No systems configured",
-    "emptyDescription": "Create a system in Manage to use this view.",
     "noMeasurements": "No aggregated measurements are available yet.",
     "period": "Period",
     "generation": "Generation",
@@ -1040,7 +1038,28 @@
       "dataQuality": "Data quality",
       "settings": "Settings"
     },
-    "tabsLabel": "System sections"
+    "tabsLabel": "System sections",
+    "noSystem": {
+      "title": "No system yet",
+      "description": "Add your system to start recording its data. Only a name is required.",
+      "descriptionReadOnly": "No system has been shared with you yet. Ask the person who manages the systems to give you access.",
+      "add": "Add system"
+    },
+    "noData": {
+      "title": "No data yet",
+      "connect": {
+        "description": "This system has not received a reading. Connect a data source so your logger can deliver data.",
+        "action": "Connect a data source"
+      },
+      "waiting": {
+        "description": "A data source is set up, but no reading has arrived yet. Check that your logger is running and uses the configuration shown for the data source.",
+        "action": "Check the data source"
+      },
+      "systems": {
+        "description": "None of your systems has received a reading yet. Open a system to connect a data source.",
+        "action": "Open systems"
+      }
+    }
   },
   "setup": {
     "title": "Set up a system",
@@ -1119,6 +1138,36 @@
       "consumptionPower": "Consumption power",
       "consumptionEnergy": "Consumption energy",
       "docsLink": "Uploader and troubleshooting documentation"
+    },
+    "checklist": {
+      "title": "Finish setting up",
+      "description": "Open steps for this system. Optional steps improve reports and forecasts; hide the ones you do not need.",
+      "next": "Next step",
+      "open": "Open",
+      "openLabel": "Open: {{item}}",
+      "hideLabel": "Hide: {{item}}",
+      "items": {
+        "location": "Location",
+        "capacity": "Installed capacity",
+        "data_source": "Data source",
+        "first_data": "First reading",
+        "channels": "Measurement channels",
+        "equipment": "Inverters and strings",
+        "tariff": "Tariff",
+        "forecast": "Yield forecast"
+      },
+      "reasons": {
+        "location_missing": "Without a location there is no weather data and no forecast.",
+        "capacity_missing": "Without the installed capacity, yields cannot be compared per kWp.",
+        "data_source_missing": "Connect a data source so the system receives data.",
+        "waiting_for_first_reading": "A data source is set up; no reading has arrived yet.",
+        "unassigned_channels_one": "{{count}} measurement channel delivers values but is not assigned to any equipment.",
+        "unassigned_channels_other": "{{count}} measurement channels deliver values but are not assigned to any equipment.",
+        "equipment_missing": "Add inverters and strings for per-string charts and a more precise forecast.",
+        "tariff_missing": "Add a tariff to see earnings and savings.",
+        "forecast_inputs_missing": "The forecast needs a location and the installed capacity or strings.",
+        "forecast_readiness_unknown": "Whether a forecast is possible could not be determined."
+      }
     }
   },
   "dataSources": {

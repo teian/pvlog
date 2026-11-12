@@ -1,3 +1,4 @@
+import { NoDataNotice, NoSystemNotice } from "@/entities/system";
 import { useSession } from "@/features/auth";
 import {
   DashboardHeader,
@@ -29,8 +30,42 @@ export function DashboardPage() {
     );
 
   const data = dashboard.data;
-  const fresh = data.ageSeconds <= data.freshnessThresholdSeconds;
-  const activeAlert = data.recentAlerts.find((alert) => alert.state === "open");
+  const header = (
+    <DashboardHeader
+      ageSeconds={data.ageSeconds}
+      alertTitle={
+        data.recentAlerts.find((alert) => alert.state === "open")?.title
+      }
+      dataState={data.dataState}
+      date={new Intl.DateTimeFormat(i18n.language, {
+        day: "numeric",
+        month: "long",
+        weekday: "long",
+      }).format(new Date())}
+      systemCount={data.systemCount}
+    />
+  );
+  // Without a reading there is nothing to measure: zeros and a live marker
+  // would read as "the system produces nothing right now".
+  if (data.dataState === "none") {
+    const systemIds = session.data?.systemIds ?? [];
+    return (
+      <section className="flex flex-col gap-6">
+        {header}
+        {data.systemCount === 0 ? (
+          <NoSystemNotice
+            canManage={
+              session.data?.permissions.includes("system_manage") ?? false
+            }
+          />
+        ) : (
+          <NoDataNotice
+            systemId={systemIds.length === 1 ? systemIds[0] : undefined}
+          />
+        )}
+      </section>
+    );
+  }
   const metrics: DashboardMetric[] = [
     {
       key: "generation",
@@ -69,18 +104,8 @@ export function DashboardPage() {
 
   return (
     <section className="flex flex-col gap-6">
-      <DashboardHeader
-        ageSeconds={data.ageSeconds}
-        alertTitle={activeAlert?.title}
-        date={new Intl.DateTimeFormat(i18n.language, {
-          day: "numeric",
-          month: "long",
-          weekday: "long",
-        }).format(new Date())}
-        fresh={fresh}
-        systemCount={session.data?.systemIds.length ?? 0}
-      />
-      {!fresh ? (
+      {header}
+      {data.dataState === "stale" ? (
         <Alert variant="destructive">
           <AlertTitle>{t("dashboard.staleTitle")}</AlertTitle>
           <AlertDescription>{t("dashboard.staleDescription")}</AlertDescription>

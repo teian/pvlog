@@ -41,7 +41,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 
 ## 5. Honest states, navigation and terminology
 
-- [ ] 5.1 Add the setup checklist to the system page and the no-data and no-system empty states to the dashboard and reports, each linking to the exact settings section; verify with component tests that a system without readings shows no live indicator and that a complete checklist is hidden.
+- [x] 5.1 Add the setup checklist to the system page and the no-data and no-system empty states to the dashboard and reports, each linking to the exact settings section; verify with component tests that a system without readings shows no live indicator and that a complete checklist is hidden.
 - [ ] 5.2 Derive status badges in the system list and equipment cards from telemetry; verify the current, stale and absent presentations with component tests.
 - [ ] 5.3 Replace "Manage" with a Systems entry that carries "Add system", render navigation entries only for permitted destinations, and add a labelled Account entry; verify with a test that a user without management permission sees no entry leading to a forbidden page.
 - [ ] 5.4 Apply the terminology table to the `de` and `en` locale files, remove the unused `onboarding.*` namespace, and add a locale contract check that fails on retired terms; verify the check fails on a seeded retired term and passes on the cleaned files.

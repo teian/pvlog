@@ -26,6 +26,7 @@ test.beforeEach(async ({ page }) => {
         inverterCount: 1,
         stringCount: 2,
         capacityWatts: 9200,
+        dataState: "current",
       },
     }),
   );
