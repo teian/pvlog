@@ -9,6 +9,7 @@ const documents = [
   "docs/guides/developer-quickstarts.md",
   "docs/guides/local-authentication-rbac.md",
   "docs/guides/operator-recovery.md",
+  "docs/guides/system-setup.md",
   "docs/guides/uploader-integration.md",
   "docs/reference/api-domain-reference.md",
   "docs/architecture/telemetry-segment-format.md",
@@ -43,5 +44,24 @@ for (const feature of ["api-version", "download", "/openapi/pvlog-v1.yaml"]) {
   if (!docsPage.includes(feature))
     throw new Error(`API docs UI missing ${feature}`);
 }
+
+// The setup guide names interface labels in bold. Each must be a string the
+// English interface actually shows, so a renamed button fails this check
+// instead of leaving the guide describing a screen that no longer exists.
+const interfaceTexts = new Set();
+(function collect(value) {
+  if (typeof value === "string") interfaceTexts.add(value);
+  else for (const child of Object.values(value)) collect(child);
+})(
+  JSON.parse(await readFile("src/ui/shared/lib/i18n/locales/en.json", "utf8")),
+);
+const setupGuide = await readFile("docs/guides/system-setup.md", "utf8");
+const unknownLabels = [...setupGuide.matchAll(/\*\*([^*]+)\*\*/g)]
+  .map((match) => match[1].replace(/\s+/g, " "))
+  .filter((label) => !interfaceTexts.has(label));
+if (unknownLabels.length > 0)
+  throw new Error(
+    `system-setup.md names labels the interface does not show: ${[...new Set(unknownLabels)].join(", ")}`,
+  );
 
 console.log(`Documentation conformance: ${documents.length} documents`);

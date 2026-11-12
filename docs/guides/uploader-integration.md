@@ -1,5 +1,8 @@
 # Uploader integration
 
+The steps in the web application, from creating a system to its first reading,
+are described in [Setting up a system](system-setup.md).
+
 ## Connect an uploader with a data source
 
 The usual way to connect a logger is a **data source**. Open the system, go to
@@ -47,7 +50,7 @@ readings** deletes only them.
 ## Account API keys for other integrations
 
 Integrations that are not tied to one data source use an account API key. Open
-**Account API keys**, create a named key with only the permissions the
+**Account** in the sidebar, go to **Account API keys**, create a named key with only the permissions the
 integration needs, and copy the cleartext value when it is shown. It cannot be
 displayed again. An account key with `telemetry:write` can upload for every
 system of the account, which is why a data source key is the better choice for
@@ -103,15 +106,17 @@ rest_command:
 
 ## Revocation and recovery
 
-Create a separate API key for each uploader so one integration can be revoked
-without interrupting another. Revocation never deletes observations already
+Every data source has its own key, so one logger can be cut off without
+interrupting another. Revocation never deletes observations already
 accepted. Back off according to `Retry-After`; do not retry schema or
 authorization failures unchanged.
 
 If a key leaks:
 
-1. Revoke it immediately under **Account API keys**.
-2. Create a replacement with only `telemetry:write`.
-3. Replace the secret at the uploader and verify a successful upload.
-4. Search audit and access logs by safe credential ID and time window, never by
+1. For a data source key, choose **Regenerate key** under **Settings → Data
+   sources**; the old key stops working at once. Revoke an account key under
+   **Account → Account API keys** and create a replacement with only
+   `telemetry:write`.
+2. Replace the secret at the uploader and verify a successful upload.
+3. Search audit and access logs by safe credential ID and time window, never by
    pasting the leaked secret into a search tool.

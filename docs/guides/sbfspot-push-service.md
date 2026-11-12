@@ -21,9 +21,11 @@ Build only the uploader crate:
 cargo build --release -p pvlog-sbfspot-push
 ```
 
-Create a named key with only `telemetry:write` under **Account API keys**, then
-put the settings in a mode-`0600` environment file such as
-`/etc/pvlog/sbfspot-push.env`:
+Add a data source with the **SBFspot** profile under the system's **Settings →
+Data sources** (see [Setting up a system](system-setup.md)). PVLog shows the
+environment file below with the server URL, the system identifier and a key
+that can only upload for this system. Save it with mode `0600`, for example as
+`/etc/pvlog/sbfspot-push.env`, and add the settings of the local database:
 
 ```dotenv
 SBFSPOT_DATABASE=/home/pi/smadata/SBFspot.db

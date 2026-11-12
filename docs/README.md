@@ -6,6 +6,7 @@ Documentation version: 1.0
 - [Developer quickstarts](guides/developer-quickstarts.md)
 - [Authentication and RBAC](guides/local-authentication-rbac.md)
 - [Operator and recovery guide](guides/operator-recovery.md)
+- [Setting up a system](guides/system-setup.md)
 - [Uploader integration and coverage](guides/uploader-integration.md)
 - [SBFspot push service](guides/sbfspot-push-service.md)
 - [Equipment catalog and custom equipment](guides/equipment-catalog.md)
