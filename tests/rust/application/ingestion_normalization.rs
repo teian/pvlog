@@ -34,6 +34,7 @@ fn explicit_units_provenance_battery_and_registered_channels_normalize_exactly()
         extended: BTreeMap::from([(channel, ExtendedValue::DecimalScaled(42))]),
         registered_channels: BTreeSet::from([channel]),
         channel_readings: std::collections::BTreeMap::new(),
+        supplements: pvlog_application::ObservationSupplements::default(),
         source: ObservationSource {
             kind: ObservationSourceKind::ModernApi,
             source_reference: Some("uploader-1".to_owned()),
@@ -59,4 +60,13 @@ fn explicit_units_provenance_battery_and_registered_channels_normalize_exactly()
         Err(IngestionNormalizationError::PrecisionLoss)
     );
     Ok(())
+}
+
+#[test]
+fn a_counter_step_is_an_increase_a_reset_or_unknown() {
+    use pvlog_application::{CounterStep, counter_step};
+    assert_eq!(counter_step(None, 500), CounterStep::NoPredecessor);
+    assert_eq!(counter_step(Some(500), 500), CounterStep::Increase(0));
+    assert_eq!(counter_step(Some(500), 740), CounterStep::Increase(240));
+    assert_eq!(counter_step(Some(500), 499), CounterStep::Reset);
 }

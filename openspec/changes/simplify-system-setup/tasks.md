@@ -49,7 +49,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 
 ## 6. Canonical fields for PVOutput parity
 
-- [ ] 6.1 Accept lifetime generation and consumption counters, derive interval energy from counter differences with reset detection, and write the existing lifetime columns; verify the increase, reset and both-supplied scenarios with tests.
+- [x] 6.1 Accept lifetime generation and consumption counters, derive interval energy from counter differences with reset detection, and write the existing lifetime columns; verify the increase, reset and both-supplied scenarios with tests.
 - [ ] 6.2 Accept grid import and export power and energy, write the existing grid columns and include them in interval, daily and lifetime aggregates; verify storage, aggregation and the contradiction rejection with tests.
 - [ ] 6.3 Write temperature and voltage to their dedicated columns, aggregate minimum and maximum temperature and mean voltage, and backfill the columns from provenance for existing readings; verify aggregates with tests and that the backfill is idempotent.
 - [ ] 6.4 Accept and return the optional reading message with its length limit; verify acceptance and rejection with tests.

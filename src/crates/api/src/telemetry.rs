@@ -7,7 +7,7 @@ use axum::{
 };
 use pvlog_application::{
     BatchIngestionMode, ChannelReading, CorrectObservation, EnergyInput, ModernTelemetryError,
-    ModernTelemetryUseCases, NormalizeObservation, PowerUnit,
+    ModernTelemetryUseCases, NormalizeObservation, ObservationSupplements, PowerUnit,
 };
 use pvlog_domain::{
     ApiCredentialId, ApiScope, BatteryFlowState, MeasurementValues, ObservationId,
@@ -53,6 +53,9 @@ struct ObservationBody {
     generation_energy_wh: Option<i64>,
     consumption_power_watts: Option<i64>,
     consumption_energy_wh: Option<i64>,
+    /// Lifetime counters; interval energy is derived from them when it is not supplied.
+    generation_lifetime_wh: Option<i64>,
+    consumption_lifetime_wh: Option<i64>,
     voltage_millivolts: Option<u32>,
     temperature_millidegrees_celsius: Option<i32>,
     source_reference: Option<String>,
@@ -322,6 +325,10 @@ fn command(
                 )
             })
             .collect(),
+        supplements: ObservationSupplements {
+            generation_lifetime_wh: body.generation_lifetime_wh,
+            consumption_lifetime_wh: body.consumption_lifetime_wh,
+        },
         source: ObservationSource {
             kind: ObservationSourceKind::ModernApi,
             source_reference: body.source_reference,
@@ -354,25 +361,61 @@ impl From<crate::RequestAuthorizationError> for TelemetryApiError {
     }
 }
 impl IntoResponse for TelemetryApiError {
+    /// Renders the error as an RFC 9457 `application/problem+json` response.
+    /// A rejected member is named in `detail` by its wire name.
     fn into_response(self) -> Response {
-        let (status, retry) = match self {
-            Self::Forbidden => (StatusCode::FORBIDDEN, None),
+        let (status, title, detail, retry) = match self {
+            Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden", "forbidden", None),
             Self::NotFound | Self::Domain(ModernTelemetryError::NotFound) => {
-                (StatusCode::NOT_FOUND, None)
+                (StatusCode::NOT_FOUND, "not_found", "not_found", None)
             }
-            Self::Unavailable => (StatusCode::SERVICE_UNAVAILABLE, None),
-            Self::Invalid | Self::Domain(ModernTelemetryError::Invalid) => {
-                (StatusCode::UNPROCESSABLE_ENTITY, None)
-            }
-            Self::Domain(ModernTelemetryError::Conflict) => (StatusCode::CONFLICT, None),
+            Self::Invalid | Self::Domain(ModernTelemetryError::Invalid) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_observation",
+                "observation_is_invalid",
+                None,
+            ),
+            Self::Domain(ModernTelemetryError::InvalidField(field)) => (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_observation",
+                field,
+                None,
+            ),
+            Self::Domain(ModernTelemetryError::Conflict) => (
+                StatusCode::CONFLICT,
+                "conflict",
+                "observation_conflict",
+                None,
+            ),
             Self::Domain(ModernTelemetryError::Overloaded {
                 retry_after_seconds,
-            }) => (StatusCode::SERVICE_UNAVAILABLE, Some(retry_after_seconds)),
-            Self::Domain(ModernTelemetryError::Repository(_)) => {
-                (StatusCode::SERVICE_UNAVAILABLE, None)
-            }
+            }) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "overloaded",
+                "ingestion_is_overloaded",
+                Some(retry_after_seconds),
+            ),
+            Self::Unavailable | Self::Domain(ModernTelemetryError::Repository(_)) => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "service_unavailable",
+                "telemetry_service_unavailable",
+                None,
+            ),
         };
-        let mut response = status.into_response();
+        let mut response = (
+            status,
+            Json(serde_json::json!({
+                "type": "https://pvlog.example/problems/telemetry",
+                "title": title,
+                "status": status.as_u16(),
+                "detail": detail,
+            })),
+        )
+            .into_response();
+        response.headers_mut().insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/problem+json"),
+        );
         if let Some(retry) = retry
             && let Ok(value) = HeaderValue::from_str(&retry.to_string())
         {

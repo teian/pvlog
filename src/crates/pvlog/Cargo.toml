@@ -76,6 +76,10 @@ name = "setup"
 path = "../../../tests/rust/pvlog/setup.rs"
 
 [[test]]
+name = "telemetry-fields"
+path = "../../../tests/rust/pvlog/telemetry_fields.rs"
+
+[[test]]
 name = "inverter-validation"
 path = "../../../tests/rust/pvlog/inverter_validation.rs"
 

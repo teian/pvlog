@@ -99,8 +99,14 @@ impl QualityFlags {
     pub const SUSPECT: Self = Self(1 << 3);
     /// Source reported a gap or unavailable value.
     pub const MISSING: Self = Self(1 << 4);
-    const KNOWN_BITS: u16 =
-        Self::ESTIMATED.0 | Self::DERIVED.0 | Self::CORRECTED.0 | Self::SUSPECT.0 | Self::MISSING.0;
+    /// A lifetime counter was lower than its predecessor, so no energy was derived from it.
+    pub const COUNTER_RESET: Self = Self(1 << 5);
+    const KNOWN_BITS: u16 = Self::ESTIMATED.0
+        | Self::DERIVED.0
+        | Self::CORRECTED.0
+        | Self::SUSPECT.0
+        | Self::MISSING.0
+        | Self::COUNTER_RESET.0;
 
     /// Validates persisted or wire-format bits.
     ///

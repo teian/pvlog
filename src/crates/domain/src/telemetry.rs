@@ -58,6 +58,15 @@ pub struct MeasurementValues {
     pub generation_energy: Option<EnergyReading>,
     pub consumption_power: Option<Watts>,
     pub consumption_energy: Option<EnergyReading>,
+    /// Lifetime generation counter as the source reported it.
+    ///
+    /// New members are left out of the serialized form while absent, so the
+    /// payload hash of a reading that does not use them stays what it was.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generation_lifetime: Option<WattHours>,
+    /// Lifetime consumption counter as the source reported it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub consumption_lifetime: Option<WattHours>,
     pub grid: Option<GridFlow>,
     pub voltage: Option<MilliVolts>,
     pub temperature: Option<MilliDegreesCelsius>,

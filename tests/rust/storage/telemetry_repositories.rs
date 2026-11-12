@@ -266,6 +266,7 @@ fn observation(
         canonical_hash,
         version: 1,
         data_source_id: None,
+        measurements: pvlog_storage::StoredMeasurements::default(),
     }
 }
 

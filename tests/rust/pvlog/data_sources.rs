@@ -455,6 +455,7 @@ fn reading(
         extended: BTreeMap::new(),
         registered_channels: BTreeSet::new(),
         channel_readings: BTreeMap::new(),
+        supplements: pvlog_application::ObservationSupplements::default(),
         source: ObservationSource {
             kind: ObservationSourceKind::ModernApi,
             source_reference: None,

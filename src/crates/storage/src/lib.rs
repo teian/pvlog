@@ -148,8 +148,9 @@ pub use telemetry_repository::PostgresTelemetryRepository;
 #[cfg(feature = "sqlite")]
 pub use telemetry_repository::SqliteTelemetryRepository;
 pub use telemetry_repository::{
-    CorrectionRecord, IdempotencyOutcome, IdempotencyRecord, ObservationInsertOutcome,
-    StoredObservation, TelemetryRepository, TelemetryRepositoryError, TransactionalObservation,
+    CorrectionRecord, IdempotencyOutcome, IdempotencyRecord, LatestCounters,
+    ObservationInsertOutcome, StoredMeasurements, StoredObservation, TelemetryRepository,
+    TelemetryRepositoryError, TransactionalObservation,
 };
 #[cfg(feature = "postgres")]
 pub use user_lifecycle_repository::PostgresUserLifecycleRepository;

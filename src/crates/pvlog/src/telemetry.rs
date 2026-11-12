@@ -10,8 +10,9 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use pvlog_application::{
     BatchIngestionMode, BatchIngestionResult, BatchItemOutcome, BatchItemStatus, Clock,
-    CorrectObservation, ModernTelemetryError, ModernTelemetryUseCases, NormalizeObservation,
-    PortError, VersionedObservation, normalize_observation,
+    CorrectObservation, CounterBaseline, IngestionNormalizationError, ModernTelemetryError,
+    ModernTelemetryUseCases, NormalizeObservation, PortError, VersionedObservation,
+    derive_counter_energy, normalize_observation,
 };
 use pvlog_domain::{
     AccountId, ApiCredentialId, CanonicalObservation, ChannelId, DataSourceId, EnergyReading,
@@ -19,7 +20,7 @@ use pvlog_domain::{
 };
 use pvlog_storage::{
     DataSourceRepository, DatabaseTarget, ManagementRepository, ObservationInsertOutcome,
-    StoredObservation, TelemetryRepository, TelemetryRepositoryError,
+    StoredMeasurements, StoredObservation, TelemetryRepository, TelemetryRepositoryError,
 };
 
 const MAXIMUM_BATCH_ITEMS: usize = 1_000;
@@ -205,8 +206,7 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         if command.test {
             // Checked like a real reading, but kept apart: it registers no
             // channel and enters no total.
-            let observation =
-                normalize_observation(command).map_err(|_| ModernTelemetryError::Invalid)?;
+            let observation = normalize_observation(command).map_err(invalid)?;
             self.store_test_reading(system_id, data_source, &observation, received_at)
                 .await?;
             return Ok(observation);
@@ -214,9 +214,9 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         let command = self
             .resolve_channels(system_id, command, received_at)
             .await?;
-        let observation =
-            normalize_observation(command).map_err(|_| ModernTelemetryError::Invalid)?;
+        let mut observation = normalize_observation(command).map_err(invalid)?;
         let repository = self.repository(system_id).await?;
+        apply_counters(repository.as_ref(), &mut observation, data_source, &[]).await?;
         let stored = stored_observation(&observation, received_at, data_source)?;
         match repository.insert_observation(&stored).await {
             Ok(ObservationInsertOutcome::Inserted) => {
@@ -279,19 +279,21 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
                 .await?;
             let status = match normalize_observation(command) {
                 Err(_) => BatchItemStatus::Invalid,
-                Ok(observation) => match stored_observation(&observation, received_at, data_source)
-                {
-                    Err(_) => BatchItemStatus::Invalid,
-                    Ok(stored) => match repository.insert_observation(&stored).await {
-                        Ok(ObservationInsertOutcome::Inserted) => {
-                            self.write_channel_values(system_id, &observation, received_at)
-                                .await?;
-                            BatchItemStatus::Inserted
-                        }
-                        Ok(ObservationInsertOutcome::Duplicate) => BatchItemStatus::Duplicate,
-                        Err(_) => BatchItemStatus::Failed,
-                    },
-                },
+                Ok(mut observation) => {
+                    apply_counters(repository.as_ref(), &mut observation, data_source, &[]).await?;
+                    match stored_observation(&observation, received_at, data_source) {
+                        Err(_) => BatchItemStatus::Invalid,
+                        Ok(stored) => match repository.insert_observation(&stored).await {
+                            Ok(ObservationInsertOutcome::Inserted) => {
+                                self.write_channel_values(system_id, &observation, received_at)
+                                    .await?;
+                                BatchItemStatus::Inserted
+                            }
+                            Ok(ObservationInsertOutcome::Duplicate) => BatchItemStatus::Duplicate,
+                            Err(_) => BatchItemStatus::Failed,
+                        },
+                    }
+                }
             };
             outcomes.push(BatchItemOutcome {
                 index,
@@ -336,8 +338,10 @@ impl StorageTelemetryApi {
             let command = self
                 .resolve_channels(system_id, command, received_at)
                 .await?;
-            let observation =
-                normalize_observation(command).map_err(|_| ModernTelemetryError::Invalid)?;
+            let mut observation = normalize_observation(command).map_err(invalid)?;
+            // Nothing of this batch is stored yet, so an earlier item is the
+            // predecessor of a later one only through this list.
+            apply_counters(repository, &mut observation, data_source, &stored).await?;
             stored.push(
                 stored_observation(&observation, received_at, data_source)
                     .map_err(|_| ModernTelemetryError::Invalid)?,
@@ -564,11 +568,7 @@ fn stored_observation(
         measured_at,
         received_at,
         source_kind: source_kind(observation.source.kind).to_owned(),
-        source_identity: observation
-            .source
-            .source_reference
-            .clone()
-            .unwrap_or_else(|| observation.idempotency.namespace.clone()),
+        source_identity: source_identity(observation),
         idempotency_identity: Some(format!(
             "{}:{}",
             observation.idempotency.namespace, observation.idempotency.key
@@ -588,7 +588,88 @@ fn stored_observation(
         canonical_hash: observation.idempotency.payload_hash,
         version: 1,
         data_source_id,
+        measurements: StoredMeasurements {
+            generation_lifetime_wh: observation
+                .values
+                .generation_lifetime
+                .map(pvlog_domain::WattHours::value),
+            consumption_lifetime_wh: observation
+                .values
+                .consumption_lifetime
+                .map(pvlog_domain::WattHours::value),
+            ..StoredMeasurements::default()
+        },
     })
+}
+
+/// Maps a normalization failure onto the telemetry error, keeping the field it names.
+fn invalid(error: IngestionNormalizationError) -> ModernTelemetryError {
+    match error {
+        IngestionNormalizationError::InvalidField(field) => {
+            ModernTelemetryError::InvalidField(field)
+        }
+        _ => ModernTelemetryError::Invalid,
+    }
+}
+
+/// The identity a reading is stored under when it has no data source.
+fn source_identity(observation: &CanonicalObservation) -> String {
+    observation
+        .source
+        .source_reference
+        .clone()
+        .unwrap_or_else(|| observation.idempotency.namespace.clone())
+}
+
+/// Derives interval energy from the lifetime counters of a reading.
+///
+/// The predecessor is the newest earlier counter of the same source, whether
+/// it is already stored or still waiting in `pending` to be stored together
+/// with this reading.
+async fn apply_counters(
+    repository: &dyn TelemetryRepository,
+    observation: &mut CanonicalObservation,
+    data_source: Option<DataSourceId>,
+    pending: &[StoredObservation],
+) -> Result<(), ModernTelemetryError> {
+    if observation.values.generation_lifetime.is_none()
+        && observation.values.consumption_lifetime.is_none()
+    {
+        return Ok(());
+    }
+    let measured_at = i64::try_from(observation.observed_at.epoch_millis())
+        .map_err(|_| ModernTelemetryError::Invalid)?;
+    let identity = source_identity(observation);
+    let stored = repository
+        .latest_counters(observation.system_id, data_source, &identity, measured_at)
+        .await
+        .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))?;
+    let same_source = |candidate: &&StoredObservation| {
+        candidate.measured_at < measured_at
+            && candidate.data_source_id == data_source
+            && (data_source.is_some() || candidate.source_identity == identity)
+    };
+    let newest = |stored: Option<(i64, i64)>, counter: fn(&StoredObservation) -> Option<i64>| {
+        pending
+            .iter()
+            .filter(same_source)
+            .filter_map(|candidate| Some((candidate.measured_at, counter(candidate)?)))
+            .chain(stored)
+            .max_by_key(|(at, _)| *at)
+            .map(|(_, value)| value)
+    };
+    derive_counter_energy(
+        observation,
+        CounterBaseline {
+            generation_lifetime_wh: newest(stored.generation, |o| {
+                o.measurements.generation_lifetime_wh
+            }),
+            consumption_lifetime_wh: newest(stored.consumption, |o| {
+                o.measurements.consumption_lifetime_wh
+            }),
+        },
+    );
+    Ok(())
 }
 
 /// Returns the numeric value of an energy reading, whether interval or cumulative total.

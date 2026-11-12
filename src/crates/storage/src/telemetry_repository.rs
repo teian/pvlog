@@ -36,6 +36,34 @@ pub struct StoredObservation {
     pub version: i64,
     /// Data source the reading was delivered through, when it is known.
     pub data_source_id: Option<DataSourceId>,
+    /// Measurements beyond generation and consumption power and energy.
+    pub measurements: StoredMeasurements,
+}
+
+/// The remaining measurement columns of a stored reading; each is absent
+/// unless the source supplied it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct StoredMeasurements {
+    pub generation_lifetime_wh: Option<i64>,
+    pub consumption_lifetime_wh: Option<i64>,
+    pub grid_import_power_watts: Option<i64>,
+    pub grid_import_energy_wh: Option<i64>,
+    pub grid_export_power_watts: Option<i64>,
+    pub grid_export_energy_wh: Option<i64>,
+    pub net_grid_power_watts: Option<i64>,
+    pub battery_power_watts: Option<i64>,
+    pub battery_energy_wh: Option<i64>,
+    pub battery_state_basis_points: Option<i32>,
+    pub temperature_millidegrees_c: Option<i64>,
+    pub voltage_millivolts: Option<i64>,
+}
+
+/// The lifetime counters a source reported most recently before a point in
+/// time, each with the time it was measured at.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct LatestCounters {
+    pub generation: Option<(i64, i64)>,
+    pub consumption: Option<(i64, i64)>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -107,6 +135,16 @@ pub trait TelemetryRepository: Send + Sync {
         &self,
         commit: &TransactionalObservation,
     ) -> Result<ObservationInsertOutcome, TelemetryRepositoryError>;
+    /// Finds the lifetime counters the same source reported last before
+    /// `before`. A reading belongs to its data source when it has one, and
+    /// otherwise to the source identity it was stored under.
+    async fn latest_counters(
+        &self,
+        system_id: SystemId,
+        data_source_id: Option<DataSourceId>,
+        source_identity: &str,
+        before: i64,
+    ) -> Result<LatestCounters, TelemetryRepositoryError>;
     async fn observations(
         &self,
         system_id: SystemId,
@@ -237,7 +275,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
             .ok_or(TelemetryRepositoryError::InvalidRecord("observation"))?;
         let mut writer = self.account.acquire_writer().await?;
         let mut transaction = writer.connection().begin().await?;
-        let result=sqlx::query("INSERT OR IGNORE INTO telemetry_hot (observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version,data_source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(blob(o.id.as_uuid())).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(serde_json::to_string(&o.provenance)?).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| blob(id.as_uuid()))).execute(&mut *transaction).await?;
+        let result=sqlx::query("INSERT OR IGNORE INTO telemetry_hot (observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version,data_source_id,generation_lifetime_wh,consumption_lifetime_wh,grid_import_power_watts,grid_import_energy_wh,grid_export_power_watts,grid_export_energy_wh,net_grid_power_watts,battery_power_watts,battery_energy_wh,battery_state_basis_points,temperature_millidegrees_c,voltage_millivolts) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(blob(o.id.as_uuid())).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(serde_json::to_string(&o.provenance)?).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| blob(id.as_uuid()))).bind(o.measurements.generation_lifetime_wh).bind(o.measurements.consumption_lifetime_wh).bind(o.measurements.grid_import_power_watts).bind(o.measurements.grid_import_energy_wh).bind(o.measurements.grid_export_power_watts).bind(o.measurements.grid_export_energy_wh).bind(o.measurements.net_grid_power_watts).bind(o.measurements.battery_power_watts).bind(o.measurements.battery_energy_wh).bind(o.measurements.battery_state_basis_points).bind(o.measurements.temperature_millidegrees_c).bind(o.measurements.voltage_millivolts).execute(&mut *transaction).await?;
         if result.rows_affected() == 0 {
             let existing = sqlite_existing_observation(&mut transaction, o).await?;
             transaction.rollback().await?;
@@ -252,6 +290,23 @@ impl TelemetryRepository for SqliteTelemetryRepository {
         transaction.commit().await?;
         Ok(ObservationInsertOutcome::Inserted)
     }
+    async fn latest_counters(
+        &self,
+        system_id: SystemId,
+        data_source_id: Option<DataSourceId>,
+        source_identity: &str,
+        before: i64,
+    ) -> Result<LatestCounters, TelemetryRepositoryError> {
+        let mut c = self.account.acquire().await?;
+        let system = blob(system_id.as_uuid());
+        let source = data_source_id.map(|id| blob(id.as_uuid()));
+        let generation = sqlx::query("SELECT measured_at,generation_lifetime_wh AS counter FROM telemetry_hot WHERE system_id=?1 AND measured_at<?2 AND generation_lifetime_wh IS NOT NULL AND ((?3 IS NOT NULL AND data_source_id=?3) OR (?3 IS NULL AND data_source_id IS NULL AND source_identity=?4)) ORDER BY measured_at DESC LIMIT 1").bind(system.clone()).bind(before).bind(source.clone()).bind(source_identity).fetch_optional(&mut *c).await?;
+        let consumption = sqlx::query("SELECT measured_at,consumption_lifetime_wh AS counter FROM telemetry_hot WHERE system_id=?1 AND measured_at<?2 AND consumption_lifetime_wh IS NOT NULL AND ((?3 IS NOT NULL AND data_source_id=?3) OR (?3 IS NULL AND data_source_id IS NULL AND source_identity=?4)) ORDER BY measured_at DESC LIMIT 1").bind(system).bind(before).bind(source).bind(source_identity).fetch_optional(&mut *c).await?;
+        Ok(LatestCounters {
+            generation: generation.map(|r| (r.get("measured_at"), r.get("counter"))),
+            consumption: consumption.map(|r| (r.get("measured_at"), r.get("counter"))),
+        })
+    }
     async fn observations(
         &self,
         s: SystemId,
@@ -260,7 +315,7 @@ impl TelemetryRepository for SqliteTelemetryRepository {
     ) -> Result<Vec<StoredObservation>, TelemetryRepositoryError> {
         validate_range(start, end)?;
         let mut c = self.account.acquire().await?;
-        let rows=sqlx::query("SELECT observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version,data_source_id FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? ORDER BY measured_at,observation_id").bind(blob(s.as_uuid())).bind(start).bind(end).fetch_all(&mut *c).await?;
+        let rows=sqlx::query("SELECT observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version,data_source_id,generation_lifetime_wh,consumption_lifetime_wh,grid_import_power_watts,grid_import_energy_wh,grid_export_power_watts,grid_export_energy_wh,net_grid_power_watts,battery_power_watts,battery_energy_wh,battery_state_basis_points,temperature_millidegrees_c,voltage_millivolts FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? ORDER BY measured_at,observation_id").bind(blob(s.as_uuid())).bind(start).bind(end).fetch_all(&mut *c).await?;
         rows.iter().map(sqlite_observation).collect()
     }
     async fn store_idempotency(
@@ -373,7 +428,7 @@ impl TelemetryRepository for PostgresTelemetryRepository {
             .ok_or(TelemetryRepositoryError::InvalidRecord("observation"))?;
         let mut connection = self.connection().await?;
         let mut transaction = connection.begin().await?;
-        let result=sqlx::query("INSERT INTO telemetry.hot_observations (account_id,observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version,data_source_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) ON CONFLICT DO NOTHING").bind(self.account_id.as_uuid()).bind(o.id.as_uuid()).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(&o.provenance).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| id.as_uuid())).execute(&mut *transaction).await?;
+        let result=sqlx::query("INSERT INTO telemetry.hot_observations (account_id,observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version,data_source_id,generation_lifetime_wh,consumption_lifetime_wh,grid_import_power_watts,grid_import_energy_wh,grid_export_power_watts,grid_export_energy_wh,net_grid_power_watts,battery_power_watts,battery_energy_wh,battery_state_basis_points,temperature_millidegrees_c,voltage_millivolts) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29) ON CONFLICT DO NOTHING").bind(self.account_id.as_uuid()).bind(o.id.as_uuid()).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(&o.provenance).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| id.as_uuid())).bind(o.measurements.generation_lifetime_wh).bind(o.measurements.consumption_lifetime_wh).bind(o.measurements.grid_import_power_watts).bind(o.measurements.grid_import_energy_wh).bind(o.measurements.grid_export_power_watts).bind(o.measurements.grid_export_energy_wh).bind(o.measurements.net_grid_power_watts).bind(o.measurements.battery_power_watts).bind(o.measurements.battery_energy_wh).bind(o.measurements.battery_state_basis_points).bind(o.measurements.temperature_millidegrees_c).bind(o.measurements.voltage_millivolts).execute(&mut *transaction).await?;
         if result.rows_affected() == 0 {
             let existing = pg_existing_observation(&mut transaction, self.account_id, o).await?;
             transaction.rollback().await?;
@@ -388,6 +443,22 @@ impl TelemetryRepository for PostgresTelemetryRepository {
         transaction.commit().await?;
         Ok(ObservationInsertOutcome::Inserted)
     }
+    async fn latest_counters(
+        &self,
+        system_id: SystemId,
+        data_source_id: Option<DataSourceId>,
+        source_identity: &str,
+        before: i64,
+    ) -> Result<LatestCounters, TelemetryRepositoryError> {
+        let mut c = self.connection().await?;
+        let source = data_source_id.map(|id| id.as_uuid());
+        let generation = sqlx::query("SELECT measured_at,generation_lifetime_wh AS counter FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at<$3 AND generation_lifetime_wh IS NOT NULL AND (($4::uuid IS NOT NULL AND data_source_id=$4) OR ($4::uuid IS NULL AND data_source_id IS NULL AND source_identity=$5)) ORDER BY measured_at DESC LIMIT 1").bind(self.account_id.as_uuid()).bind(system_id.as_uuid()).bind(before).bind(source).bind(source_identity).fetch_optional(&mut c).await?;
+        let consumption = sqlx::query("SELECT measured_at,consumption_lifetime_wh AS counter FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at<$3 AND consumption_lifetime_wh IS NOT NULL AND (($4::uuid IS NOT NULL AND data_source_id=$4) OR ($4::uuid IS NULL AND data_source_id IS NULL AND source_identity=$5)) ORDER BY measured_at DESC LIMIT 1").bind(self.account_id.as_uuid()).bind(system_id.as_uuid()).bind(before).bind(source).bind(source_identity).fetch_optional(&mut c).await?;
+        Ok(LatestCounters {
+            generation: generation.map(|r| (r.get("measured_at"), r.get("counter"))),
+            consumption: consumption.map(|r| (r.get("measured_at"), r.get("counter"))),
+        })
+    }
     async fn observations(
         &self,
         s: SystemId,
@@ -396,7 +467,7 @@ impl TelemetryRepository for PostgresTelemetryRepository {
     ) -> Result<Vec<StoredObservation>, TelemetryRepositoryError> {
         validate_range(start, end)?;
         let mut c = self.connection().await?;
-        let rows=sqlx::query("SELECT observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version,data_source_id FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at>=$3 AND measured_at<$4 ORDER BY measured_at,observation_id").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
+        let rows=sqlx::query("SELECT observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version,data_source_id,generation_lifetime_wh,consumption_lifetime_wh,grid_import_power_watts,grid_import_energy_wh,grid_export_power_watts,grid_export_energy_wh,net_grid_power_watts,battery_power_watts,battery_energy_wh,battery_state_basis_points,temperature_millidegrees_c,voltage_millivolts FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at>=$3 AND measured_at<$4 ORDER BY measured_at,observation_id").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
         c.close().await?;
         rows.iter().map(pg_observation).collect()
     }
@@ -460,7 +531,7 @@ async fn sqlite_insert_hot(
     c: &mut sqlx::SqliteConnection,
     o: &StoredObservation,
 ) -> Result<sqlx::sqlite::SqliteQueryResult, TelemetryRepositoryError> {
-    Ok(sqlx::query("INSERT OR IGNORE INTO telemetry_hot (observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version,data_source_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(blob(o.id.as_uuid())).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(serde_json::to_string(&o.provenance)?).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| blob(id.as_uuid()))).execute(c).await?)
+    Ok(sqlx::query("INSERT OR IGNORE INTO telemetry_hot (observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance_json,canonical_hash,version,data_source_id,generation_lifetime_wh,consumption_lifetime_wh,grid_import_power_watts,grid_import_energy_wh,grid_export_power_watts,grid_export_energy_wh,net_grid_power_watts,battery_power_watts,battery_energy_wh,battery_state_basis_points,temperature_millidegrees_c,voltage_millivolts) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(blob(o.id.as_uuid())).bind(blob(o.system_id.as_uuid())).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(serde_json::to_string(&o.provenance)?).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| blob(id.as_uuid()))).bind(o.measurements.generation_lifetime_wh).bind(o.measurements.consumption_lifetime_wh).bind(o.measurements.grid_import_power_watts).bind(o.measurements.grid_import_energy_wh).bind(o.measurements.grid_export_power_watts).bind(o.measurements.grid_export_energy_wh).bind(o.measurements.net_grid_power_watts).bind(o.measurements.battery_power_watts).bind(o.measurements.battery_energy_wh).bind(o.measurements.battery_state_basis_points).bind(o.measurements.temperature_millidegrees_c).bind(o.measurements.voltage_millivolts).execute(c).await?)
 }
 
 #[cfg(feature = "postgres")]
@@ -469,7 +540,7 @@ async fn pg_insert_hot(
     account_id: AccountId,
     o: &StoredObservation,
 ) -> Result<sqlx::postgres::PgQueryResult, TelemetryRepositoryError> {
-    Ok(sqlx::query("INSERT INTO telemetry.hot_observations (account_id,observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version,data_source_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) ON CONFLICT DO NOTHING").bind(account_id.as_uuid()).bind(o.id.as_uuid()).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(&o.provenance).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| id.as_uuid())).execute(&mut *c).await?)
+    Ok(sqlx::query("INSERT INTO telemetry.hot_observations (account_id,observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version,data_source_id,generation_lifetime_wh,consumption_lifetime_wh,grid_import_power_watts,grid_import_energy_wh,grid_export_power_watts,grid_export_energy_wh,net_grid_power_watts,battery_power_watts,battery_energy_wh,battery_state_basis_points,temperature_millidegrees_c,voltage_millivolts) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29) ON CONFLICT DO NOTHING").bind(account_id.as_uuid()).bind(o.id.as_uuid()).bind(o.system_id.as_uuid()).bind(o.measured_at).bind(o.received_at).bind(&o.source_kind).bind(&o.source_identity).bind(&o.idempotency_identity).bind(o.quality_flags).bind(o.generation_power_watts).bind(o.generation_energy_wh).bind(o.consumption_power_watts).bind(o.consumption_energy_wh).bind(&o.provenance).bind(o.canonical_hash.as_slice()).bind(o.version).bind(o.data_source_id.map(|id| id.as_uuid())).bind(o.measurements.generation_lifetime_wh).bind(o.measurements.consumption_lifetime_wh).bind(o.measurements.grid_import_power_watts).bind(o.measurements.grid_import_energy_wh).bind(o.measurements.grid_export_power_watts).bind(o.measurements.grid_export_energy_wh).bind(o.measurements.net_grid_power_watts).bind(o.measurements.battery_power_watts).bind(o.measurements.battery_energy_wh).bind(o.measurements.battery_state_basis_points).bind(o.measurements.temperature_millidegrees_c).bind(o.measurements.voltage_millivolts).execute(&mut *c).await?)
 }
 
 fn validate_range(start: i64, end: i64) -> Result<(), TelemetryRepositoryError> {
@@ -570,6 +641,20 @@ fn sqlite_observation(
             .get::<Option<Vec<u8>>, _>("data_source_id")
             .map(|id| sid(id, DataSourceId::from_uuid))
             .transpose()?,
+        measurements: StoredMeasurements {
+            generation_lifetime_wh: r.get("generation_lifetime_wh"),
+            consumption_lifetime_wh: r.get("consumption_lifetime_wh"),
+            grid_import_power_watts: r.get("grid_import_power_watts"),
+            grid_import_energy_wh: r.get("grid_import_energy_wh"),
+            grid_export_power_watts: r.get("grid_export_power_watts"),
+            grid_export_energy_wh: r.get("grid_export_energy_wh"),
+            net_grid_power_watts: r.get("net_grid_power_watts"),
+            battery_power_watts: r.get("battery_power_watts"),
+            battery_energy_wh: r.get("battery_energy_wh"),
+            battery_state_basis_points: r.get("battery_state_basis_points"),
+            temperature_millidegrees_c: r.get("temperature_millidegrees_c"),
+            voltage_millivolts: r.get("voltage_millivolts"),
+        },
     })
 }
 #[cfg(feature = "sqlite")]
@@ -669,6 +754,20 @@ fn pg_observation(
             .map(DataSourceId::from_uuid)
             .transpose()
             .map_err(|_| TelemetryRepositoryError::InvalidStoredValue)?,
+        measurements: StoredMeasurements {
+            generation_lifetime_wh: r.get("generation_lifetime_wh"),
+            consumption_lifetime_wh: r.get("consumption_lifetime_wh"),
+            grid_import_power_watts: r.get("grid_import_power_watts"),
+            grid_import_energy_wh: r.get("grid_import_energy_wh"),
+            grid_export_power_watts: r.get("grid_export_power_watts"),
+            grid_export_energy_wh: r.get("grid_export_energy_wh"),
+            net_grid_power_watts: r.get("net_grid_power_watts"),
+            battery_power_watts: r.get("battery_power_watts"),
+            battery_energy_wh: r.get("battery_energy_wh"),
+            battery_state_basis_points: r.get("battery_state_basis_points"),
+            temperature_millidegrees_c: r.get("temperature_millidegrees_c"),
+            voltage_millivolts: r.get("voltage_millivolts"),
+        },
     })
 }
 #[cfg(feature = "postgres")]

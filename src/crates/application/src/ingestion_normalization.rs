@@ -37,6 +37,18 @@ pub struct EnergyInput {
     pub cumulative: bool,
     pub reset_sequence: u32,
 }
+/// Optional members of a reading beyond power and interval energy.
+///
+/// They are grouped so that a reading which uses none of them is written as
+/// `ObservationSupplements::default()`.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ObservationSupplements {
+    /// Lifetime generation counter in watt-hours.
+    pub generation_lifetime_wh: Option<i64>,
+    /// Lifetime consumption counter in watt-hours.
+    pub consumption_lifetime_wh: Option<i64>,
+}
+
 #[derive(Clone, Debug)]
 pub struct NormalizeObservation {
     pub system_id: SystemId,
@@ -61,6 +73,7 @@ pub struct NormalizeObservation {
     pub registered_channels: BTreeSet<ChannelId>,
     /// Readings still keyed by their wire name, before channel resolution.
     pub channel_readings: BTreeMap<String, ChannelReading>,
+    pub supplements: ObservationSupplements,
     pub source: ObservationSource,
     pub idempotency_namespace: String,
     pub idempotency_key: String,
@@ -69,7 +82,7 @@ pub struct NormalizeObservation {
 
 /// Normalizes an explicit-unit ingestion command without floating-point conversion.
 /// # Errors
-/// Returns an error for sub-base-unit precision, empty identity, invalid battery ratio, serialization failure, or unregistered channels.
+/// Returns an error for sub-base-unit precision, empty identity, invalid battery ratio, serialization failure, unregistered channels, or a supplement that is out of range, naming its wire field.
 pub fn normalize_observation(
     input: NormalizeObservation,
 ) -> Result<CanonicalObservation, IngestionNormalizationError> {
@@ -112,6 +125,14 @@ pub fn normalize_observation(
         temperature: input
             .temperature_millidegrees_celsius
             .map(MilliDegreesCelsius::new),
+        generation_lifetime: counter(
+            input.supplements.generation_lifetime_wh,
+            "generationLifetimeWh",
+        )?,
+        consumption_lifetime: counter(
+            input.supplements.consumption_lifetime_wh,
+            "consumptionLifetimeWh",
+        )?,
         battery,
         extended: input.extended,
         ..MeasurementValues::default()
@@ -160,6 +181,16 @@ fn energy(input: EnergyInput) -> Result<EnergyReading, IngestionNormalizationErr
         EnergyReading::Interval(value)
     })
 }
+/// Accepts a counter that cannot run backwards past zero.
+fn counter(
+    value: Option<i64>,
+    field: &'static str,
+) -> Result<Option<WattHours>, IngestionNormalizationError> {
+    match value {
+        Some(value) if value < 0 => Err(IngestionNormalizationError::InvalidField(field)),
+        value => Ok(value.map(WattHours::new)),
+    }
+}
 fn exact_div(value: i64, divisor: i64) -> Result<i64, IngestionNormalizationError> {
     if value % divisor == 0 {
         Ok(value / divisor)
@@ -180,4 +211,7 @@ pub enum IngestionNormalizationError {
     InvalidBatteryRatio,
     #[error("canonical payload serialization failed")]
     Serialization,
+    /// A member is out of range; carries its wire name.
+    #[error("field {0} is invalid")]
+    InvalidField(&'static str),
 }

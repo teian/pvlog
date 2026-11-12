@@ -16,6 +16,7 @@ mod equipment_configuration;
 mod identity_linking;
 mod import_export;
 mod ingestion_admission;
+mod ingestion_counters;
 mod ingestion_normalization;
 mod ingestion_validation;
 mod local_password;
@@ -95,9 +96,10 @@ pub use import_export::{
 pub use ingestion_admission::{
     IngestionAdmission, IngestionAdmissionError, IngestionAdmissionMetrics, IngestionPermit,
 };
+pub use ingestion_counters::{CounterBaseline, CounterStep, counter_step, derive_counter_energy};
 pub use ingestion_normalization::{
     ChannelReading, EnergyInput, EnergyUnit, IngestionNormalizationError, NormalizeObservation,
-    PowerUnit, normalize_observation,
+    ObservationSupplements, PowerUnit, normalize_observation,
 };
 pub use ingestion_validation::{
     IngestionValidationError, IngestionValidationPolicy, validate_observation,

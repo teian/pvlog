@@ -33,6 +33,9 @@ pub trait ModernTelemetryUseCases: Send + Sync {
 pub enum ModernTelemetryError {
     #[error("telemetry request is invalid")]
     Invalid,
+    /// One member of the request is invalid; carries its wire name.
+    #[error("telemetry field {0} is invalid")]
+    InvalidField(&'static str),
     #[error("telemetry observation was not found")]
     NotFound,
     #[error("telemetry version conflict")]
