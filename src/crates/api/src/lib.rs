@@ -37,6 +37,7 @@ mod connectors;
 mod daily_summaries;
 mod dashboard;
 mod data_sources;
+mod device_events;
 mod discovery;
 mod equipment_catalog;
 mod forecasting;
@@ -96,6 +97,11 @@ pub use data_sources::{
     CreateDataSourceInput, DataSourceApiError, DataSourceApiUseCases, DataSourceConfiguration,
     DataSourceResponse, IssuedDataSource, RenameDataSourceInput, TestReadingResponse,
     data_sources_router,
+};
+pub use device_events::{
+    DEFAULT_DEVICE_EVENT_LIMIT, DeviceEventApiError, DeviceEventApiUseCases, DeviceEventInput,
+    DeviceEventQuery, DeviceEventResponse, DeviceEventsAccepted, MAXIMUM_DEVICE_EVENT_LIMIT,
+    MAXIMUM_DEVICE_EVENTS_PER_REQUEST, device_events_router,
 };
 pub use discovery::{
     AdoptProposalInput, AdoptedEquipmentResponse, AdoptedStringInput, AdoptedStringResponse,

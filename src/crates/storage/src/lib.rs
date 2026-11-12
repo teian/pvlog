@@ -21,6 +21,7 @@ mod channel_repository;
 mod compaction;
 mod daily_summary_repository;
 mod data_source_repository;
+mod device_event_repository;
 mod discovery_repository;
 mod external_identity_repository;
 mod integrity_planner;
@@ -88,6 +89,11 @@ pub use data_source_repository::SqliteDataSourceRepository;
 pub use data_source_repository::{
     DataSourceActivity, DataSourceRecord, DataSourceRepository, TestReadingRecord,
 };
+#[cfg(feature = "postgres")]
+pub use device_event_repository::PostgresDeviceEventRepository;
+#[cfg(feature = "sqlite")]
+pub use device_event_repository::SqliteDeviceEventRepository;
+pub use device_event_repository::{DeviceEventFilter, DeviceEventRecord, DeviceEventRepository};
 #[cfg(feature = "postgres")]
 pub use discovery_repository::PostgresDiscoveryRepository;
 #[cfg(feature = "sqlite")]

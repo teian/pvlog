@@ -148,6 +148,24 @@ is kept next to the value PVLog computes from the readings; a complete summary
 is the one the statistics use. The fields are listed in the
 [PVOutput field mapping](../reference/pvoutput-field-mapping.md).
 
+## Device events
+
+A logger that reads the event log of its devices can upload the events:
+
+```sh
+curl --fail-with-body \
+  -H "Authorization: Bearer $PVLOG_API_KEY" \
+  -H 'Content-Type: application/json' \
+  --data '{"events":[{"deviceId":"2000123456","eventId":"8812","occurredAtEpochMillis":1780000000000,"code":3501,"message":"Insulation failure"}]}' \
+  "$PVLOG_URL/api/v1/systems/$PVLOG_SYSTEM_ID/device-events"
+```
+
+`deviceId` is the device as the logger names it; for an inverter, use its
+serial number, so that the events appear at the inverter with that serial.
+An event is stored once per device and `eventId`. Without an `eventId`, its
+time and code identify it. Uploading events again is therefore always safe:
+the response counts them as `unchanged`. A request carries up to 1,000 events.
+
 ## Home Assistant example
 
 Keep the key in `secrets.yaml` as `pvlog_api_key`, then reference it from a REST

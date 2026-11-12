@@ -76,6 +76,10 @@ name = "setup"
 path = "../../../tests/rust/pvlog/setup.rs"
 
 [[test]]
+name = "device-events"
+path = "../../../tests/rust/pvlog/device_events.rs"
+
+[[test]]
 name = "equipment-discovery"
 path = "../../../tests/rust/pvlog/equipment_discovery.rs"
 

@@ -86,6 +86,10 @@ name = "setup-endpoints"
 path = "../../../tests/rust/api/setup_endpoints.rs"
 
 [[test]]
+name = "device-event-endpoints"
+path = "../../../tests/rust/api/device_event_endpoints.rs"
+
+[[test]]
 name = "daily-summary-endpoints"
 path = "../../../tests/rust/api/daily_summary_endpoints.rs"
 

@@ -1101,6 +1101,106 @@ paths:
                 type: array
                 items: { $ref: "#/components/schemas/MeasurementChannel" }
         "403": { $ref: "#/components/responses/ForbiddenProblem" }
+  /api/v1/systems/{system_id}/device-events:
+    parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
+    post:
+      operationId: storeDeviceEvents
+      summary: Upload device events
+      description: Stores the events devices reported, such as a fault or a changed setting. An event is identified by its device and its eventId, or by its time and code when the source has no identifier, so uploading it again stores nothing new. An event that is uploaded again with other content replaces the stored one. Either all events of a request are stored or none.
+      tags: [Telemetry]
+      security: [{ bearerAuth: [telemetry:write] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  minItems: 1
+                  maxItems: 1000
+                  items: { $ref: "#/components/schemas/DeviceEventInput" }
+            example:
+              events:
+                - deviceId: "2000123456"
+                  eventId: "8812"
+                  occurredAtEpochMillis: 1780000000000
+                  code: 3501
+                  message: Insulation failure
+      responses:
+        "200":
+          description: What became of the events
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [stored, unchanged]
+                properties:
+                  stored:
+                    type: integer
+                    description: Events that were new, or replaced a stored event with other content.
+                  unchanged:
+                    type: integer
+                    description: Events that were already stored as uploaded.
+        "401": { $ref: "#/components/responses/UnauthorizedProblem" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+    get:
+      operationId: listDeviceEvents
+      summary: List device events
+      description: Lists the device events of a system, newest first.
+      tags: [Telemetry]
+      security: [{ sessionCookie: [] }, { bearerAuth: [telemetry:read] }]
+      parameters:
+        - name: deviceId
+          in: query
+          description: Only events of this device.
+          schema: { type: string }
+        - $ref: "#/components/parameters/DeviceEventFrom"
+        - $ref: "#/components/parameters/DeviceEventTo"
+        - $ref: "#/components/parameters/DeviceEventLimit"
+      responses:
+        "200":
+          description: Device events, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DeviceEvent" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
+  /api/v1/systems/{system_id}/inverters/{inverter_id}/device-events:
+    parameters:
+      - $ref: "#/components/parameters/NestedSystemId"
+      - name: inverter_id
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/UuidV7" }
+    get:
+      operationId: listInverterDeviceEvents
+      summary: List the device events of an inverter
+      description: Lists the events of the device whose identifier is the inverter's serial number, newest first. An inverter without a serial number has none.
+      tags: [Telemetry]
+      security: [{ sessionCookie: [] }, { bearerAuth: [telemetry:read] }]
+      parameters:
+        - $ref: "#/components/parameters/DeviceEventFrom"
+        - $ref: "#/components/parameters/DeviceEventTo"
+        - $ref: "#/components/parameters/DeviceEventLimit"
+      responses:
+        "200":
+          description: Device events, newest first
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/DeviceEvent" }
+        "403": { $ref: "#/components/responses/ForbiddenProblem" }
+        "404": { $ref: "#/components/responses/NotFoundProblem" }
+        "422": { $ref: "#/components/responses/ValidationProblem" }
   /api/v1/systems/{system_id}/discovery-proposals:
     parameters: [{ $ref: "#/components/parameters/NestedSystemId" }]
     get:
@@ -3392,6 +3492,20 @@ components:
       in: path
       required: true
       schema: { $ref: "#/components/schemas/UuidV7" }
+    DeviceEventFrom:
+      name: from
+      in: query
+      description: Only events that occurred at or after this instant, in epoch milliseconds.
+      schema: { type: integer, format: int64 }
+    DeviceEventTo:
+      name: to
+      in: query
+      description: Only events that occurred before this instant, in epoch milliseconds.
+      schema: { type: integer, format: int64 }
+    DeviceEventLimit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 100 }
     DiscoveryProposalId:
       name: proposal_id
       in: path
@@ -4664,6 +4778,38 @@ components:
       type: string
       enum: [mean, sum, min, max, last, counter_delta]
       description: How the values of a period are reduced to one value. counter_delta is the growth of a counter, ignoring resets.
+    DeviceEventInput:
+      type: object
+      required: [deviceId, occurredAtEpochMillis]
+      properties:
+        deviceId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: The device as the source names it. For an inverter this is its serial number.
+        eventId:
+          type: [string, "null"]
+          maxLength: 128
+          description: The source's own identifier of the event within the device. Without it, the event is identified by its time and code.
+        occurredAtEpochMillis: { type: integer, format: int64, minimum: 0 }
+        code: { type: [integer, "null"], format: int64 }
+        message: { type: [string, "null"], maxLength: 500 }
+    DeviceEvent:
+      type: object
+      required: [id, deviceId, occurredAtEpochMillis, receivedAtEpochMillis]
+      properties:
+        id: { $ref: "#/components/schemas/UuidV7" }
+        deviceId: { type: string }
+        eventId: { type: [string, "null"] }
+        occurredAtEpochMillis: { type: integer, format: int64 }
+        code: { type: [integer, "null"], format: int64 }
+        message: { type: [string, "null"] }
+        dataSourceId:
+          oneOf:
+            - $ref: "#/components/schemas/UuidV7"
+            - type: "null"
+          description: Data source the event was delivered through, when it is known.
+        receivedAtEpochMillis: { type: integer, format: int64 }
     DiscoveryProposal:
       type: object
       required:

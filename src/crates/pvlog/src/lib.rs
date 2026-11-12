@@ -14,6 +14,7 @@ pub mod config;
 pub mod daily_summaries;
 pub mod dashboard;
 pub mod data_sources;
+pub mod device_events;
 pub mod discovery;
 pub mod embedded_ui;
 pub mod forecasting;
