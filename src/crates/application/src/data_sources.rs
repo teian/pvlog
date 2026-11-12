@@ -112,7 +112,8 @@ pub fn render_configuration(
             language: "dotenv",
             content: format!(
                 "PVLOG_URL={server_url}\nPVLOG_SYSTEM_ID={system_id}\n\
-                 PVLOG_API_KEY={api_key}\nSBFSPOT_DATABASE=/var/lib/sbfspot/SBFspot.db\n"
+                 PVLOG_API_KEY={api_key}\nSBFSPOT_DATABASE=/var/lib/sbfspot/SBFspot.db\n\
+                 SBFSPOT_PUSH_START_AT=0\n"
             ),
         }],
         "generic" => vec![

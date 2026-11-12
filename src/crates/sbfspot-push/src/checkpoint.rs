@@ -1,11 +1,18 @@
+use crate::EventPosition;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use thiserror::Error;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+/// How far the database has been uploaded.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Checkpoint {
+    /// Latest archive time whose reading was accepted.
     pub last_timestamp: i64,
+    /// Latest event that was accepted. Absent in a checkpoint written before
+    /// events were uploaded, and until the first event was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_event: Option<EventPosition>,
 }
 
 #[derive(Clone, Debug)]

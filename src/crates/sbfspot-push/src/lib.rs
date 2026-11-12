@@ -6,11 +6,17 @@ mod source;
 
 pub use checkpoint::{Checkpoint, CheckpointStore};
 pub use client::{ApiError, PvlogClient, PvlogClientConfig};
-pub use source::{Reading, SbfspotError, SbfspotSource};
+pub use source::{
+    ChannelValue, DeviceEvent, DeviceIdentity, EventPosition, Reading, SbfspotError, SbfspotSource,
+    SourceGroup,
+};
 
 use serde::Serialize;
 use std::{path::PathBuf, time::Duration};
 use thiserror::Error;
+
+/// Most events `PVLog` accepts in one request.
+const EVENTS_PER_REQUEST: usize = 1000;
 
 /// Runtime settings for one catch-up pass.
 #[derive(Clone, Debug)]
@@ -22,12 +28,16 @@ pub struct PushConfig {
 }
 
 /// Summary returned after the source has been caught up.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PushSummary {
     pub batches: u64,
     pub observations: u64,
     pub last_timestamp: Option<i64>,
+    /// Events uploaded in this pass.
+    pub events: u64,
+    /// Groups of values the database does not hold. Everything else was delivered.
+    pub unavailable: Vec<SourceGroup>,
 }
 
 /// Runs repeated catch-up passes until shutdown is requested.
@@ -40,11 +50,19 @@ pub async fn run_service(
     config: &PushConfig,
     poll_interval: Duration,
 ) -> Result<(), PushError> {
+    let unavailable = source.unavailable_groups();
+    if !unavailable.is_empty() {
+        tracing::warn!(
+            ?unavailable,
+            "the SBFspot database lacks optional tables; their values are not delivered"
+        );
+    }
     loop {
         let summary = push_pending(source, client, config).await?;
         tracing::info!(
             batches = summary.batches,
             observations = summary.observations,
+            events = summary.events,
             last_timestamp = summary.last_timestamp,
             "SBFspot catch-up pass complete"
         );
@@ -59,7 +77,7 @@ pub async fn run_service(
     }
 }
 
-/// Sends all observations newer than the durable checkpoint.
+/// Sends all observations and events newer than the durable checkpoint.
 ///
 /// # Errors
 /// Returns an error without advancing the checkpoint if a batch is not accepted.
@@ -72,39 +90,60 @@ pub async fn push_pending(
         return Err(PushError::InvalidBatchSize(config.batch_size));
     }
     let store = CheckpointStore::new(config.checkpoint_path.clone());
-    let mut cursor = store
-        .load()
-        .await?
-        .map_or(config.initial_timestamp, |state| state.last_timestamp);
-    let mut summary = PushSummary::default();
+    let mut checkpoint = store.load().await?.unwrap_or(Checkpoint {
+        last_timestamp: config.initial_timestamp,
+        last_event: None,
+    });
+    let mut summary = PushSummary {
+        unavailable: source.unavailable_groups(),
+        ..PushSummary::default()
+    };
 
     loop {
-        let readings = source.read_after(cursor, config.batch_size).await?;
-        if readings.is_empty() {
-            return Ok(summary);
-        }
-        let last_timestamp = readings
-            .last()
-            .map(|reading| reading.timestamp)
-            .ok_or(PushError::EmptyBatch)?;
-
+        let readings = source
+            .read_after(checkpoint.last_timestamp, config.batch_size)
+            .await?;
+        let Some(last_timestamp) = readings.last().map(|reading| reading.timestamp) else {
+            break;
+        };
+        checkpoint.last_timestamp = last_timestamp;
         if !config.dry_run {
             client.send(&readings).await?;
-            store.save(Checkpoint { last_timestamp }).await?;
+            store.save(checkpoint).await?;
         }
-        cursor = last_timestamp;
         summary.batches += 1;
         summary.observations += u64::try_from(readings.len()).unwrap_or(u64::MAX);
         summary.last_timestamp = Some(last_timestamp);
     }
+
+    // Events from before the start time are history nobody asked for.
+    let mut position = checkpoint.last_event.unwrap_or(EventPosition {
+        timestamp: config.initial_timestamp,
+        serial: i64::MAX,
+        entry_id: i64::MAX,
+    });
+    loop {
+        let events = source
+            .read_events_after(position, EVENTS_PER_REQUEST.min(config.batch_size))
+            .await?;
+        let Some(last) = events.last().map(|event| event.position) else {
+            break;
+        };
+        position = last;
+        checkpoint.last_event = Some(position);
+        if !config.dry_run {
+            client.send_events(&events).await?;
+            store.save(checkpoint).await?;
+        }
+        summary.events += u64::try_from(events.len()).unwrap_or(u64::MAX);
+    }
+    Ok(summary)
 }
 
 #[derive(Debug, Error)]
 pub enum PushError {
     #[error("batch size must be between 1 and 1000, got {0}")]
     InvalidBatchSize(usize),
-    #[error("SBFspot returned an unexpected empty batch")]
-    EmptyBatch,
     #[error(transparent)]
     Source(#[from] SbfspotError),
     #[error(transparent)]

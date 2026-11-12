@@ -1,4 +1,4 @@
-use crate::Reading;
+use crate::{DeviceEvent, Reading};
 use reqwest::{StatusCode, header::RETRY_AFTER};
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
@@ -18,6 +18,7 @@ pub struct PvlogClientConfig {
 pub struct PvlogClient {
     http: reqwest::Client,
     endpoint: Url,
+    events_endpoint: Url,
     api_key: String,
     maximum_attempts: u32,
 }
@@ -37,7 +38,16 @@ impl PvlogClient {
         if config.maximum_attempts == 0 {
             return Err(ApiError::InvalidMaximumAttempts);
         }
-        let endpoint = batch_endpoint(config.base_url, &config.system_id)?;
+        let events_endpoint = system_endpoint(
+            config.base_url.clone(),
+            &config.system_id,
+            &["device-events"],
+        )?;
+        let endpoint = system_endpoint(
+            config.base_url,
+            &config.system_id,
+            &["observations", "batch"],
+        )?;
         let http = reqwest::Client::builder()
             .timeout(config.request_timeout)
             .user_agent(concat!("pvlog-sbfspot-push/", env!("CARGO_PKG_VERSION")))
@@ -46,6 +56,7 @@ impl PvlogClient {
         Ok(Self {
             http,
             endpoint,
+            events_endpoint,
             api_key: config.api_key,
             maximum_attempts: config.maximum_attempts,
         })
@@ -70,18 +81,42 @@ impl PvlogClient {
                 .collect(),
         };
 
+        let result: BatchResponse = self.post(&self.endpoint, &request).await?;
+        validate_outcomes(result, readings.len())
+    }
+
+    /// Uploads events. An event is identified by its inverter and entry
+    /// number, so `PVLog` stores one that is sent again only once.
+    ///
+    /// # Errors
+    /// Returns an error on a permanent response or after transient retries are exhausted.
+    pub async fn send_events(&self, events: &[DeviceEvent]) -> Result<(), ApiError> {
+        if events.is_empty() {
+            return Err(ApiError::EmptyBatch);
+        }
+        let _accepted: serde_json::Value = self
+            .post(&self.events_endpoint, &EventsRequest { events })
+            .await?;
+        Ok(())
+    }
+
+    /// Posts a JSON body and decodes the answer, retrying transient failures.
+    async fn post<Request: Serialize + Sync, Answer: serde::de::DeserializeOwned>(
+        &self,
+        endpoint: &Url,
+        request: &Request,
+    ) -> Result<Answer, ApiError> {
         for attempt in 1..=self.maximum_attempts {
             let response = self
                 .http
-                .post(self.endpoint.clone())
+                .post(endpoint.clone())
                 .bearer_auth(&self.api_key)
-                .json(&request)
+                .json(request)
                 .send()
                 .await;
             match response {
                 Ok(response) if response.status().is_success() => {
-                    let result: BatchResponse = response.json().await.map_err(ApiError::Decode)?;
-                    return validate_outcomes(result, readings.len());
+                    return response.json().await.map_err(ApiError::Decode);
                 }
                 Ok(response) => {
                     let status = response.status();
@@ -113,7 +148,8 @@ impl PvlogClient {
     }
 }
 
-fn batch_endpoint(mut base_url: Url, system_id: &str) -> Result<Url, ApiError> {
+/// Builds the URL of a resource of the system below the API root.
+fn system_endpoint(mut base_url: Url, system_id: &str, resource: &[&str]) -> Result<Url, ApiError> {
     if !matches!(base_url.scheme(), "http" | "https") {
         return Err(ApiError::InvalidUrlScheme);
     }
@@ -125,7 +161,8 @@ fn batch_endpoint(mut base_url: Url, system_id: &str) -> Result<Url, ApiError> {
     if !has_api_prefix {
         segments.extend(["api", "v1"]);
     }
-    segments.extend(["systems", system_id, "observations", "batch"]);
+    segments.extend(["systems", system_id]);
+    segments.extend(resource);
     drop(segments);
     base_url.set_query(None);
     base_url.set_fragment(None);
@@ -192,6 +229,11 @@ struct BatchItem<'a> {
     reading: &'a Reading,
 }
 
+#[derive(Serialize)]
+struct EventsRequest<'a> {
+    events: &'a [DeviceEvent],
+}
+
 #[derive(Deserialize)]
 struct BatchResponse {
     outcomes: Vec<BatchOutcome>,
@@ -231,7 +273,7 @@ pub enum ApiError {
         body: String,
         attempts: u32,
     },
-    #[error("failed to decode the PVLog batch response: {0}")]
+    #[error("failed to decode the PVLog response: {0}")]
     Decode(reqwest::Error),
     #[error("PVLog returned {actual} outcomes for {expected} observations")]
     IncompleteBatch { expected: usize, actual: usize },

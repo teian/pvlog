@@ -21,6 +21,7 @@ url.workspace = true
 
 [dev-dependencies]
 axum.workspace = true
+pvlog-application = { version = "0.1.0", path = "../application" }
 tempfile.workspace = true
 
 [[test]]

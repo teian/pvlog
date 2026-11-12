@@ -91,6 +91,7 @@ pub struct NormalizeObservation {
 /// Normalizes an explicit-unit ingestion command without floating-point conversion.
 /// # Errors
 /// Returns an error for sub-base-unit precision, empty identity, invalid battery ratio, serialization failure, unregistered channels, or a supplement that is out of range, naming its wire field.
+#[allow(clippy::too_many_lines)]
 pub fn normalize_observation(
     input: NormalizeObservation,
 ) -> Result<CanonicalObservation, IngestionNormalizationError> {
