@@ -715,6 +715,9 @@
       "inverterOptionDetails": "{{power}} W · {{mppts}} MPPT · {{phases}}-phase",
       "inverterSearchPlaceholder": "Search manufacturer or type",
       "inverterNumber": "Inverter {{number}}",
+      "serial": "Serial number",
+      "firmware": "Firmware",
+      "firmwareChanged": "(since {{date}})",
       "location": "Location",
       "locationError": "The address could not be resolved right now. Please try again.",
       "locationNotFound": "No matching location was found for this address.",
@@ -1167,6 +1170,16 @@
     "targetOf": "What {{name}} measures",
     "saveName": "Save",
     "noValue": "No value yet",
+    "statusValue": "{{label}} ({{code}})",
+    "statusCodes": {
+      "35": "Fault",
+      "51": "Closed",
+      "303": "Off",
+      "307": "Ok",
+      "311": "Open",
+      "455": "Warning",
+      "16777213": "Information not available"
+    },
     "unassignedBadge": "Not assigned",
     "targets": {
       "unassigned": "Not assigned",

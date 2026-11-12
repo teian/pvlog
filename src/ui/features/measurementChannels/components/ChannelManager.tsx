@@ -1,3 +1,4 @@
+import { useSourceProfiles } from "@/entities/dataSource";
 import { DiscoveryProposals } from "@/entities/equipmentDiscovery";
 import { ChannelRow } from "@/features/measurementChannels/components/ChannelRow";
 import {
@@ -32,6 +33,8 @@ export function ChannelManager({
   const equipment = useBindableEquipment(systemId);
   const bind = useBindChannel(systemId);
   const retire = useRetireChannel(systemId);
+  // Labels of status codes are a nicety: without the profiles codes show as numbers.
+  const profiles = useSourceProfiles();
 
   if (channels.isPending || equipment.isPending)
     return <Skeleton className="h-40 w-full" />;
@@ -93,6 +96,7 @@ export function ChannelManager({
               channel={channel}
               equipment={equipment.data}
               key={channel.id}
+              profiles={profiles.data ?? []}
               onBind={(binding) => {
                 bind.mutate({ key: channel.channelKey, binding });
               }}

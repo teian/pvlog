@@ -30,7 +30,7 @@ function inverterInput(inverter: SystemInverterDraft) {
     name: inverter.name.trim(),
     manufacturer: inverter.manufacturer || null,
     model: inverter.model || null,
-    serialReference: null,
+    serialReference: inverter.serialReference ?? null,
     ratedPowerWatts: inverter.ratedPowerWatts || null,
     valueProvenance: inverter.specificationSnapshot
       ? "catalog_copied"

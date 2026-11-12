@@ -28,8 +28,14 @@ export function InverterDraftEditor({
   onChange: (value: SystemInverterDraft) => void;
   onRemove: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const prefix = `inverter-${String(index)}`;
+  const firmwareChanged =
+    value.firmwareChangedAt == null
+      ? null
+      : new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium" }).format(
+          value.firmwareChangedAt,
+        );
   const patch = (next: Partial<SystemInverterDraft>) => {
     onChange({ ...value, ...next });
   };
@@ -56,6 +62,36 @@ export function InverterDraftEditor({
           <Trash2Icon />
         </Button>
       </header>
+      {value.serialReference || value.firmwareVersion ? (
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs">
+          {value.serialReference ? (
+            <>
+              <dt className="text-muted-foreground">
+                {t("systemManagement.wizard.serial")}
+              </dt>
+              <dd className="font-mono">{value.serialReference}</dd>
+            </>
+          ) : null}
+          {value.firmwareVersion ? (
+            <>
+              <dt className="text-muted-foreground">
+                {t("systemManagement.wizard.firmware")}
+              </dt>
+              <dd>
+                <span className="font-mono">{value.firmwareVersion}</span>
+                {firmwareChanged ? (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    {t("systemManagement.wizard.firmwareChanged", {
+                      date: firmwareChanged,
+                    })}
+                  </span>
+                ) : null}
+              </dd>
+            </>
+          ) : null}
+        </dl>
+      ) : null}
       <InverterCatalogField
         id={`${prefix}-catalog`}
         onSelect={(entry, manual) => {

@@ -9,7 +9,9 @@ import type {
   ChannelBinding,
   MeasurementChannel,
 } from "@/features/measurementChannels/measurementChannels.types";
+import type { SourceProfile } from "@/entities/dataSource";
 import { formatChannelValue } from "@/features/measurementChannels/utils/formatChannelValue";
+import { statusLabel } from "@/features/measurementChannels/utils/statusLabel";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,10 +31,11 @@ import {
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 
-/** Shows one measurement channel with its last value and binding. @param props - The channel, the system's equipment, whether it may only be viewed, whether a request runs, and the bind and retire callbacks. @returns A table row that highlights an unassigned channel. */
+/** Shows one measurement channel with its last value and binding; a status code is shown with its meaning. @param props - The channel, the system's equipment, the source profiles that label status codes, whether it may only be viewed, whether a request runs, and the bind and retire callbacks. @returns A table row that highlights an unassigned channel. */
 export function ChannelRow({
   channel,
   equipment,
+  profiles,
   readOnly,
   busy,
   onBind,
@@ -40,6 +43,7 @@ export function ChannelRow({
 }: {
   channel: MeasurementChannel;
   equipment: BindableInverter[];
+  profiles: SourceProfile[];
   readOnly: boolean;
   busy: boolean;
   onBind: (binding: ChannelBinding) => void;
@@ -56,15 +60,27 @@ export function ChannelRow({
       ...next,
     });
   };
+  const label =
+    channel.lastValue === null || channel.scale !== 0
+      ? null
+      : statusLabel(channel.channelKey, channel.lastValue, profiles);
   const value =
     channel.lastValue === null
       ? t("channels.noValue")
-      : formatChannelValue(
-          channel.lastValue,
-          channel.scale,
-          channel.unit,
-          i18n.language,
-        );
+      : label === null
+        ? formatChannelValue(
+            channel.lastValue,
+            channel.scale,
+            // A status code has no unit to show.
+            channel.unit === "code" ? "" : channel.unit,
+            i18n.language,
+          )
+        : t("channels.statusValue", {
+            label: t(`channels.statusCodes.${String(channel.lastValue)}`, {
+              defaultValue: label,
+            }),
+            code: channel.lastValue,
+          });
   const time =
     channel.lastValueAtEpochMillis === null
       ? null

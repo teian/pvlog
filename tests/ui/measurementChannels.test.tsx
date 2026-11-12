@@ -84,6 +84,25 @@ function installBackend(permissions: string[]): Backend {
         ]);
       if (url.endsWith("/discovery-proposals?includeDismissed=true"))
         return json([]);
+      if (url === "/api/v1/data-source-profiles")
+        return json([
+          {
+            id: "smalog",
+            displayName: "smalog",
+            issuesCredential: true,
+            snippetKinds: [],
+            channelKeys: [
+              { key: "inv.{serial}.ac.l{phase}.power" },
+              {
+                key: "inv.{serial}.status",
+                statusLabels: [
+                  { code: 307, label: "Ok" },
+                  { code: 455, label: "Warning" },
+                ],
+              },
+            ],
+          },
+        ]);
       const collection = `/api/v1/systems/${systemId}/channels`;
       if (url === collection) return json(backend.channels);
       if (url === `${collection}/mppt-1` && method === "PUT") {
@@ -176,6 +195,38 @@ describe("measurement channels section", () => {
 
     expect(await screen.findByText("12.34 V")).toBeVisible();
     expect(screen.getByText("7")).toBeVisible();
+  });
+
+  it("shows a status code with the meaning the source profile gives it", async () => {
+    const backend = installBackend(["system_manage"]);
+    backend.channels.push(
+      channel({
+        id: "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f84",
+        channelKey: "inv.2000123456.status",
+        displayName: "Device status",
+        unit: "code",
+        aggregation: "last",
+        targetKind: "plant",
+        lastValue: 455,
+      }),
+      channel({
+        id: "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f85",
+        channelKey: "inv.3000654321.status",
+        displayName: "Garage status",
+        unit: "code",
+        aggregation: "last",
+        targetKind: "plant",
+        lastValue: 999,
+      }),
+    );
+    renderChannels();
+
+    expect(await screen.findByText("Warning (455)")).toBeVisible();
+    // A code the profile does not list is shown as its number.
+    expect(screen.getByText("999")).toBeVisible();
+
+    await i18n.changeLanguage("de");
+    expect(await screen.findByText("Warnung (455)")).toBeVisible();
   });
 
   it("binds an unassigned channel to a string", async () => {

@@ -60,6 +60,9 @@ export function equipmentDrafts(
     model: inverter.model ?? "",
     ratedPowerWatts: inverter.ratedPowerWatts ?? 0,
     specificationSnapshot: inverter.specificationSnapshot,
+    serialReference: inverter.serialReference,
+    firmwareVersion: inverter.firmwareVersion,
+    firmwareChangedAt: inverter.firmwareChangedAt,
     strings: inverter.strings.map((string) => ({
       id: string.id,
       effectiveFrom: string.effectiveFrom,

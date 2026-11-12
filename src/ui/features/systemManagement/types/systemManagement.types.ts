@@ -43,6 +43,9 @@ export const managedInverterSchema = z.object({
   manufacturer: z.string().nullable(),
   model: z.string().nullable(),
   ratedPowerWatts: z.number().int().nullable(),
+  serialReference: z.string().nullable().default(null),
+  firmwareVersion: z.string().nullable().default(null),
+  firmwareChangedAt: z.number().int().nullable().default(null),
   specificationSnapshot: z.unknown().nullable(),
   effectiveFrom: z.number().int(),
   effectiveTo: z.number().int().nullable(),
@@ -83,6 +86,12 @@ export interface SystemInverterDraft {
   model: string;
   ratedPowerWatts: number;
   specificationSnapshot: unknown;
+  /** Serial the device reports under; kept as stored, so the inverter stays linked to its data. */
+  serialReference?: string | null;
+  /** Firmware the device last reported; read-only. */
+  firmwareVersion?: string | null;
+  /** Epoch milliseconds of the last firmware change; read-only. */
+  firmwareChangedAt?: number | null;
   strings: SystemStringDraft[];
 }
 

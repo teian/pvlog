@@ -8,6 +8,17 @@ export const sourceProfileSchema = z.object({
   displayName: z.string().min(1),
   issuesCredential: z.boolean(),
   snippetKinds: z.array(z.string()),
+  /** Keys a source of this profile sends; status keys carry the meaning of their codes. */
+  channelKeys: z
+    .array(
+      z.object({
+        key: z.string(),
+        statusLabels: z
+          .array(z.object({ code: z.number().int(), label: z.string() }))
+          .optional(),
+      }),
+    )
+    .default([]),
 });
 
 /** Whether a data source still delivers readings. */

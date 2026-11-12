@@ -208,6 +208,34 @@ describe("equipment section", () => {
     });
   });
 
+  it("shows the identity a device reported and keeps its serial when equipment is edited", async () => {
+    const backend = installBackend(
+      ["system_manage"],
+      [
+        {
+          ...storedInverter(),
+          serialReference: "2000123456",
+          firmwareVersion: "3.10.18.R",
+          firmwareChangedAt: Date.UTC(2027, 0, 15),
+        },
+      ],
+    );
+    const user = userEvent.setup();
+    renderEquipment();
+
+    expect(await screen.findByText("2000123456")).toBeVisible();
+    expect(screen.getByText("3.10.18.R")).toBeVisible();
+    expect(screen.getByText("(since Jan 15, 2027)")).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Save equipment" }));
+
+    expect(await screen.findByText("Equipment saved.")).toBeVisible();
+    expect(backend.requests[0]?.body).toMatchObject({
+      serialReference: "2000123456",
+    });
+    expect(backend.requests[0]?.body).not.toHaveProperty("firmwareVersion");
+  });
+
   it("names what is missing instead of saving", async () => {
     const backend = installBackend(["system_manage"], [storedInverter()]);
     const user = userEvent.setup();

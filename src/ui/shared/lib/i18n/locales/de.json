@@ -715,6 +715,9 @@
       "inverterOptionDetails": "{{power}} W · {{mppts}} MPPT · {{phases}}-phasig",
       "inverterSearchPlaceholder": "Hersteller oder Typ suchen",
       "inverterNumber": "Wechselrichter {{number}}",
+      "serial": "Seriennummer",
+      "firmware": "Firmware",
+      "firmwareChanged": "(seit {{date}})",
       "location": "Standort",
       "locationError": "Die Adresse konnte derzeit nicht aufgelöst werden. Bitte versuche es erneut.",
       "locationNotFound": "Für diese Adresse wurde kein passender Standort gefunden.",
@@ -1167,6 +1170,16 @@
     "targetOf": "Was {{name}} misst",
     "saveName": "Speichern",
     "noValue": "Noch kein Wert",
+    "statusValue": "{{label}} ({{code}})",
+    "statusCodes": {
+      "35": "Fehler",
+      "51": "Geschlossen",
+      "303": "Aus",
+      "307": "Ok",
+      "311": "Offen",
+      "455": "Warnung",
+      "16777213": "Information nicht verfügbar"
+    },
     "unassignedBadge": "Nicht zugeordnet",
     "targets": {
       "unassigned": "Nicht zugeordnet",
