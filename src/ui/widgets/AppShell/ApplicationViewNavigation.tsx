@@ -1,3 +1,4 @@
+import { mayOpen, useSession, type GuardedDestination } from "@/features/auth";
 import { cn } from "@/shared/lib/utils";
 import {
   BarChart3Icon,
@@ -11,6 +12,8 @@ import { useTranslation } from "react-i18next";
 import { NavLink } from "react-router";
 
 interface ViewNavigationItem {
+  /** Destination whose permission the entry needs; omitted when signing in suffices. */
+  destination?: GuardedDestination;
   end?: boolean;
   icon: LucideIcon;
   labelKey: string;
@@ -24,41 +27,57 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
       "border-brand bg-sidebar-accent font-semibold text-sidebar-accent-foreground",
   );
 
-/** Renders the six design-defined application views. @param props - Current system scope and drawer close callback. @returns Localized view navigation. */
+/** Renders the application views the session may open. @param props - Drawer close callback. @returns Localized view navigation without entries that would lead to a forbidden page. */
 export function ApplicationViewNavigation({
   onClose,
 }: {
-  firstSystemId?: string | undefined;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const permissions = useSession().data?.permissions;
   const items: ViewNavigationItem[] = [
     { end: true, icon: LayoutDashboardIcon, labelKey: "dashboard", to: "/" },
     {
+      destination: "systems",
       end: true,
       icon: ListIcon,
       labelKey: "systems",
       to: "/systems",
     },
     {
+      destination: "reports",
       icon: BarChart3Icon,
       labelKey: "statistics",
       to: "/statistics",
     },
-    { icon: SunIcon, labelKey: "seasonal", to: "/seasonal" },
-    { icon: CloudSunIcon, labelKey: "weather", to: "/weather" },
+    {
+      destination: "reports",
+      icon: SunIcon,
+      labelKey: "seasonal",
+      to: "/seasonal",
+    },
+    {
+      destination: "reports",
+      icon: CloudSunIcon,
+      labelKey: "weather",
+      to: "/weather",
+    },
   ];
 
-  return items.map(({ end, icon: Icon, labelKey, to }) => (
-    <NavLink
-      className={linkClass}
-      end={end ?? false}
-      key={labelKey}
-      onClick={onClose}
-      to={to}
-    >
-      <Icon aria-hidden="true" className="size-4" />
-      {t(`nav.${labelKey}`)}
-    </NavLink>
-  ));
+  return items
+    .filter(
+      ({ destination }) => !destination || mayOpen(permissions, destination),
+    )
+    .map(({ end, icon: Icon, labelKey, to }) => (
+      <NavLink
+        className={linkClass}
+        end={end ?? false}
+        key={labelKey}
+        onClick={onClose}
+        to={to}
+      >
+        <Icon aria-hidden="true" className="size-4" />
+        {t(`nav.${labelKey}`)}
+      </NavLink>
+    ));
 }

@@ -1,4 +1,8 @@
-import { useSession } from "@/features/auth";
+import { useSession } from "@/features/auth/hooks/useSession";
+import {
+  mayOpen,
+  type GuardedDestination,
+} from "@/features/auth/utils/destinationAccess";
 import {
   Alert,
   AlertDescription,
@@ -11,11 +15,12 @@ import { Navigate, useLocation } from "react-router";
 
 /** Protected route properties. */
 export type ProtectedRouteProps = PropsWithChildren<{
-  /** Permission required for the route. */ permission?: string;
+  /** Guarded destination the route belongs to; omitted when signing in suffices. */
+  destination?: GuardedDestination;
 }>;
 
-/** Guards a route with session bootstrap and optional permission checks. @param props - Guarded content and permission. @returns Loading, error, redirect, or authorized content. */
-export function ProtectedRoute({ children, permission }: ProtectedRouteProps) {
+/** Guards a route with session bootstrap and optional permission checks. @param props - Guarded content and its destination. @returns Loading, error, redirect, or authorized content. */
+export function ProtectedRoute({ children, destination }: ProtectedRouteProps) {
   const session = useSession();
   const location = useLocation();
   const { t } = useTranslation();
@@ -39,7 +44,7 @@ export function ProtectedRoute({ children, permission }: ProtectedRouteProps) {
     );
   if (!session.data.authenticated)
     return <Navigate replace state={{ from: location.pathname }} to="/login" />;
-  if (permission && !session.data.permissions.includes(permission))
+  if (destination && !mayOpen(session.data.permissions, destination))
     return <Navigate replace to="/forbidden" />;
   return children;
 }

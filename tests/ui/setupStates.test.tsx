@@ -328,7 +328,10 @@ describe("system list status", () => {
   });
 
   it("marks a system without current data in the navigation only", async () => {
-    installBackend({ dataState: "stale", permissions: ["system_read"] });
+    installBackend({
+      dataState: "stale",
+      permissions: ["system_read", "telemetry_read"],
+    });
     renderWithApp(<SystemsPage />);
 
     const navigation = within(

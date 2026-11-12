@@ -380,14 +380,15 @@
     "allSystems": "Alle Anlagen",
     "alerts": "Warnungen",
     "dashboard": "Übersicht",
-    "manage": "Verwalten",
     "seasonal": "Jahreszeiten",
     "statistics": "Statistik",
     "system": "Anlage {{id}}",
     "systems": "Anlagen",
     "unavailable": "Diese Ansicht ist noch nicht verfügbar",
     "weather": "Wetter",
-    "view": "Ansicht"
+    "view": "Ansicht",
+    "account": "Konto",
+    "addSystem": "Anlage hinzufügen"
   },
   "administration": {
     "title": "Verwaltung",
@@ -922,7 +923,6 @@
   },
   "account": {
     "description": "Verwalte deine persönlichen Daten, dein Passwort und die Zugänge für Integrationen.",
-    "navigation": "Konto verwalten",
     "password": {
       "confirm": "Neues Passwort bestätigen",
       "current": "Aktuelles Passwort",

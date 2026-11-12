@@ -1,9 +1,15 @@
+import { mayOpen, useSession } from "@/features/auth";
 import { useSystemOverviews } from "@/features/reporting";
 import { Button } from "@/shared/components";
 import { cn } from "@/shared/lib/utils";
-import { ListTreeIcon, PanelLeftCloseIcon, SettingsIcon } from "lucide-react";
+import {
+  ListTreeIcon,
+  PanelLeftCloseIcon,
+  PlusIcon,
+  SettingsIcon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { NavLink } from "react-router";
+import { Link, NavLink } from "react-router";
 import { AppBrand } from "./AppBrand";
 import { ApplicationViewNavigation } from "./ApplicationViewNavigation";
 import { SessionControls } from "./SessionControls";
@@ -35,10 +41,13 @@ const scopeLinkClass = ({ isActive }: { isActive: boolean }) =>
 /** Renders the complete desktop navigation and mobile drawer. @param props - Sidebar state and available scope. @returns The application sidebar. */
 export function AppSidebar({ onClose, open, systemIds }: AppSidebarProps) {
   const { t } = useTranslation();
-  const firstSystemId = systemIds.at(0);
+  const permissions = useSession().data?.permissions;
+  // A system page needs its own permission; without it the names would be
+  // links to the forbidden page.
+  const listedSystemIds = mayOpen(permissions, "system") ? systemIds : [];
   // Names come from the cached system overviews; the identifier stays as the
   // label until one resolves, so navigation never renders an empty entry.
-  const overviews = useSystemOverviews(systemIds);
+  const overviews = useSystemOverviews(listedSystemIds);
 
   return (
     <aside
@@ -67,18 +76,27 @@ export function AppSidebar({ onClose, open, systemIds }: AppSidebarProps) {
           <p className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/70">
             {t("nav.view")}
           </p>
-          <ApplicationViewNavigation
-            firstSystemId={firstSystemId}
-            onClose={onClose}
-          />
-          <p className="mt-5 px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/70">
-            {t("nav.systems")}
-          </p>
+          <ApplicationViewNavigation onClose={onClose} />
+          <div className="mt-5 flex items-center justify-between px-2 pb-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-sidebar-foreground/70">
+              {t("nav.systems")}
+            </p>
+            {mayOpen(permissions, "setup") ? (
+              <Link
+                className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                onClick={onClose}
+                to="/setup"
+              >
+                <PlusIcon aria-hidden="true" className="size-3.5" />
+                {t("nav.addSystem")}
+              </Link>
+            ) : null}
+          </div>
           <NavLink className={scopeLinkClass} end onClick={onClose} to="/">
             <ListTreeIcon aria-hidden="true" className="size-4" />
             {t("nav.allSystems")}
           </NavLink>
-          {systemIds.map((id, index) => {
+          {listedSystemIds.map((id, index) => {
             const overview = overviews[index]?.data;
             const name = overview?.name;
             // Only an active system that is not delivering is marked; a
@@ -117,14 +135,16 @@ export function AppSidebar({ onClose, open, systemIds }: AppSidebarProps) {
           })}
         </nav>
         <div className="shrink-0 border-t border-sidebar-border px-2 py-3">
-          <NavLink
-            className={navLinkClass}
-            onClick={onClose}
-            to="/administration"
-          >
-            <SettingsIcon aria-hidden="true" className="size-4" />
-            {t("nav.administration")}
-          </NavLink>
+          {mayOpen(permissions, "administration") ? (
+            <NavLink
+              className={navLinkClass}
+              onClick={onClose}
+              to="/administration"
+            >
+              <SettingsIcon aria-hidden="true" className="size-4" />
+              {t("nav.administration")}
+            </NavLink>
+          ) : null}
           <SessionControls />
           <p className="px-2 pt-3 text-[10px] text-sidebar-foreground/70">
             {t("shell.footer")}

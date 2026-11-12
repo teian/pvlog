@@ -96,7 +96,7 @@ export function AppRoutes() {
           />
           <Route
             element={
-              <ProtectedRoute>
+              <ProtectedRoute destination="administration">
                 <AdministrationPage />
               </ProtectedRoute>
             }
@@ -104,7 +104,7 @@ export function AppRoutes() {
           />
           <Route
             element={
-              <ProtectedRoute permission="system_manage">
+              <ProtectedRoute destination="setup">
                 <SetupPage />
               </ProtectedRoute>
             }
@@ -112,7 +112,7 @@ export function AppRoutes() {
           />
           <Route
             element={
-              <ProtectedRoute permission="system_manage">
+              <ProtectedRoute destination="setup">
                 <SetupPage />
               </ProtectedRoute>
             }
@@ -128,7 +128,7 @@ export function AppRoutes() {
           />
           <Route
             element={
-              <ProtectedRoute permission="system_read">
+              <ProtectedRoute destination="systems">
                 <SystemsPage />
               </ProtectedRoute>
             }
@@ -136,7 +136,7 @@ export function AppRoutes() {
           />
           <Route
             element={
-              <ProtectedRoute permission="telemetry_read">
+              <ProtectedRoute destination="reports">
                 <StatisticsPage />
               </ProtectedRoute>
             }
@@ -144,7 +144,7 @@ export function AppRoutes() {
           />
           <Route
             element={
-              <ProtectedRoute permission="telemetry_read">
+              <ProtectedRoute destination="reports">
                 <SeasonalPage />
               </ProtectedRoute>
             }
@@ -152,7 +152,7 @@ export function AppRoutes() {
           />
           <Route
             element={
-              <ProtectedRoute permission="telemetry_read">
+              <ProtectedRoute destination="reports">
                 <WeatherPage />
               </ProtectedRoute>
             }
@@ -160,7 +160,7 @@ export function AppRoutes() {
           />
           <Route
             element={
-              <ProtectedRoute permission="telemetry_read">
+              <ProtectedRoute destination="system">
                 <SystemLayoutPage />
               </ProtectedRoute>
             }

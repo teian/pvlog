@@ -12,7 +12,7 @@ test.beforeEach(async ({ page }) => {
         },
         accountId: "019505c8-7c85-7f0b-9bc3-2a3c4d5e6f70",
         systemIds: [],
-        permissions: [],
+        permissions: ["system_read", "telemetry_read", "instance_manage"],
         connectors: [],
       },
     });

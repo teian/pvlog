@@ -380,14 +380,15 @@
     "allSystems": "All Systems",
     "alerts": "Alerts",
     "dashboard": "Dashboard",
-    "manage": "Manage",
     "seasonal": "Seasonal",
     "statistics": "Statistics",
     "system": "System {{id}}",
     "systems": "Systems",
     "unavailable": "This view is not available yet",
     "weather": "Weather",
-    "view": "View"
+    "view": "View",
+    "account": "Account",
+    "addSystem": "Add system"
   },
   "administration": {
     "title": "Administration",
@@ -922,7 +923,6 @@
   },
   "account": {
     "description": "Manage your personal details, password, and integration access.",
-    "navigation": "Manage account",
     "password": {
       "confirm": "Confirm new password",
       "current": "Current password",

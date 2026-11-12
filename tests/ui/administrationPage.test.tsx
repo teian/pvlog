@@ -26,7 +26,7 @@ describe("administration page", () => {
           },
           accountId: sessionAccountId,
           systemIds: [],
-          permissions: [],
+          permissions: ["instance_manage"],
           connectors: [],
         });
       if (path === "/api/v1/users/me/identities")
