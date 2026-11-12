@@ -272,6 +272,8 @@ fn inverter(system_id: SystemId) -> InverterRecord {
         effective_to: None,
         created_at: 1,
         updated_at: 1,
+        firmware_version: None,
+        firmware_changed_at: None,
         strings: vec![PvStringRecord {
             id: StringId::new(),
             inverter_id,

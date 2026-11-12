@@ -10,8 +10,9 @@ use pvlog_api::{
 };
 use pvlog_application::{
     BatchIngestionMode, BatchIngestionResult, ChannelReading, CorrectObservation, DecimalValue,
-    IngestedObservation, ModernTelemetryError, ModernTelemetryUseCases, NormalizeObservation,
-    RejectedChannel, VersionedObservation, normalize_observation,
+    IngestedObservation, IngestionNormalizationError, ModernTelemetryError,
+    ModernTelemetryUseCases, NormalizeObservation, RejectedChannel, ReportedDevice,
+    VersionedObservation, normalize_observation,
 };
 use pvlog_domain::{
     AccountId, ApiCredentialId, ApiScope, ObservationId, Permission, PrincipalId, SystemId, UserId,
@@ -224,9 +225,110 @@ async fn channel_values_are_typed_and_contradictions_are_returned() -> Result<()
     Ok(())
 }
 
-/// Records the channel readings it is handed and refuses the one named `status`.
+#[tokio::test]
+async fn battery_values_and_device_identity_reach_the_service() -> Result<(), Box<dyn Error>> {
+    let system = SystemId::new();
+    let user = UserId::new();
+    let stub = Arc::new(ChannelStub::default());
+    let app = telemetry_router(stub.clone(), Arc::new(Authorizer::new(system, user)))
+        .layer(Extension(RequestPrincipal::User(user)));
+    let post = |body: &'static str| {
+        let app = app.clone();
+        async move {
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .method(Method::POST)
+                        .uri(format!("/api/v1/systems/{system}/observations"))
+                        .header("content-type", "application/json")
+                        .header("idempotency-key", "one")
+                        .body(Body::from(body))?,
+                )
+                .await?;
+            let status = response.status();
+            let bytes = axum::body::to_bytes(response.into_body(), 65_536).await?;
+            Ok::<_, Box<dyn Error>>((status, serde_json::from_slice::<serde_json::Value>(&bytes)?))
+        }
+    };
+
+    let (status, body) = post(
+        r#"{"observedAtEpochMillis":0,
+            "batteryStateOfChargeBasisPoints":6250,"batteryPowerWatts":-700,"batteryEnergyWh":3900,
+            "devices":[{"id":"2000123456","familyId":"9305","configuredName":"Dach",
+                        "reportedName":"SN: 2000123456","model":"SB 3000TL-21",
+                        "firmware":"3.10.18.R","transport":"bluetooth"},
+                       {"id":"3000654321","kind":"battery"}]}"#,
+    )
+    .await?;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(
+        body["values"]["battery"],
+        serde_json::json!({
+            "energy": 3900, "power": -700, "state_of_charge": 6250, "flow_state": "discharging"
+        })
+    );
+    let devices = stub.1.lock().map_err(|_| "poisoned")?.clone();
+    assert_eq!(
+        devices,
+        vec![
+            ReportedDevice {
+                id: "2000123456".to_owned(),
+                kind: None,
+                family_id: Some("9305".to_owned()),
+                configured_name: Some("Dach".to_owned()),
+                reported_name: Some("SN: 2000123456".to_owned()),
+                model: Some("SB 3000TL-21".to_owned()),
+                firmware: Some("3.10.18.R".to_owned()),
+                transport: Some("bluetooth".to_owned()),
+            },
+            ReportedDevice {
+                id: "3000654321".to_owned(),
+                kind: Some("battery".to_owned()),
+                ..ReportedDevice::default()
+            },
+        ]
+    );
+
+    // The device's own state of charge, in per mille, becomes the system's.
+    let (_, body) = post(
+        r#"{"observedAtEpochMillis":0,"channels":{"inv.2000123456.battery.soc":{"value":815}}}"#,
+    )
+    .await?;
+    assert_eq!(body["values"]["battery"]["state_of_charge"], 8150);
+
+    // Each refusal names the member that caused it.
+    for (refused, member) in [
+        (
+            r#"{"observedAtEpochMillis":0,"batteryStateOfChargeBasisPoints":10001}"#,
+            "batteryStateOfChargeBasisPoints",
+        ),
+        (
+            r#"{"observedAtEpochMillis":0,"batteryEnergyWh":-1}"#,
+            "batteryEnergyWh",
+        ),
+        (
+            r#"{"observedAtEpochMillis":0,"channels":{"inv.1.battery.soc":{"value":1001}}}"#,
+            "channels",
+        ),
+        (
+            r#"{"observedAtEpochMillis":0,"devices":[{"id":"not a serial"}]}"#,
+            "devices",
+        ),
+    ] {
+        let (status, body) = post(refused).await?;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{refused}");
+        assert_eq!(body["detail"], member, "{refused}");
+    }
+    Ok(())
+}
+
+/// Records the channel readings and devices it is handed and refuses the
+/// channel named `status`.
 #[derive(Default)]
-struct ChannelStub(Mutex<std::collections::BTreeMap<String, ChannelReading>>);
+struct ChannelStub(
+    Mutex<std::collections::BTreeMap<String, ChannelReading>>,
+    Mutex<Vec<ReportedDevice>>,
+);
 
 #[async_trait]
 impl ModernTelemetryUseCases for ChannelStub {
@@ -236,6 +338,8 @@ impl ModernTelemetryUseCases for ChannelStub {
     ) -> Result<IngestedObservation, ModernTelemetryError> {
         *self.0.lock().map_err(|_| ModernTelemetryError::Invalid)? =
             command.channel_readings.clone();
+        *self.1.lock().map_err(|_| ModernTelemetryError::Invalid)? =
+            command.supplements.devices.clone();
         let rejected_channels = command
             .channel_readings
             .keys()
@@ -246,8 +350,12 @@ impl ModernTelemetryUseCases for ChannelStub {
             })
             .collect();
         Ok(IngestedObservation {
-            observation: normalize_observation(command)
-                .map_err(|_| ModernTelemetryError::Invalid)?,
+            observation: normalize_observation(command).map_err(|error| match error {
+                IngestionNormalizationError::InvalidField(member) => {
+                    ModernTelemetryError::InvalidField(member)
+                }
+                _ => ModernTelemetryError::Invalid,
+            })?,
             rejected_channels,
         })
     }

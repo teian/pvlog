@@ -352,6 +352,8 @@ fn adopted_equipment(
         effective_to: None,
         created_at: now,
         updated_at: now,
+        firmware_version: None,
+        firmware_changed_at: None,
         strings: strings.iter().map(|(_, string)| string.clone()).collect(),
     };
     (record, strings)

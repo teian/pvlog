@@ -13,6 +13,7 @@ mod channel_values;
 mod daily_values;
 mod data_quality;
 mod data_sources;
+mod device_identity;
 mod equipment_catalog;
 mod equipment_configuration;
 mod identity_linking;
@@ -88,6 +89,12 @@ pub use data_quality::{
 pub use data_sources::{
     ConfigurationSnippet, ConnectionState, SOURCE_PROFILES, STALE_AFTER_INTERVALS, SourceProfile,
     connection_state, render_configuration, source_profile,
+};
+pub use device_identity::{
+    InvalidReportedDevice, MAXIMUM_DEVICE_ID_CHARACTERS, MAXIMUM_DEVICE_TEXT_CHARACTERS,
+    MAXIMUM_REPORTED_DEVICES, MAXIMUM_STATE_OF_CHARGE_PERMILLE, ReportedDevice,
+    device_states_of_charge_in_range, system_state_of_charge_basis_points,
+    validate_reported_devices,
 };
 pub use equipment_catalog::{
     EquipmentCatalog, EquipmentCatalogError, EquipmentCatalogPage, EquipmentCatalogQuery,

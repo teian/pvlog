@@ -317,6 +317,8 @@ fn inverter(system_id: SystemId, effective_from: i64, effective_to: Option<i64>)
         effective_to,
         created_at: 1,
         updated_at: 1,
+        firmware_version: None,
+        firmware_changed_at: None,
         strings: vec![PvStringRecord {
             id: StringId::new(),
             inverter_id,

@@ -103,6 +103,12 @@ pub struct InverterResponse {
     pub effective_from: i64,
     pub effective_to: Option<i64>,
     pub version: u64,
+    /// Firmware the device last reported through a data source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firmware_version: Option<String>,
+    /// Epoch milliseconds at which a different firmware version was first reported.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub firmware_changed_at: Option<i64>,
     pub strings: Vec<PvStringResponse>,
 }
 

@@ -1,6 +1,9 @@
 //! Exact normalization of explicit wire units into canonical integer base units.
 
-use crate::ChannelReading;
+use crate::{
+    ChannelReading, ReportedDevice, device_states_of_charge_in_range,
+    system_state_of_charge_basis_points, validate_reported_devices,
+};
 use pvlog_domain::{
     ApiCredentialId, BasisPoints, BatteryFlowState, BatteryReading, CanonicalObservation,
     ChannelId, EnergyReading, ExtendedValue, IdempotencyIdentity, MeasurementValues,
@@ -47,6 +50,8 @@ pub struct ObservationSupplements {
     pub grid_export_energy_wh: Option<i64>,
     /// Short text from the source, at most [`MAXIMUM_MESSAGE_CHARACTERS`] long.
     pub message: Option<String>,
+    /// Identity of the devices the source reads, as far as it reports it.
+    pub devices: Vec<ReportedDevice>,
 }
 
 /// Longest message a reading may carry, counted in characters.
@@ -99,23 +104,52 @@ pub fn normalize_observation(
     {
         return Err(IngestionNormalizationError::UnregisteredChannel);
     }
+    if input
+        .battery_state_of_charge_basis_points
+        .is_some_and(|ratio| !(0..=10_000).contains(&ratio))
+    {
+        return Err(IngestionNormalizationError::InvalidField(
+            "batteryStateOfChargeBasisPoints",
+        ));
+    }
+    if input.battery_energy.is_some_and(|stored| stored.value < 0) {
+        return Err(IngestionNormalizationError::InvalidField("batteryEnergyWh"));
+    }
+    if !device_states_of_charge_in_range(&input.channel_readings) {
+        return Err(IngestionNormalizationError::InvalidField("channels"));
+    }
+    if validate_reported_devices(&input.supplements.devices).is_err() {
+        return Err(IngestionNormalizationError::InvalidField("devices"));
+    }
+    // A state the source states for the system wins over what its devices report.
+    let state_of_charge = input
+        .battery_state_of_charge_basis_points
+        .or_else(|| system_state_of_charge_basis_points(&input.channel_readings));
     let battery = (input.battery_energy.is_some()
         || input.battery_power.is_some()
-        || input.battery_state_of_charge_basis_points.is_some())
+        || state_of_charge.is_some())
     .then(|| -> Result<_, IngestionNormalizationError> {
+        let power = input.battery_power.map(power).transpose()?;
         Ok(BatteryReading {
             energy: input
                 .battery_energy
                 .map(energy)
                 .transpose()?
                 .map(energy_value),
-            power: input.battery_power.map(power).transpose()?,
-            state_of_charge: input
-                .battery_state_of_charge_basis_points
+            power,
+            state_of_charge: state_of_charge
                 .map(BasisPoints::new)
                 .transpose()
                 .map_err(|_| IngestionNormalizationError::InvalidBatteryRatio)?,
-            flow_state: input.battery_flow_state,
+            flow_state: match (input.battery_flow_state, power.map(Watts::value)) {
+                // Positive battery power charges, negative power discharges.
+                (BatteryFlowState::Unknown, Some(watts)) if watts > 0 => BatteryFlowState::Charging,
+                (BatteryFlowState::Unknown, Some(watts)) if watts < 0 => {
+                    BatteryFlowState::Discharging
+                }
+                (BatteryFlowState::Unknown, Some(_)) => BatteryFlowState::Idle,
+                (stated, _) => stated,
+            },
         })
     })
     .transpose()?;

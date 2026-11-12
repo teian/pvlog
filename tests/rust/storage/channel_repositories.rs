@@ -308,6 +308,8 @@ fn inverter(system_id: SystemId, strings: &[&str]) -> InverterRecord {
         effective_to: None,
         created_at: 1,
         updated_at: 1,
+        firmware_version: None,
+        firmware_changed_at: None,
         strings: strings
             .iter()
             .map(|name| PvStringRecord {

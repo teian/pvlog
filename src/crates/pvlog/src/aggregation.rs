@@ -59,6 +59,8 @@ struct Sample {
     grid_export_energy_wh: Option<i64>,
     temperature_millidegrees_c: Option<i64>,
     voltage_millivolts: Option<i64>,
+    /// Energy the battery held when the sample was taken.
+    battery_energy_wh: Option<i64>,
     quality_flags: i64,
 }
 
@@ -77,6 +79,9 @@ struct Bucket {
     maximum_temperature: Option<i64>,
     voltage_sum: i64,
     voltage_points: i64,
+    /// Stored battery energy at the first and the last sample that reported it.
+    first_battery_energy_wh: Option<i64>,
+    last_battery_energy_wh: Option<i64>,
     minimum_watts: Option<i64>,
     maximum_watts: Option<i64>,
     first_watts: Option<i64>,
@@ -114,12 +119,22 @@ impl Bucket {
             self.voltage_sum += voltage;
             self.voltage_points += 1;
         }
+        if let Some(stored) = sample.battery_energy_wh {
+            self.first_battery_energy_wh = self.first_battery_energy_wh.or(Some(stored));
+            self.last_battery_energy_wh = Some(stored);
+        }
         if let Some(watts) = sample.generation_power_watts {
             self.minimum_watts = Some(self.minimum_watts.map_or(watts, |value| value.min(watts)));
             self.maximum_watts = Some(self.maximum_watts.map_or(watts, |value| value.max(watts)));
             self.first_watts = self.first_watts.or(Some(watts));
             self.last_watts = Some(watts);
         }
+    }
+
+    /// Change of the energy the battery holds across the bucket: positive when
+    /// it was charged. Absent when no sample reported the stored energy.
+    fn battery_energy_delta(&self) -> Option<i64> {
+        Some(self.last_battery_energy_wh? - self.first_battery_energy_wh?)
     }
 
     /// Mean of the reported voltages, absent when none was reported.
@@ -395,7 +410,7 @@ async fn plant_samples(
 ) -> Result<Option<Vec<Sample>>, AggregationError> {
     let rows = sqlx::query(
         "SELECT measured_at,generation_power_watts,generation_energy_wh,consumption_energy_wh,\
-         grid_import_energy_wh,grid_export_energy_wh,temperature_millidegrees_c,voltage_millivolts,quality_flags FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? \
+         grid_import_energy_wh,grid_export_energy_wh,temperature_millidegrees_c,voltage_millivolts,battery_energy_wh,quality_flags FROM telemetry_hot WHERE system_id=? AND measured_at>=? AND measured_at<? \
          ORDER BY measured_at",
     )
     .bind(system.to_vec())
@@ -421,6 +436,7 @@ async fn plant_samples(
                     .ok()
                     .flatten(),
                 voltage_millivolts: row.try_get("voltage_millivolts").ok().flatten(),
+                battery_energy_wh: row.try_get("battery_energy_wh").ok().flatten(),
                 quality_flags: row.try_get("quality_flags").unwrap_or_default(),
             })
             .collect(),
@@ -467,6 +483,7 @@ async fn metered_scopes(
             grid_export_energy_wh: None,
             temperature_millidegrees_c: None,
             voltage_millivolts: None,
+            battery_energy_wh: None,
             quality_flags: row.try_get("quality_flags").unwrap_or_default(),
         };
         strings.entry(string_id).or_default().push(sample);
@@ -480,6 +497,7 @@ async fn metered_scopes(
             grid_export_energy_wh: None,
             temperature_millidegrees_c: None,
             voltage_millivolts: None,
+            battery_energy_wh: None,
             quality_flags: 0,
         });
         merged.generation_power_watts =
@@ -566,8 +584,8 @@ async fn write_rollup(
          quality_flags,coverage_basis_points,calculated_at,\
          grid_import_energy_sum_wh,grid_export_energy_sum_wh,\
          temperature_min_millidegrees_c,temperature_max_millidegrees_c,\
-         voltage_mean_millivolts) \
-         VALUES (?,?,?,?,?,?,?,1,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) \
+         voltage_mean_millivolts,battery_energy_delta_wh) \
+         VALUES (?,?,?,?,?,?,?,1,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) \
          ON CONFLICT(system_id,scope_kind,scope_id,resolution,bucket_start,generation) DO UPDATE SET \
          bucket_end=excluded.bucket_end,point_count=excluded.point_count,\
          expected_count=excluded.expected_count,\
@@ -584,7 +602,8 @@ async fn write_rollup(
          grid_export_energy_sum_wh=excluded.grid_export_energy_sum_wh,\
          temperature_min_millidegrees_c=excluded.temperature_min_millidegrees_c,\
          temperature_max_millidegrees_c=excluded.temperature_max_millidegrees_c,\
-         voltage_mean_millivolts=excluded.voltage_mean_millivolts",
+         voltage_mean_millivolts=excluded.voltage_mean_millivolts,\
+         battery_energy_delta_wh=excluded.battery_energy_delta_wh",
     )
     .bind(context.blob.clone())
     .bind(context.scope_kind)
@@ -609,6 +628,7 @@ async fn write_rollup(
     .bind(bucket.minimum_temperature)
     .bind(bucket.maximum_temperature)
     .bind(bucket.mean_voltage())
+    .bind(bucket.battery_energy_delta())
     .execute(connection)
     .await
     .map_err(|_| AggregationError::Unavailable)?;

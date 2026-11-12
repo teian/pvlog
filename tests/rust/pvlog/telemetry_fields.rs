@@ -17,19 +17,22 @@ use pvlog_api::{
 use pvlog_application::{
     BatchIngestionMode, ChannelReading, Clock, ComputedDay, DayBasis, DayEnergy, DecimalValue,
     EnergyInput, EnergyUnit, ModernTelemetryError, ModernTelemetryUseCases as _,
-    NormalizeObservation, ObservationSupplements, SuppliedDailySummary, SuppliedDay, effective_day,
+    NormalizeObservation, ObservationSupplements, PowerUnit, ReportedDevice, SuppliedDailySummary,
+    SuppliedDay, effective_day,
 };
 use pvlog_domain::{
-    AccountId, BatteryFlowState, MembershipId, ObservationSource, ObservationSourceKind,
-    QualityFlags, SystemId, UserId, UtcTimestamp,
+    AccountId, BatteryFlowState, EquipmentValueProvenance, InverterId, MembershipId,
+    ObservationSource, ObservationSourceKind, QualityFlags, StringId, SystemId, UserId,
+    UtcTimestamp,
 };
 use pvlog_storage::{
-    AccountConfigurationRepository as _, AccountRecord, DatabaseTarget, ManagementRepository,
-    MembershipRecord, PostgresAccountConfigurationRepository, PostgresManagementRepository,
-    PostgresTelemetryRepository, SqliteAccountConfigurationRepository, SqliteAccountPoolConfig,
-    SqliteAccountPoolRouter, SqliteAccountProvisioner, SqliteManagementRepository,
-    SqliteTelemetryRepository, StoredObservation, SystemConfigurationRecord, SystemRegistryRecord,
-    TelemetryRepository, UserRecord, apply_migrations,
+    AccountConfigurationRepository, AccountRecord, DatabaseTarget, InverterRecord,
+    ManagementRepository, MembershipRecord, PostgresAccountConfigurationRepository,
+    PostgresManagementRepository, PostgresTelemetryRepository, PvStringRecord,
+    SqliteAccountConfigurationRepository, SqliteAccountPoolConfig, SqliteAccountPoolRouter,
+    SqliteAccountProvisioner, SqliteManagementRepository, SqliteTelemetryRepository,
+    StoredObservation, SystemConfigurationRecord, SystemRegistryRecord, TelemetryRepository,
+    UserRecord, apply_migrations,
 };
 use tempfile::TempDir;
 
@@ -44,6 +47,8 @@ struct Fixture {
     account_id: AccountId,
     target: DatabaseTarget,
     management: Arc<dyn ManagementRepository>,
+    /// The clock of the telemetry service; a test moves it forward.
+    clock: Arc<TestClock>,
     /// The account database, where aggregates can be read directly.
     sqlite: Option<pvlog_storage::RoutedSqliteAccount>,
     postgres_url: Option<String>,
@@ -78,8 +83,10 @@ impl Fixture {
         management
             .save_system_registry(&registry(system_id, account_id))
             .await?;
+        let clock = Arc::new(TestClock(AtomicI64::new(START)));
         Ok(Self {
-            telemetry: StorageTelemetryApi::new(target.clone(), management.clone(), clock()),
+            telemetry: StorageTelemetryApi::new(target.clone(), management.clone(), clock.clone()),
+            clock,
             stored: Box::new(SqliteTelemetryRepository::new(
                 router.route(account_id).await?,
             )),
@@ -106,8 +113,10 @@ impl Fixture {
         management
             .save_system_registry(&registry(system_id, account_id))
             .await?;
+        let clock = Arc::new(TestClock(AtomicI64::new(START)));
         Ok(Self {
-            telemetry: StorageTelemetryApi::new(target.clone(), management.clone(), clock()),
+            telemetry: StorageTelemetryApi::new(target.clone(), management.clone(), clock.clone()),
+            clock,
             stored: Box::new(PostgresTelemetryRepository::new(url.clone(), account_id)),
             system_id,
             account_id,
@@ -787,6 +796,346 @@ async fn postgres_stores_typed_channel_values_and_names_contradictions_when_conf
         return Ok(());
     };
     typed_channels(Fixture::postgres(url).await?).await
+}
+
+async fn battery(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    // The system's battery: state of charge, charging power and stored energy.
+    let mut charging = fixture.reading(0);
+    charging.battery_state_of_charge_basis_points = Some(6_250);
+    charging.battery_power = Some((1_500, PowerUnit::Watts));
+    charging.battery_energy = interval(4_000);
+    let accepted = fixture.telemetry.ingest(charging).await?.observation;
+    assert_eq!(
+        accepted.values.battery.map(|battery| battery.flow_state),
+        Some(BatteryFlowState::Charging)
+    );
+    let stored = fixture.at(0).await?.measurements;
+    assert_eq!(stored.battery_state_basis_points, Some(6_250));
+    assert_eq!(stored.battery_power_watts, Some(1_500));
+    assert_eq!(stored.battery_energy_wh, Some(4_000));
+
+    let mut discharging = fixture.reading(1);
+    discharging.battery_power = Some((-700, PowerUnit::Watts));
+    discharging.battery_energy = interval(3_900);
+    let accepted = fixture.telemetry.ingest(discharging).await?.observation;
+    assert_eq!(
+        accepted.values.battery.map(|battery| battery.flow_state),
+        Some(BatteryFlowState::Discharging)
+    );
+    let stored = fixture.at(1).await?.measurements;
+    assert_eq!(stored.battery_power_watts, Some(-700));
+    assert_eq!(
+        stored.battery_state_basis_points, None,
+        "a state that was not reported stays missing"
+    );
+
+    // A battery is never more than full or less than empty.
+    for ratio in [10_001, -1] {
+        let mut out_of_range = fixture.reading(2);
+        out_of_range.battery_state_of_charge_basis_points = Some(ratio);
+        assert!(matches!(
+            fixture.telemetry.ingest(out_of_range).await,
+            Err(ModernTelemetryError::InvalidField(
+                "batteryStateOfChargeBasisPoints"
+            ))
+        ));
+    }
+    let mut negative = fixture.reading(2);
+    negative.battery_energy = interval(-1);
+    assert!(matches!(
+        fixture.telemetry.ingest(negative).await,
+        Err(ModernTelemetryError::InvalidField("batteryEnergyWh"))
+    ));
+    let mut overfull = fixture.reading(2);
+    overfull.channel_readings.insert(
+        "inv.2000123456.battery.soc".to_owned(),
+        channel_value("1001", None),
+    );
+    assert!(matches!(
+        fixture.telemetry.ingest(overfull).await,
+        Err(ModernTelemetryError::InvalidField("channels"))
+    ));
+    assert!(
+        fixture.at(2).await.is_err(),
+        "a rejected reading is not stored"
+    );
+
+    // An inverter reports its battery: the values are kept for that inverter
+    // in the logger's units, and the system's state follows them.
+    let mut device = fixture.reading(3);
+    for (measurement, value) in [("soc", "815"), ("voltage", "51200")] {
+        device.channel_readings.insert(
+            format!("inv.2000123456.battery.{measurement}"),
+            channel_value(value, None),
+        );
+    }
+    let accepted = fixture.telemetry.ingest(device).await?;
+    assert_eq!(accepted.rejected_channels, Vec::new());
+    let channels = pvlog::channels::channel_repository(
+        &fixture.target,
+        fixture.management.as_ref(),
+        fixture.system_id,
+    )
+    .await
+    .ok_or("channel storage is unavailable")?;
+    for (measurement, unit, value) in [("soc", "‰", 815), ("voltage", "mV", 51_200)] {
+        let channel = channels
+            .channel(
+                fixture.system_id,
+                &format!("inv.2000123456.battery.{measurement}"),
+            )
+            .await?
+            .ok_or("battery channel is missing")?;
+        assert_eq!(channel.unit, unit);
+        assert_eq!(channel.last_value, Some(value), "{measurement}");
+    }
+    assert_eq!(
+        fixture.at(3).await?.measurements.battery_state_basis_points,
+        Some(8_150),
+        "the system's latest battery state reflects the device"
+    );
+
+    // Aggregates exist on SQLite only; PostgreSQL has no aggregation cycle yet.
+    let Some(account) = &fixture.sqlite else {
+        return Ok(());
+    };
+    pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
+    let mut connection = account.acquire().await?;
+    let change: Option<i64> = sqlx::query_scalar(
+        "SELECT battery_energy_delta_wh FROM telemetry_rollups \
+         WHERE system_id=? AND scope_kind='system' AND resolution='day'",
+    )
+    .bind(fixture.system_id.as_uuid().as_bytes().to_vec())
+    .fetch_one(&mut *connection)
+    .await?;
+    assert_eq!(change, Some(-100), "the battery lost 100 Wh over the day");
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_stores_battery_measurements_and_their_change() -> Result<(), Box<dyn Error>> {
+    battery(Fixture::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_stores_battery_measurements_when_configured() -> Result<(), Box<dyn Error>> {
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    battery(Fixture::postgres(url).await?).await
+}
+
+const ROOF: &str = "2000123456";
+const GARAGE: &str = "3000654321";
+
+fn roof_inverter(system_id: SystemId) -> InverterRecord {
+    let inverter_id = InverterId::new();
+    InverterRecord {
+        id: inverter_id,
+        system_id,
+        name: "Roof".to_owned(),
+        manufacturer: Some("SMA".to_owned()),
+        model: Some("typed by hand".to_owned()),
+        serial_reference: Some(ROOF.to_owned()),
+        rated_power_watts: None,
+        catalog_entry_id: None,
+        catalog_revision: None,
+        value_provenance: EquipmentValueProvenance::Manual,
+        specification_snapshot: None,
+        effective_from: 0,
+        effective_to: None,
+        created_at: 1,
+        updated_at: 1,
+        firmware_version: None,
+        firmware_changed_at: None,
+        strings: vec![PvStringRecord {
+            id: StringId::new(),
+            inverter_id,
+            name: "South".to_owned(),
+            panel_count: 10,
+            panel_manufacturer: None,
+            panel_model: None,
+            rated_power_watts: 4_000,
+            module_catalog_entry_id: None,
+            module_catalog_revision: None,
+            value_provenance: EquipmentValueProvenance::Manual,
+            module_specification_snapshot: None,
+            module_peak_power_watts: None,
+            total_peak_power_watts: None,
+            orientation_degrees: None,
+            tilt_degrees: None,
+            temperature_coefficient_ppm_per_celsius: None,
+            shading: Vec::new(),
+            effective_from: 0,
+            effective_to: None,
+            created_at: 1,
+            updated_at: 1,
+        }],
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+async fn device_identity(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    let configuration: Box<dyn AccountConfigurationRepository> = match &fixture.sqlite {
+        Some(account) => Box::new(SqliteAccountConfigurationRepository::new(account.clone())),
+        None => Box::new(PostgresAccountConfigurationRepository::new(
+            fixture.postgres_url.clone().ok_or("no database")?,
+            fixture.account_id,
+        )),
+    };
+    configuration
+        .save_inverter_aggregate(&roof_inverter(fixture.system_id))
+        .await?;
+    let discovery = pvlog::discovery::discovery_repository(
+        &fixture.target,
+        fixture.management.as_ref(),
+        fixture.system_id,
+    )
+    .await
+    .ok_or("discovery storage is unavailable")?;
+    let roof = |firmware: &str| ReportedDevice {
+        id: ROOF.to_owned(),
+        family_id: Some("9305".to_owned()),
+        configured_name: Some("Dach".to_owned()),
+        reported_name: Some("SN: 2000123456".to_owned()),
+        model: Some("SB 3000TL-21".to_owned()),
+        firmware: Some(firmware.to_owned()),
+        transport: Some("bluetooth".to_owned()),
+        ..ReportedDevice::default()
+    };
+    let inverter = || async {
+        configuration
+            .effective_inverters(fixture.system_id, START)
+            .await?
+            .into_iter()
+            .next()
+            .ok_or_else(|| Box::<dyn Error>::from("the inverter is gone"))
+    };
+
+    // A logger says who its devices are: one is a known inverter, one is new.
+    let mut first = fixture.reading(0);
+    first.supplements.devices = vec![
+        roof("3.10.18.R"),
+        ReportedDevice {
+            id: GARAGE.to_owned(),
+            model: Some("SB 1.5-1VL-40".to_owned()),
+            firmware: Some("2.4.6.R".to_owned()),
+            configured_name: Some("Garage".to_owned()),
+            ..ReportedDevice::default()
+        },
+    ];
+    fixture.telemetry.ingest(first).await?;
+    let known = inverter().await?;
+    assert_eq!(known.firmware_version.as_deref(), Some("3.10.18.R"));
+    assert_eq!(known.firmware_changed_at, Some(START));
+    assert_eq!(known.model.as_deref(), Some("SB 3000TL-21"));
+    assert_eq!(known.name, "Roof", "the name the owner chose stays");
+    let proposals = discovery.discovery_proposals(fixture.system_id).await?;
+    assert_eq!(
+        proposals
+            .iter()
+            .map(|proposal| (
+                proposal.device_serial.as_str(),
+                proposal.reported_name.as_deref(),
+                proposal.model.as_deref(),
+                proposal.firmware.as_deref()
+            ))
+            .collect::<Vec<_>>(),
+        vec![(
+            GARAGE,
+            Some("Garage"),
+            Some("SB 1.5-1VL-40"),
+            Some("2.4.6.R")
+        )],
+        "only the device that matches no inverter is proposed"
+    );
+
+    // The same firmware reported later is no change.
+    fixture.clock.0.store(START + STEP, Ordering::SeqCst);
+    let mut second = fixture.reading(1);
+    second.supplements.devices = vec![roof("3.10.18.R")];
+    fixture.telemetry.ingest(second).await?;
+    assert_eq!(inverter().await?.firmware_changed_at, Some(START));
+
+    // A new firmware version is shown with the time it was first reported.
+    // What the logger leaves out this time stays as it was reported before.
+    fixture.clock.0.store(START + 2 * STEP, Ordering::SeqCst);
+    let mut third = fixture.reading(2);
+    third.supplements.devices = vec![ReportedDevice {
+        id: ROOF.to_owned(),
+        firmware: Some("3.20.13.R".to_owned()),
+        ..ReportedDevice::default()
+    }];
+    fixture.telemetry.ingest(third).await?;
+    let updated = inverter().await?;
+    assert_eq!(updated.firmware_version.as_deref(), Some("3.20.13.R"));
+    assert_eq!(updated.firmware_changed_at, Some(START + 2 * STEP));
+    assert_eq!(updated.model.as_deref(), Some("SB 3000TL-21"));
+
+    let reported = discovery.reported_devices(fixture.system_id).await?;
+    assert_eq!(
+        reported
+            .iter()
+            .map(|device| device.identity.device_serial.as_str())
+            .collect::<Vec<_>>(),
+        vec![ROOF, GARAGE]
+    );
+    let latest = &reported[0];
+    assert_eq!(latest.identity.kind.as_deref(), Some("inverter"));
+    assert_eq!(latest.identity.family_id.as_deref(), Some("9305"));
+    assert_eq!(latest.identity.configured_name.as_deref(), Some("Dach"));
+    assert_eq!(
+        latest.identity.reported_name.as_deref(),
+        Some("SN: 2000123456")
+    );
+    assert_eq!(latest.identity.firmware.as_deref(), Some("3.20.13.R"));
+    assert_eq!(latest.identity.transport.as_deref(), Some("bluetooth"));
+    assert_eq!(
+        (latest.first_reported_at, latest.last_reported_at),
+        (START, START + 2 * STEP)
+    );
+
+    // A device that cannot be named in a channel key, or is listed twice, is refused.
+    for devices in [
+        vec![ReportedDevice {
+            id: "20 00".to_owned(),
+            ..ReportedDevice::default()
+        }],
+        vec![roof("1"), roof("2")],
+        vec![ReportedDevice {
+            id: ROOF.to_owned(),
+            firmware: Some(" ".to_owned()),
+            ..ReportedDevice::default()
+        }],
+    ] {
+        let mut refused = fixture.reading(3);
+        refused.supplements.devices = devices;
+        assert!(matches!(
+            fixture.telemetry.ingest(refused).await,
+            Err(ModernTelemetryError::InvalidField("devices"))
+        ));
+    }
+    assert_eq!(
+        inverter().await?.firmware_version.as_deref(),
+        Some("3.20.13.R"),
+        "a refused reading changes nothing"
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_keeps_device_identity_and_updates_the_matched_inverter()
+-> Result<(), Box<dyn Error>> {
+    device_identity(Fixture::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_keeps_device_identity_and_updates_the_matched_inverter_when_configured()
+-> Result<(), Box<dyn Error>> {
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    device_identity(Fixture::postgres(url).await?).await
 }
 
 fn summary(date: &str, generation: i64, complete: bool) -> SuppliedDailySummary {

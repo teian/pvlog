@@ -12,9 +12,9 @@ use pvlog_application::{
     BatchIngestionMode, BatchIngestionResult, BatchItemOutcome, BatchItemStatus,
     ChannelAggregation, ChannelTyping, ChannelValueType, Clock, CorrectObservation,
     CounterBaseline, IngestedObservation, IngestionNormalizationError, ModernTelemetryError,
-    ModernTelemetryUseCases, NormalizeObservation, PortError, RejectedChannel,
+    ModernTelemetryUseCases, NormalizeObservation, PortError, RejectedChannel, ReportedDevice,
     VersionedObservation, channel_typing_for, derive_counter_energy, device_channel,
-    normalize_observation, scaled_channel_value,
+    normalize_observation, scaled_channel_value, validate_reported_devices,
 };
 use pvlog_domain::{
     AccountId, ApiCredentialId, CanonicalObservation, ChannelId, DataSourceId, EnergyReading,
@@ -22,8 +22,8 @@ use pvlog_domain::{
 };
 use pvlog_storage::{
     ChannelRecord, ChannelRegistration, ChannelRepository, DataSourceRepository, DatabaseTarget,
-    DiscoveredDeviceRecord, ManagementRepository, ObservationInsertOutcome, StoredMeasurements,
-    StoredObservation, TelemetryRepository, TelemetryRepositoryError,
+    DiscoveredDeviceRecord, ManagementRepository, ObservationInsertOutcome, ReportedDeviceRecord,
+    StoredMeasurements, StoredObservation, TelemetryRepository, TelemetryRepositoryError,
 };
 
 const MAXIMUM_BATCH_ITEMS: usize = 1_000;
@@ -414,28 +414,59 @@ impl StorageTelemetryApi {
     ) -> Result<(NormalizeObservation, Vec<RejectedChannel>), ModernTelemetryError> {
         let (command, rejected, new_devices) =
             resolve_channels(repository, system_id, command, received_at).await?;
-        if !new_devices.is_empty() {
-            let unavailable = || ModernTelemetryError::Repository(PortError::Unavailable);
-            let discovery = crate::discovery::discovery_repository(
-                &self.target,
-                self.management.as_ref(),
-                system_id,
+        let reported = &command.supplements.devices;
+        if new_devices.is_empty() && reported.is_empty() {
+            return Ok((command, rejected));
+        }
+        // Nothing is kept about the devices of a reading that will be refused.
+        validate_reported_devices(reported)
+            .map_err(|_| ModernTelemetryError::InvalidField("devices"))?;
+        let unavailable = || ModernTelemetryError::Repository(PortError::Unavailable);
+        let discovery = crate::discovery::discovery_repository(
+            &self.target,
+            self.management.as_ref(),
+            system_id,
+        )
+        .await
+        .ok_or_else(unavailable)?;
+        for device in reported {
+            discovery
+                .record_device_identity(system_id, &reported_device_record(device), received_at)
+                .await
+                .map_err(|_| unavailable())?;
+        }
+        // A device that states who it is can be proposed before it sends a
+        // value; one that only sends values is proposed by its serial.
+        let serials: BTreeSet<&str> = new_devices
+            .iter()
+            .map(String::as_str)
+            .chain(
+                reported
+                    .iter()
+                    .filter(|device| is_inverter(device))
+                    .map(|device| device.id.as_str()),
             )
-            .await
-            .ok_or_else(unavailable)?;
-            for device_serial in new_devices {
-                discovery
-                    .record_discovered_device(
-                        system_id,
-                        &DiscoveredDeviceRecord {
-                            device_serial,
-                            ..DiscoveredDeviceRecord::default()
-                        },
-                        received_at,
-                    )
-                    .await
-                    .map_err(|_| unavailable())?;
-            }
+            .collect();
+        for device_serial in serials {
+            let identity = reported.iter().find(|device| device.id == device_serial);
+            discovery
+                .record_discovered_device(
+                    system_id,
+                    &DiscoveredDeviceRecord {
+                        device_serial: device_serial.to_owned(),
+                        reported_name: identity.and_then(|device| {
+                            device
+                                .reported_name
+                                .clone()
+                                .or_else(|| device.configured_name.clone())
+                        }),
+                        model: identity.and_then(|device| device.model.clone()),
+                        firmware: identity.and_then(|device| device.firmware.clone()),
+                    },
+                    received_at,
+                )
+                .await
+                .map_err(|_| unavailable())?;
         }
         Ok((command, rejected))
     }
@@ -468,6 +499,26 @@ impl StorageTelemetryApi {
     /// Returns the current clock time as epoch milliseconds, or zero if it does not fit in an `i64`.
     fn received_at(&self) -> i64 {
         i64::try_from(self.clock.now().epoch_millis()).unwrap_or_default()
+    }
+}
+
+/// Whether a reported device is an inverter, which is what a source reports
+/// unless it says otherwise.
+fn is_inverter(device: &ReportedDevice) -> bool {
+    device.kind.as_deref().is_none_or(|kind| kind == "inverter")
+}
+
+/// Projects a reported device onto the stored identity.
+fn reported_device_record(device: &ReportedDevice) -> ReportedDeviceRecord {
+    ReportedDeviceRecord {
+        device_serial: device.id.clone(),
+        kind: device.kind.clone(),
+        family_id: device.family_id.clone(),
+        configured_name: device.configured_name.clone(),
+        reported_name: device.reported_name.clone(),
+        model: device.model.clone(),
+        firmware: device.firmware.clone(),
+        transport: device.transport.clone(),
     }
 }
 
@@ -599,6 +650,7 @@ fn stored_observation(
         .values
         .grid_export_power
         .map(pvlog_domain::Watts::value);
+    let battery = observation.values.battery;
     Ok(StoredObservation {
         id: observation.id,
         system_id: observation.system_id,
@@ -654,8 +706,16 @@ fn stored_observation(
                 .values
                 .voltage
                 .map(|value| i64::from(value.value())),
+            battery_power_watts: battery
+                .and_then(|battery| battery.power)
+                .map(pvlog_domain::Watts::value),
+            battery_energy_wh: battery
+                .and_then(|battery| battery.energy)
+                .map(pvlog_domain::WattHours::value),
+            battery_state_basis_points: battery
+                .and_then(|battery| battery.state_of_charge)
+                .map(pvlog_domain::BasisPoints::value),
             message: observation.values.message.clone(),
-            ..StoredMeasurements::default()
         },
     })
 }

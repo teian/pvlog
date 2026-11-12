@@ -190,6 +190,8 @@ impl InverterApiUseCases for InverterStub {
             effective_from: input.effective_from,
             effective_to: input.effective_to,
             version: 1,
+            firmware_version: None,
+            firmware_changed_at: None,
             strings: input
                 .strings
                 .into_iter()

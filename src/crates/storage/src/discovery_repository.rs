@@ -26,6 +26,30 @@ pub struct DiscoveredDeviceRecord {
     pub firmware: Option<String>,
 }
 
+/// The identity a source reported for one of its devices.
+///
+/// A member that is `None` was not reported and leaves the stored value as it is.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ReportedDeviceRecord {
+    pub device_serial: String,
+    /// Kind of device as the source names it; `inverter` when not stated.
+    pub kind: Option<String>,
+    pub family_id: Option<String>,
+    pub configured_name: Option<String>,
+    pub reported_name: Option<String>,
+    pub model: Option<String>,
+    pub firmware: Option<String>,
+    pub transport: Option<String>,
+}
+
+/// The latest identity held for a device, with the times it was reported.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StoredReportedDevice {
+    pub identity: ReportedDeviceRecord,
+    pub first_reported_at: i64,
+    pub last_reported_at: i64,
+}
+
 /// A device proposed as an inverter of a system.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiscoveryProposalRecord {
@@ -59,6 +83,23 @@ pub trait DiscoveryRepository: Send + Sync {
         device: &DiscoveredDeviceRecord,
         now: i64,
     ) -> Result<(), AccountRepositoryError>;
+    /// Keeps the identity a source reported for a device.
+    ///
+    /// The inverter of the system that carries the serial takes the reported
+    /// firmware, with `now` as the time of the change when the version differs
+    /// from the one held, and the reported model unless its model comes from
+    /// the equipment catalog. Returns whether an inverter was changed.
+    async fn record_device_identity(
+        &self,
+        system_id: SystemId,
+        device: &ReportedDeviceRecord,
+        now: i64,
+    ) -> Result<bool, AccountRepositoryError>;
+    /// Lists the latest identity of every device reported for a system, by serial.
+    async fn reported_devices(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Vec<StoredReportedDevice>, AccountRepositoryError>;
     /// Lists the proposals of a system in every state, oldest first.
     async fn discovery_proposals(
         &self,
@@ -87,6 +128,39 @@ fn validate_device(device: &DiscoveredDeviceRecord) -> Result<(), AccountReposit
         return Err(AccountRepositoryError::InvalidRecord("discovered device"));
     }
     Ok(())
+}
+
+fn validate_identity(device: &ReportedDeviceRecord) -> Result<(), AccountRepositoryError> {
+    let length = device.device_serial.chars().count();
+    if device.device_serial.trim().is_empty() || length > 64 {
+        return Err(AccountRepositoryError::InvalidRecord("reported device"));
+    }
+    Ok(())
+}
+
+/// Reads a reported device from a row; both databases use the same column names.
+fn reported_device<'r, R>(row: &'r R) -> StoredReportedDevice
+where
+    R: sqlx::Row,
+    &'r str: sqlx::ColumnIndex<R>,
+    String: sqlx::Decode<'r, R::Database> + sqlx::Type<R::Database>,
+    Option<String>: sqlx::Decode<'r, R::Database> + sqlx::Type<R::Database>,
+    i64: sqlx::Decode<'r, R::Database> + sqlx::Type<R::Database>,
+{
+    StoredReportedDevice {
+        identity: ReportedDeviceRecord {
+            device_serial: row.get("device_serial"),
+            kind: Some(row.get("kind")),
+            family_id: row.get("family_id"),
+            configured_name: row.get("configured_name"),
+            reported_name: row.get("reported_name"),
+            model: row.get("model"),
+            firmware: row.get("firmware"),
+            transport: row.get("transport"),
+        },
+        first_reported_at: row.get("first_reported_at"),
+        last_reported_at: row.get("last_reported_at"),
+    }
 }
 
 fn validate_state(state: &str) -> Result<(), AccountRepositoryError> {
@@ -146,6 +220,84 @@ fn sqlite_proposal(
 #[cfg(feature = "sqlite")]
 #[async_trait]
 impl DiscoveryRepository for SqliteDiscoveryRepository {
+    async fn record_device_identity(
+        &self,
+        system_id: SystemId,
+        device: &ReportedDeviceRecord,
+        now: i64,
+    ) -> Result<bool, AccountRepositoryError> {
+        validate_identity(device)?;
+        let mut writer = self.account.acquire_writer().await?;
+        sqlx::query(
+            "INSERT INTO reported_devices (system_id,device_serial,kind,family_id,\
+             configured_name,reported_name,model,firmware,transport,first_reported_at,\
+             last_reported_at) VALUES (?,?,COALESCE(?,'inverter'),?,?,?,?,?,?,?,?) \
+             ON CONFLICT(system_id,device_serial) DO UPDATE SET \
+             kind=COALESCE(?,kind),\
+             family_id=COALESCE(excluded.family_id,family_id),\
+             configured_name=COALESCE(excluded.configured_name,configured_name),\
+             reported_name=COALESCE(excluded.reported_name,reported_name),\
+             model=COALESCE(excluded.model,model),\
+             firmware=COALESCE(excluded.firmware,firmware),\
+             transport=COALESCE(excluded.transport,transport),\
+             last_reported_at=excluded.last_reported_at",
+        )
+        .bind(blob(system_id.as_uuid()))
+        .bind(&device.device_serial)
+        .bind(device.kind.as_deref())
+        .bind(device.family_id.as_deref())
+        .bind(device.configured_name.as_deref())
+        .bind(device.reported_name.as_deref())
+        .bind(device.model.as_deref())
+        .bind(device.firmware.as_deref())
+        .bind(device.transport.as_deref())
+        .bind(now)
+        .bind(now)
+        .bind(device.kind.as_deref())
+        .execute(writer.connection())
+        .await?;
+        // Every right-hand side reads the row as it was before the update.
+        let changed = sqlx::query(
+            "UPDATE inverters SET \
+             firmware_changed_at=CASE WHEN ?1 IS NOT NULL AND firmware_version IS NOT ?1 \
+               THEN ?3 ELSE firmware_changed_at END,\
+             firmware_version=COALESCE(?1,firmware_version),\
+             model=CASE WHEN catalog_entry_id IS NULL THEN COALESCE(?2,model) ELSE model END,\
+             updated_at=?3,version=version+1 \
+             WHERE system_id=?4 AND serial_reference=?5 AND effective_from<=?3 \
+             AND (effective_to IS NULL OR effective_to>?3) \
+             AND ((?1 IS NOT NULL AND firmware_version IS NOT ?1) \
+               OR (?2 IS NOT NULL AND catalog_entry_id IS NULL AND model IS NOT ?2))",
+        )
+        .bind(device.firmware.as_deref())
+        .bind(device.model.as_deref())
+        .bind(now)
+        .bind(blob(system_id.as_uuid()))
+        .bind(&device.device_serial)
+        .execute(writer.connection())
+        .await?
+        .rows_affected();
+        Ok(changed > 0)
+    }
+
+    async fn reported_devices(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Vec<StoredReportedDevice>, AccountRepositoryError> {
+        let mut connection = self.account.acquire().await?;
+        Ok(sqlx::query(
+            "SELECT device_serial,kind,family_id,configured_name,reported_name,model,firmware,\
+             transport,first_reported_at,last_reported_at FROM reported_devices \
+             WHERE system_id=? ORDER BY device_serial",
+        )
+        .bind(blob(system_id.as_uuid()))
+        .fetch_all(&mut *connection)
+        .await?
+        .iter()
+        .map(reported_device)
+        .collect())
+    }
+
     async fn record_discovered_device(
         &self,
         system_id: SystemId,
@@ -304,6 +456,87 @@ fn postgres_proposal(
 #[cfg(feature = "postgres")]
 #[async_trait]
 impl DiscoveryRepository for PostgresDiscoveryRepository {
+    async fn record_device_identity(
+        &self,
+        system_id: SystemId,
+        device: &ReportedDeviceRecord,
+        now: i64,
+    ) -> Result<bool, AccountRepositoryError> {
+        validate_identity(device)?;
+        let mut connection = self.connection().await?;
+        sqlx::query(
+            "INSERT INTO account_data.reported_devices AS d (account_id,system_id,device_serial,\
+             kind,family_id,configured_name,reported_name,model,firmware,transport,\
+             first_reported_at,last_reported_at) \
+             VALUES ($1,$2,$3,COALESCE($4,'inverter'),$5,$6,$7,$8,$9,$10,$11,$11) \
+             ON CONFLICT(account_id,system_id,device_serial) DO UPDATE SET \
+             kind=COALESCE($4,d.kind),\
+             family_id=COALESCE(excluded.family_id,d.family_id),\
+             configured_name=COALESCE(excluded.configured_name,d.configured_name),\
+             reported_name=COALESCE(excluded.reported_name,d.reported_name),\
+             model=COALESCE(excluded.model,d.model),\
+             firmware=COALESCE(excluded.firmware,d.firmware),\
+             transport=COALESCE(excluded.transport,d.transport),\
+             last_reported_at=excluded.last_reported_at",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .bind(&device.device_serial)
+        .bind(device.kind.as_deref())
+        .bind(device.family_id.as_deref())
+        .bind(device.configured_name.as_deref())
+        .bind(device.reported_name.as_deref())
+        .bind(device.model.as_deref())
+        .bind(device.firmware.as_deref())
+        .bind(device.transport.as_deref())
+        .bind(now)
+        .execute(&mut connection)
+        .await?;
+        // Every right-hand side reads the row as it was before the update.
+        let changed = sqlx::query(
+            "UPDATE account_data.inverters SET \
+             firmware_changed_at=CASE WHEN $1::TEXT IS NOT NULL \
+               AND firmware_version IS DISTINCT FROM $1 THEN $3 ELSE firmware_changed_at END,\
+             firmware_version=COALESCE($1,firmware_version),\
+             model=CASE WHEN catalog_entry_id IS NULL THEN COALESCE($2,model) ELSE model END,\
+             updated_at=$3,version=version+1 \
+             WHERE account_id=$4 AND system_id=$5 AND serial_reference=$6 \
+             AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>$3) \
+             AND (($1::TEXT IS NOT NULL AND firmware_version IS DISTINCT FROM $1) \
+               OR ($2::TEXT IS NOT NULL AND catalog_entry_id IS NULL \
+                 AND model IS DISTINCT FROM $2))",
+        )
+        .bind(device.firmware.as_deref())
+        .bind(device.model.as_deref())
+        .bind(now)
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .bind(&device.device_serial)
+        .execute(&mut connection)
+        .await?
+        .rows_affected();
+        connection.close().await?;
+        Ok(changed > 0)
+    }
+
+    async fn reported_devices(
+        &self,
+        system_id: SystemId,
+    ) -> Result<Vec<StoredReportedDevice>, AccountRepositoryError> {
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "SELECT device_serial,kind,family_id,configured_name,reported_name,model,firmware,\
+             transport,first_reported_at,last_reported_at FROM account_data.reported_devices \
+             WHERE account_id=$1 AND system_id=$2 ORDER BY device_serial",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        Ok(rows.iter().map(reported_device).collect())
+    }
+
     async fn record_discovered_device(
         &self,
         system_id: SystemId,

@@ -65,6 +65,11 @@ pub struct InverterRecord {
     pub effective_to: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
+    /// Firmware the device last reported. Saving an inverter never writes it;
+    /// it changes only when a source reports the device's identity.
+    pub firmware_version: Option<String>,
+    /// When a firmware version different from the previous one was reported.
+    pub firmware_changed_at: Option<i64>,
     pub strings: Vec<PvStringRecord>,
 }
 
@@ -346,7 +351,7 @@ impl AccountConfigurationRepository for SqliteAccountConfigurationRepository {
         at: i64,
     ) -> Result<Vec<InverterRecord>, AccountRepositoryError> {
         let mut connection = self.account.acquire().await?;
-        let rows = sqlx::query("SELECT id,system_id,name,manufacturer,model,serial_reference,rated_power_watts,catalog_entry_id,catalog_revision,value_provenance,specification_snapshot_json,effective_from,effective_to,created_at,updated_at FROM inverters WHERE system_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>?) ORDER BY effective_from,id")
+        let rows = sqlx::query("SELECT id,system_id,name,manufacturer,model,serial_reference,rated_power_watts,catalog_entry_id,catalog_revision,value_provenance,specification_snapshot_json,effective_from,effective_to,created_at,updated_at,firmware_version,firmware_changed_at FROM inverters WHERE system_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>?) ORDER BY effective_from,id")
             .bind(blob(system_id.as_uuid())).bind(at).bind(at).fetch_all(&mut *connection).await?;
         let mut records = Vec::with_capacity(rows.len());
         for row in &rows {
@@ -558,7 +563,7 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
         at: i64,
     ) -> Result<Vec<InverterRecord>, AccountRepositoryError> {
         let mut connection = self.connection().await?;
-        let rows = sqlx::query("SELECT id,system_id,name,manufacturer,model,serial_reference,rated_power_watts,catalog_entry_id,catalog_revision,value_provenance,specification_snapshot,effective_from,effective_to,created_at,updated_at FROM account_data.inverters WHERE account_id=$1 AND system_id=$2 AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>$3) ORDER BY effective_from,id")
+        let rows = sqlx::query("SELECT id,system_id,name,manufacturer,model,serial_reference,rated_power_watts,catalog_entry_id,catalog_revision,value_provenance,specification_snapshot,effective_from,effective_to,created_at,updated_at,firmware_version,firmware_changed_at FROM account_data.inverters WHERE account_id=$1 AND system_id=$2 AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>$3) ORDER BY effective_from,id")
             .bind(self.account_id.as_uuid()).bind(system_id.as_uuid()).bind(at).fetch_all(&mut connection).await?;
         let mut records = Vec::with_capacity(rows.len());
         for row in &rows {
@@ -860,6 +865,8 @@ fn sqlite_inverter(r: &sqlx::sqlite::SqliteRow) -> Result<InverterRecord, Accoun
         effective_to: r.get("effective_to"),
         created_at: r.get("created_at"),
         updated_at: r.get("updated_at"),
+        firmware_version: r.get("firmware_version"),
+        firmware_changed_at: r.get("firmware_changed_at"),
         strings: Vec::new(),
     })
 }
@@ -1028,6 +1035,8 @@ fn pg_inverter(r: &sqlx::postgres::PgRow) -> Result<InverterRecord, AccountRepos
         effective_to: r.get("effective_to"),
         created_at: r.get("created_at"),
         updated_at: r.get("updated_at"),
+        firmware_version: r.get("firmware_version"),
+        firmware_changed_at: r.get("firmware_changed_at"),
         strings: Vec::new(),
     })
 }

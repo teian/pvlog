@@ -122,6 +122,8 @@ impl ManagementInverterApi {
             effective_to: input.effective_to,
             created_at: now,
             updated_at: now,
+            firmware_version: None,
+            firmware_changed_at: None,
             strings,
         })
     }
@@ -369,6 +371,8 @@ fn response(record: InverterRecord) -> InverterResponse {
         effective_from: record.effective_from,
         effective_to: record.effective_to,
         version: 1,
+        firmware_version: record.firmware_version,
+        firmware_changed_at: record.firmware_changed_at,
         strings: record
             .strings
             .into_iter()

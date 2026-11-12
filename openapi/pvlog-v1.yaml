@@ -4563,6 +4563,15 @@ components:
             version: { type: integer, minimum: 1 }
             catalogEntryId: { type: [string, "null"], readOnly: true }
             catalogRevision: { type: [string, "null"], readOnly: true }
+            firmwareVersion:
+              type: string
+              readOnly: true
+              description: Firmware the device last reported through a data source. Absent until a source reports it.
+            firmwareChangedAt:
+              type: integer
+              format: int64
+              readOnly: true
+              description: Epoch milliseconds at which a firmware version different from the previous one was first reported.
             strings:
               type: array
               minItems: 1
@@ -5390,6 +5399,31 @@ components:
             },
           voltageMillivolts: { type: integer, minimum: 0 },
           temperatureMillidegreesCelsius: { type: integer },
+          batteryStateOfChargeBasisPoints:
+            {
+              type: integer,
+              minimum: 0,
+              maximum: 10000,
+              description: "State of charge of the system's battery; 10000 is full. When absent it is taken from the devices that report inv.<serial>.battery.soc, each counting equally.",
+            },
+          batteryPowerWatts:
+            {
+              type: integer,
+              description: Power flowing into the battery. Positive while charging and negative while discharging.,
+            },
+          batteryEnergyWh:
+            {
+              type: integer,
+              minimum: 0,
+              description: Energy the battery holds at the time of the reading. Its change over a period is reported with the aggregates.,
+            },
+          devices:
+            {
+              type: array,
+              maxItems: 64,
+              description: "Identity of the devices the source reads. The latest identity is kept per device. An inverter whose serial matches takes the reported firmware and, unless its model comes from the equipment catalog, the reported model. A device that matches no inverter becomes a discovery proposal.",
+              items: { $ref: "#/components/schemas/ReportedDevice" },
+            },
           message:
             {
               type: string,
@@ -5439,6 +5473,40 @@ components:
               description: Marks a reading sent only to prove the connection. It is validated like any other but stored apart from telemetry. Not allowed in a batch.,
             },
         }
+    ReportedDevice:
+      type: object
+      additionalProperties: false
+      required: [id]
+      description: What a source reports about one of its devices. An absent member leaves the value reported before untouched.
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9_-]+$"
+          description: "The source's identifier of the device; for an inverter its serial number. It is the serial in the keys of the device key scheme."
+        kind:
+          type: string
+          maxLength: 120
+          default: inverter
+        familyId:
+          type: string
+          maxLength: 120
+          description: Device family identifier, such as SMA's SUSy ID.
+        configuredName:
+          type: string
+          maxLength: 120
+          description: Name the operator gave the device in the logger.
+        reportedName:
+          type: string
+          maxLength: 120
+          description: Name the device reports for itself.
+        model: { type: string, maxLength: 120 }
+        firmware: { type: string, maxLength: 120 }
+        transport:
+          type: string
+          maxLength: 120
+          description: How the logger reaches the device, for example bluetooth or speedwire.
     ObservationBatchInput:
       type: object
       required: [mode, items]

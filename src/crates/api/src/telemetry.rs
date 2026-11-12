@@ -8,7 +8,7 @@ use axum::{
 use pvlog_application::{
     BatchIngestionMode, ChannelReading, CorrectObservation, DecimalValue, EnergyInput,
     ModernTelemetryError, ModernTelemetryUseCases, NormalizeObservation, ObservationSupplements,
-    PowerUnit, RejectedChannel,
+    PowerUnit, RejectedChannel, ReportedDevice,
 };
 use pvlog_domain::{
     ApiCredentialId, ApiScope, BatteryFlowState, CanonicalObservation, MeasurementValues,
@@ -64,6 +64,14 @@ struct ObservationBody {
     grid_export_energy_wh: Option<i64>,
     voltage_millivolts: Option<u32>,
     temperature_millidegrees_celsius: Option<i32>,
+    /// Battery of the whole system: state of charge from 0 to 10000, power
+    /// that is positive while charging, and the energy currently stored.
+    battery_state_of_charge_basis_points: Option<i32>,
+    battery_power_watts: Option<i64>,
+    battery_energy_wh: Option<i64>,
+    /// Identity of the devices the source reads.
+    #[serde(default)]
+    devices: Vec<ReportedDeviceBody>,
     /// Short text from the source, at most 30 characters.
     message: Option<String>,
     source_reference: Option<String>,
@@ -74,6 +82,37 @@ struct ObservationBody {
     /// stored apart from the system's telemetry.
     #[serde(default)]
     test: bool,
+}
+
+/// What a source reports about one of its devices. An absent member leaves
+/// what is already known untouched.
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReportedDeviceBody {
+    /// The source's identifier of the device; for an inverter its serial number.
+    id: String,
+    kind: Option<String>,
+    family_id: Option<String>,
+    configured_name: Option<String>,
+    reported_name: Option<String>,
+    model: Option<String>,
+    firmware: Option<String>,
+    transport: Option<String>,
+}
+
+impl From<ReportedDeviceBody> for ReportedDevice {
+    fn from(body: ReportedDeviceBody) -> Self {
+        Self {
+            id: body.id,
+            kind: body.kind,
+            family_id: body.family_id,
+            configured_name: body.configured_name,
+            reported_name: body.reported_name,
+            model: body.model,
+            firmware: body.firmware,
+            transport: body.transport,
+        }
+    }
 }
 
 #[derive(Clone, Deserialize)]
@@ -367,9 +406,16 @@ fn command(
         }),
         voltage_millivolts: body.voltage_millivolts,
         temperature_millidegrees_celsius: body.temperature_millidegrees_celsius,
-        battery_energy: None,
-        battery_power: None,
-        battery_state_of_charge_basis_points: None,
+        battery_energy: body.battery_energy_wh.map(|value| EnergyInput {
+            value,
+            unit: pvlog_application::EnergyUnit::WattHours,
+            cumulative: false,
+            reset_sequence: 0,
+        }),
+        battery_power: body
+            .battery_power_watts
+            .map(|value| (value, PowerUnit::Watts)),
+        battery_state_of_charge_basis_points: body.battery_state_of_charge_basis_points,
         battery_flow_state: BatteryFlowState::Unknown,
         extended: BTreeMap::new(),
         registered_channels: BTreeSet::new(),
@@ -382,6 +428,7 @@ fn command(
             grid_import_energy_wh: body.grid_import_energy_wh,
             grid_export_energy_wh: body.grid_export_energy_wh,
             message: body.message,
+            devices: body.devices.into_iter().map(Into::into).collect(),
         },
         source: ObservationSource {
             kind: ObservationSourceKind::ModernApi,

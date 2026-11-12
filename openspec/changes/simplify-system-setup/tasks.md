@@ -69,7 +69,7 @@ Groups 1–5 fix the setup and navigation and can ship without groups 6–9. Gro
 ## 8. smalog and SBFspot parity
 
 - [x] 8.1 Define the smalog profile with the shared SMA key scheme, status-code labels and the `[pvlog]` configuration snippet; verify that each key registers with its documented unit, scale, target kind and aggregation and that the snippet contains no cleartext key outside the environment line.
-- [ ] 8.2 Accept system and per-device battery measurements and device identity, write the existing battery columns, and update a matched inverter's model and firmware; verify the battery, out-of-range and firmware-change scenarios with tests.
+- [x] 8.2 Accept system and per-device battery measurements and device identity, write the existing battery columns, and update a matched inverter's model and firmware; verify the battery, out-of-range and firmware-change scenarios with tests.
 - [ ] 8.3 Accept per-device daily summaries with lifetime counter and completeness flag and apply the complete-supplied, computed, incomplete-supplied precedence; verify both daily-value-precedence scenarios with tests on both databases.
 - [ ] 8.4 Extend device events with source event identifier, type, category, group, message, old and new value and user group; verify idempotency per device and event identifier and that old and new values read back.
 - [ ] 8.5 Store archive energy samples that have no live measurement and include them in derived interval energy; verify the archive-sample scenario with a test.

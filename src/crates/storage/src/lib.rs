@@ -99,7 +99,8 @@ pub use discovery_repository::PostgresDiscoveryRepository;
 #[cfg(feature = "sqlite")]
 pub use discovery_repository::SqliteDiscoveryRepository;
 pub use discovery_repository::{
-    DiscoveredDeviceRecord, DiscoveryProposalRecord, DiscoveryRepository,
+    DiscoveredDeviceRecord, DiscoveryProposalRecord, DiscoveryRepository, ReportedDeviceRecord,
+    StoredReportedDevice,
 };
 #[cfg(feature = "postgres")]
 pub use external_identity_repository::PostgresExternalIdentityRepository;
