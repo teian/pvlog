@@ -89,6 +89,27 @@ async fn an_upload_key_supplies_a_summary_for_its_system() -> Result<(), Box<dyn
     assert_eq!(summary.date, "2026-06-10");
     assert!(summary.complete);
     assert_eq!(summary.import_energy_wh_by_band.get("offPeak"), Some(&800));
+    assert_eq!(summary.device_id, None);
+    drop(stored);
+
+    // The yield of one inverter, with its lifetime counter.
+    let (status, _) = send(
+        app(api_key(ApiScope::TelemetryWrite, Some(system)), &supplied),
+        Method::PUT,
+        format!("/api/v1/systems/{system}/daily-summaries/2026-06-10"),
+        Some(serde_json::json!({
+            "deviceId": "2000123456",
+            "generationEnergyWh": 5_200,
+            "generationLifetimeWh": 10_000_000,
+            "complete": true,
+        })),
+    )
+    .await?;
+    assert_eq!(status, StatusCode::OK);
+    let stored = supplied.lock().map_err(|_| "poisoned")?;
+    let (_, summary) = stored.last().ok_or("the summary reached the service")?;
+    assert_eq!(summary.device_id.as_deref(), Some("2000123456"));
+    assert_eq!(summary.generation_lifetime_wh, Some(10_000_000));
     Ok(())
 }
 
@@ -103,6 +124,11 @@ async fn a_rejected_member_is_named() -> Result<(), Box<dyn Error>> {
             "generationEnergyWh",
         ),
         ("2026-13-01", serde_json::json!({}), "date"),
+        (
+            "2026-06-10",
+            serde_json::json!({ "deviceId": "roof inverter" }),
+            "deviceId",
+        ),
         (
             "2026-06-10",
             serde_json::json!({ "peakTime": "noon" }),
@@ -238,6 +264,7 @@ fn value(date: String, basis: DayBasis, generation: Option<i64>) -> DailyValueRe
         consumption_energy_wh: None,
         export_energy_wh: None,
         supplied: None,
+        supplied_devices: Vec::new(),
         computed: None,
     }
 }

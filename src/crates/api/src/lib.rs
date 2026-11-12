@@ -87,7 +87,7 @@ pub use connectors::{
 };
 pub use daily_summaries::{
     ComputedSummaryResponse, DailySummaryApiError, DailySummaryApiUseCases, DailyValueResponse,
-    SummarySource, SuppliedSummaryResponse, daily_summaries_router,
+    SummarySource, SuppliedDeviceSummaryResponse, SuppliedSummaryResponse, daily_summaries_router,
 };
 pub use dashboard::{
     DashboardAlertResponse, DashboardApiError, DashboardApiUseCases, DashboardIngestionResponse,

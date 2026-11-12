@@ -3,6 +3,8 @@
 
 use serde::Serialize;
 
+use crate::device_identity::MAXIMUM_DEVICE_ID_CHARACTERS;
+
 /// Share of the expected readings of a day from which the computed value is
 /// trusted over a summary the source has not yet marked complete.
 pub const SUFFICIENT_DAILY_COVERAGE_BASIS_POINTS: u16 = 8_000;
@@ -88,6 +90,9 @@ pub const MAXIMUM_WEATHER_CONDITION_CHARACTERS: usize = 40;
 pub struct SuppliedDailySummary {
     /// Local calendar date in the system's timezone, as `YYYY-MM-DD`.
     pub date: String,
+    /// The device the summary describes, as its source names it; for an
+    /// inverter its serial number. `None` for a summary of the whole system.
+    pub device_id: Option<String>,
     pub generation_energy_wh: Option<i64>,
     pub export_energy_wh: Option<i64>,
     pub consumption_energy_wh: Option<i64>,
@@ -116,6 +121,15 @@ impl SuppliedDailySummary {
             || self.date.len() != 10
         {
             return Err("date");
+        }
+        if self.device_id.as_ref().is_some_and(|id| {
+            id.is_empty()
+                || id.len() > MAXIMUM_DEVICE_ID_CHARACTERS
+                || !id
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-' || byte == b'_')
+        }) {
+            return Err("deviceId");
         }
         for (value, field) in [
             (self.generation_energy_wh, "generationEnergyWh"),

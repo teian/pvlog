@@ -9,7 +9,7 @@ use std::{collections::BTreeMap, sync::Arc};
 use async_trait::async_trait;
 use pvlog_api::{
     ComputedSummaryResponse, DailySummaryApiError, DailySummaryApiUseCases, DailyValueResponse,
-    SummarySource, SuppliedSummaryResponse,
+    SummarySource, SuppliedDeviceSummaryResponse, SuppliedSummaryResponse,
 };
 use pvlog_application::{
     Clock, ComputedDay, DayBasis, DayEnergy, SuppliedDailySummary, SuppliedDay, effective_day,
@@ -29,8 +29,58 @@ pub struct DailyValue {
     pub date: String,
     pub basis: DayBasis,
     pub energy: DayEnergy,
+    /// The summary of the whole system: the one a source supplied, or the sum
+    /// of the summaries it supplied for its devices.
     pub supplied: Option<SourceDailySummaryRecord>,
+    /// The device summaries `supplied` adds up; empty when the source
+    /// summarized the system itself.
+    pub supplied_devices: Vec<SourceDailySummaryRecord>,
     pub computed: Option<ComputedDailySummaryRecord>,
+}
+
+/// Adds up the summaries one source supplied for its devices on one day.
+///
+/// Energy and lifetime counters are sums over the devices that reported them;
+/// a lifetime sum exists only when every device reported its counter. The day
+/// is complete once every device summary is. A peak and weather belong to one
+/// device or to the site and are not combined.
+fn device_sum(devices: &[SourceDailySummaryRecord]) -> Option<SourceDailySummaryRecord> {
+    let first = devices.first()?;
+    let sum = |value: fn(&SourceDailySummaryRecord) -> Option<i64>| {
+        devices
+            .iter()
+            .filter_map(value)
+            .fold(None, |total: Option<i64>, part| {
+                Some(total.unwrap_or_default().saturating_add(part))
+            })
+    };
+    Some(SourceDailySummaryRecord {
+        system_id: first.system_id,
+        source_key: first.source_key.clone(),
+        device_key: String::new(),
+        local_date: first.local_date.clone(),
+        data_source_id: first.data_source_id,
+        generation_energy_wh: sum(|record| record.generation_energy_wh),
+        export_energy_wh: sum(|record| record.export_energy_wh),
+        consumption_energy_wh: sum(|record| record.consumption_energy_wh),
+        generation_lifetime_wh: devices
+            .iter()
+            .all(|record| record.generation_lifetime_wh.is_some())
+            .then(|| sum(|record| record.generation_lifetime_wh))
+            .flatten(),
+        complete: devices.iter().all(|record| record.complete),
+        peak_power_watts: None,
+        peak_time: None,
+        weather_condition: None,
+        temperature_min_millidegrees_c: None,
+        temperature_max_millidegrees_c: None,
+        import_energy_by_band: serde_json::json!({}),
+        received_at: devices
+            .iter()
+            .map(|record| record.received_at)
+            .max()
+            .unwrap_or(first.received_at),
+    })
 }
 
 /// The repositories of one account that daily values are read from.
@@ -116,8 +166,9 @@ pub async fn daily_repositories(
 /// Reads the days in `from..=to` that have a supplied or a computed value and
 /// decides for each which one it reports.
 ///
-/// Only summaries of the whole system take part; summaries of single devices
-/// are stored but not yet summed.
+/// A source that summarizes its devices instead of the system takes part
+/// with the sum of those summaries. A summary of the system itself wins over
+/// such a sum of the same standing.
 ///
 /// # Errors
 ///
@@ -129,22 +180,35 @@ pub async fn daily_values(
     to: &str,
 ) -> Result<Vec<DailyValue>, DailySummaryApiError> {
     let unavailable = |_| DailySummaryApiError::Unavailable;
-    let mut supplied: BTreeMap<String, SourceDailySummaryRecord> = BTreeMap::new();
-    for record in summaries
+    let (of_devices, of_systems): (Vec<_>, Vec<_>) = summaries
         .source_summaries(system_id, from, to)
         .await
         .map_err(unavailable)?
-    {
-        if !record.device_key.is_empty() {
-            continue;
-        }
+        .into_iter()
+        .partition(|record| !record.device_key.is_empty());
+    let mut by_source: BTreeMap<(String, String), Vec<SourceDailySummaryRecord>> = BTreeMap::new();
+    for record in of_devices {
+        by_source
+            .entry((record.local_date.clone(), record.source_key.clone()))
+            .or_default()
+            .push(record);
+    }
+    // Device sums come first, so that among summaries of the same standing a
+    // summary of the system itself is the one kept.
+    let candidates = by_source
+        .into_values()
+        .filter_map(|devices| Some((device_sum(&devices)?, devices)))
+        .chain(of_systems.into_iter().map(|record| (record, Vec::new())));
+    let mut supplied: BTreeMap<String, (SourceDailySummaryRecord, Vec<SourceDailySummaryRecord>)> =
+        BTreeMap::new();
+    for (record, devices) in candidates {
         // Several sources may describe the same day. A complete summary beats
         // an incomplete one; among equals the one received last is kept, which
         // is the order the records arrive in.
         match supplied.get(&record.local_date) {
-            Some(kept) if kept.complete && !record.complete => {}
+            Some((kept, _)) if kept.complete && !record.complete => {}
             _ => {
-                supplied.insert(record.local_date.clone(), record);
+                supplied.insert(record.local_date.clone(), (record, devices));
             }
         }
     }
@@ -160,7 +224,7 @@ pub async fn daily_values(
     Ok(dates
         .into_iter()
         .filter_map(|date| {
-            let supplied = supplied.remove(&date);
+            let (supplied, supplied_devices) = supplied.remove(&date).unzip();
             let computed = computed.remove(&date);
             let (energy, basis) = effective_day(
                 computed.as_ref().map(|record| ComputedDay {
@@ -188,6 +252,7 @@ pub async fn daily_values(
                 basis,
                 energy,
                 supplied,
+                supplied_devices: supplied_devices.unwrap_or_default(),
                 computed,
             })
         })
@@ -241,7 +306,7 @@ impl DailySummaryApiUseCases for StorageDailySummaryApi {
             .save_source_summary(&SourceDailySummaryRecord {
                 system_id,
                 source_key: data_source.map_or(source.identity, |id| id.to_string()),
-                device_key: String::new(),
+                device_key: summary.device_id.clone().unwrap_or_default(),
                 local_date: summary.date.clone(),
                 data_source_id: data_source,
                 generation_energy_wh: summary.generation_energy_wh,
@@ -315,6 +380,17 @@ fn response(value: DailyValue) -> DailyValueResponse {
                 .unwrap_or_default(),
             received_at_epoch_millis: record.received_at,
         }),
+        supplied_devices: value
+            .supplied_devices
+            .into_iter()
+            .map(|record| SuppliedDeviceSummaryResponse {
+                device_id: record.device_key,
+                generation_energy_wh: record.generation_energy_wh,
+                generation_lifetime_wh: record.generation_lifetime_wh,
+                complete: record.complete,
+                received_at_epoch_millis: record.received_at,
+            })
+            .collect(),
         computed: value.computed.map(|record| ComputedSummaryResponse {
             generation_energy_wh: record.generation_energy_wh,
             consumption_energy_wh: record.consumption_energy_wh,

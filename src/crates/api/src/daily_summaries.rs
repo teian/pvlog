@@ -29,8 +29,12 @@ pub struct DailyValueResponse {
     pub generation_energy_wh: Option<i64>,
     pub consumption_energy_wh: Option<i64>,
     pub export_energy_wh: Option<i64>,
-    /// The summary a source supplied for the day, when there is one.
+    /// The summary a source supplied for the day, when there is one. When the
+    /// source summarizes its devices instead of the system, this is their sum.
     pub supplied: Option<SuppliedSummaryResponse>,
+    /// The summaries of single devices that `supplied` adds up.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub supplied_devices: Vec<SuppliedDeviceSummaryResponse>,
     /// The value computed from interval readings, when there is one. It stays
     /// available also while the supplied summary is the one reported.
     pub computed: Option<ComputedSummaryResponse>,
@@ -52,6 +56,19 @@ pub struct SuppliedSummaryResponse {
     pub temperature_min_millidegrees_celsius: Option<i64>,
     pub temperature_max_millidegrees_celsius: Option<i64>,
     pub import_energy_wh_by_band: BTreeMap<String, i64>,
+    pub received_at_epoch_millis: i64,
+}
+
+/// The daily summary of one device as its source supplied it.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuppliedDeviceSummaryResponse {
+    /// The device as the source names it; for an inverter its serial number.
+    pub device_id: String,
+    pub generation_energy_wh: Option<i64>,
+    /// Lifetime generation counter of the device at the end of the day.
+    pub generation_lifetime_wh: Option<i64>,
+    pub complete: bool,
     pub received_at_epoch_millis: i64,
 }
 
@@ -121,6 +138,8 @@ pub fn daily_summaries_router(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SummaryBody {
+    /// The device the summary describes; absent for the whole system.
+    device_id: Option<String>,
     generation_energy_wh: Option<i64>,
     export_energy_wh: Option<i64>,
     consumption_energy_wh: Option<i64>,
@@ -178,6 +197,7 @@ async fn supply(
         .account_id;
     let summary = SuppliedDailySummary {
         date,
+        device_id: body.device_id,
         generation_energy_wh: body.generation_energy_wh,
         export_energy_wh: body.export_energy_wh,
         consumption_energy_wh: body.consumption_energy_wh,

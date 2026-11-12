@@ -1978,7 +1978,7 @@ paths:
     put:
       operationId: supplyDailySummary
       summary: Supply a daily summary
-      description: Stores the summary a source reports for one local date. Supplying a summary again for the same date replaces the earlier one of the same source, so a running day can be updated until it is marked complete. The summary is kept next to the value computed from interval readings; the response states which of the two the day reports.
+      description: Stores the summary a source reports for one local date. Supplying a summary again for the same date replaces the earlier one of the same source and device, so a running day can be updated until it is marked complete. The summary is kept next to the value computed from interval readings; the response states which of the two the day reports.
       tags: [Telemetry]
       security: [{ bearerAuth: [telemetry:write] }]
       requestBody:
@@ -6139,6 +6139,12 @@ components:
       additionalProperties: false
       description: A daily summary as a source reports it. Every member is optional; an absent member means that the value is unknown.
       properties:
+        deviceId:
+          type: string
+          minLength: 1
+          maxLength: 64
+          pattern: "^[A-Za-z0-9_-]+$"
+          description: "The device the summary describes, as the source names it; for an inverter its serial number. Absent for a summary of the whole system. The summaries a source supplies for its devices are added up to the day's value, which is complete once every one of them is."
         generationEnergyWh: { type: integer, format: int64, minimum: 0 }
         exportEnergyWh: { type: integer, format: int64, minimum: 0 }
         consumptionEnergyWh: { type: integer, format: int64, minimum: 0 }
@@ -6182,7 +6188,7 @@ components:
         consumptionEnergyWh: { type: [integer, "null"], format: int64 }
         exportEnergyWh: { type: [integer, "null"], format: int64 }
         supplied:
-          description: The summary a source supplied for the day.
+          description: The summary a source supplied for the day. For a source that summarizes its devices it is the sum of their summaries, with a lifetime counter only when every device reported one.
           anyOf:
             - allOf:
                 - $ref: "#/components/schemas/DailySummaryInput"
@@ -6194,6 +6200,21 @@ components:
                         - type: "null"
                     receivedAtEpochMillis: { type: integer, format: int64 }
             - type: "null"
+        suppliedDevices:
+          type: array
+          description: The summaries of single devices that supplied adds up. Absent when the source summarized the system itself.
+          items:
+            type: object
+            required: [deviceId, complete, receivedAtEpochMillis]
+            properties:
+              deviceId: { type: string }
+              generationEnergyWh: { type: [integer, "null"], format: int64 }
+              generationLifetimeWh:
+                type: [integer, "null"]
+                format: int64
+                description: Lifetime generation counter of the device at the end of the day.
+              complete: { type: boolean }
+              receivedAtEpochMillis: { type: integer, format: int64 }
         computed:
           description: The value computed from interval readings. It stays available while the supplied summary is the one reported.
           anyOf:

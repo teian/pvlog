@@ -1348,6 +1348,206 @@ async fn daily_summaries(fixture: Fixture) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Stores a day as the aggregation would compute it from interval readings.
+async fn computed_day(
+    fixture: &Fixture,
+    date: &str,
+    generation: i64,
+    coverage_basis_points: i32,
+) -> Result<(), Box<dyn Error>> {
+    if let Some(account) = &fixture.sqlite {
+        let mut writer = account.acquire_writer().await?;
+        sqlx::query(
+            "INSERT INTO system_daily_summaries (system_id,local_date,timezone,\
+             generation_energy_wh,coverage_basis_points,calculated_at) VALUES (?,?,?,?,?,?)",
+        )
+        .bind(fixture.system_id.as_uuid().as_bytes().to_vec())
+        .bind(date)
+        .bind("Europe/Berlin")
+        .bind(generation)
+        .bind(coverage_basis_points)
+        .bind(START)
+        .execute(writer.connection())
+        .await?;
+    } else {
+        use sqlx::Connection as _;
+        let url = fixture.postgres_url.as_deref().ok_or("no database")?;
+        let mut connection = sqlx::PgConnection::connect(url).await?;
+        sqlx::query(
+            "INSERT INTO telemetry.daily_summaries (account_id,system_id,local_date,timezone,\
+             generation_energy_wh,coverage_basis_points,calculated_at) \
+             VALUES ($1,$2,$3::date,$4,$5,$6,$7)",
+        )
+        .bind(fixture.account_id.as_uuid())
+        .bind(fixture.system_id.as_uuid())
+        .bind(date)
+        .bind("Europe/Berlin")
+        .bind(generation)
+        .bind(coverage_basis_points)
+        .bind(START)
+        .execute(&mut connection)
+        .await?;
+        connection.close().await?;
+    }
+    Ok(())
+}
+
+/// The daily yield one inverter reports, with its lifetime counter.
+fn device_yield(
+    date: &str,
+    serial: &str,
+    generation: i64,
+    lifetime: i64,
+    complete: bool,
+) -> SuppliedDailySummary {
+    SuppliedDailySummary {
+        date: date.to_owned(),
+        device_id: Some(serial.to_owned()),
+        generation_energy_wh: Some(generation),
+        generation_lifetime_wh: Some(lifetime),
+        complete,
+        ..SuppliedDailySummary::default()
+    }
+}
+
+#[allow(clippy::too_many_lines)]
+async fn device_daily_summaries(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    let failed = |error: DailySummaryApiError| format!("daily summary failed: {error:?}");
+    let summaries = StorageDailySummaryApi::new(fixture.target.clone(), clock());
+    let reporting = StorageReportingApi::new(fixture.target.clone());
+    let source = || SummarySource {
+        credential_id: None,
+        identity: "user:logger".to_owned(),
+    };
+    let (account_id, system_id) = (fixture.account_id, fixture.system_id);
+    let supply = |summary: SuppliedDailySummary| {
+        let summaries = &summaries;
+        async move {
+            summaries
+                .supply(account_id, system_id, source(), summary)
+                .await
+        }
+    };
+    let (complete_day, mixed_day, sparse_day) = ("2026-07-01", "2026-07-02", "2026-07-03");
+    // Readings cover the first two days well and the third hardly at all.
+    computed_day(&fixture, complete_day, 9_000, 9_500).await?;
+    computed_day(&fixture, mixed_day, 8_000, 9_500).await?;
+    computed_day(&fixture, sparse_day, 100, 1_000).await?;
+
+    // Complete yields of both inverters: their sum is the day's generation,
+    // and what the readings add up to stays retrievable.
+    supply(device_yield(complete_day, ROOF, 5_200, 10_000_000, true))
+        .await
+        .map_err(failed)?;
+    let day = supply(device_yield(complete_day, GARAGE, 4_100, 2_000_000, true))
+        .await
+        .map_err(failed)?;
+    assert_eq!(day.basis, DayBasis::SuppliedComplete);
+    assert_eq!(day.generation_energy_wh, Some(9_300));
+    assert_eq!(
+        day.computed.as_ref().and_then(|c| c.generation_energy_wh),
+        Some(9_000)
+    );
+    let sum = day.supplied.as_ref().ok_or("the sum is returned")?;
+    assert_eq!(sum.generation_lifetime_wh, Some(12_000_000));
+    assert!(sum.complete);
+    assert_eq!(
+        day.supplied_devices
+            .iter()
+            .map(|device| (
+                device.device_id.as_str(),
+                device.generation_energy_wh,
+                device.generation_lifetime_wh,
+                device.complete
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (ROOF, Some(5_200), Some(10_000_000), true),
+            (GARAGE, Some(4_100), Some(2_000_000), true),
+        ]
+    );
+
+    // One inverter has not closed its day: the summary is not complete, and
+    // the readings cover the day, so the computed value is the one reported.
+    supply(device_yield(mixed_day, ROOF, 3_000, 10_003_000, true))
+        .await
+        .map_err(failed)?;
+    let day = supply(device_yield(mixed_day, GARAGE, 2_000, 2_002_000, false))
+        .await
+        .map_err(failed)?;
+    assert_eq!(day.basis, DayBasis::Computed);
+    assert_eq!(day.generation_energy_wh, Some(8_000));
+    let sum = day.supplied.as_ref().ok_or("the sum is returned")?;
+    assert_eq!(
+        (sum.generation_energy_wh, sum.complete),
+        (Some(5_000), false)
+    );
+
+    // Without sufficient readings the incomplete summary is all there is.
+    let day = supply(device_yield(sparse_day, ROOF, 700, 10_003_700, false))
+        .await
+        .map_err(failed)?;
+    assert_eq!(day.basis, DayBasis::SuppliedIncomplete);
+    assert_eq!(day.generation_energy_wh, Some(700));
+
+    // The open day matures: the resubmission replaces the device's summary.
+    let day = supply(device_yield(mixed_day, GARAGE, 4_500, 2_004_500, true))
+        .await
+        .map_err(failed)?;
+    assert_eq!(day.basis, DayBasis::SuppliedComplete);
+    assert_eq!(day.generation_energy_wh, Some(7_500));
+    assert_eq!(day.supplied_devices.len(), 2, "no summary is duplicated");
+
+    let statistics = reporting.statistics(account_id, system_id).await?;
+    // This fixture has no lifetime total from readings, so the statistics
+    // show only what the supplied days change against their computed values.
+    assert_eq!(
+        statistics.generation_energy_wh,
+        Some((9_300 - 9_000) + (7_500 - 8_000) + (700 - 100)),
+        "a supplied day replaces what was computed for it instead of adding to it"
+    );
+
+    // A device without a lifetime counter leaves the lifetime sum unknown.
+    let day = supply(SuppliedDailySummary {
+        generation_lifetime_wh: None,
+        ..device_yield(sparse_day, GARAGE, 300, 0, false)
+    })
+    .await
+    .map_err(failed)?;
+    assert_eq!(day.generation_energy_wh, Some(1_000));
+    assert_eq!(
+        day.supplied.as_ref().and_then(|s| s.generation_lifetime_wh),
+        None
+    );
+
+    // A summary of the whole system from the same source wins over the sum.
+    let day = supply(summary(complete_day, 9_999, true))
+        .await
+        .map_err(failed)?;
+    assert_eq!(day.generation_energy_wh, Some(9_999));
+    assert!(day.supplied_devices.is_empty());
+
+    assert_eq!(
+        supply(device_yield(sparse_day, "not a serial", 1, 1, false)).await,
+        Err(DailySummaryApiError::InvalidField("deviceId"))
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_reports_device_yields_by_precedence() -> Result<(), Box<dyn Error>> {
+    device_daily_summaries(Fixture::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_reports_device_yields_by_precedence_when_configured() -> Result<(), Box<dyn Error>>
+{
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    device_daily_summaries(Fixture::postgres(url).await?).await
+}
+
 #[tokio::test]
 async fn sqlite_includes_supplied_daily_summaries_in_statistics() -> Result<(), Box<dyn Error>> {
     daily_summaries(Fixture::sqlite().await?).await
