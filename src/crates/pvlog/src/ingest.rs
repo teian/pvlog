@@ -27,7 +27,7 @@ use pvlog_storage::{
     DeviceEventRecord, DeviceEventRepository, DiscoveredDeviceRecord, ENERGY_SAMPLE_ORIGIN,
     EnergySampleRecord, INGESTION_SOURCE_KIND, IngestRepository, IngestionMarkRecord,
     ManagementRepository, ObservationUpsert, ReportedDeviceRecord, SourceDailySummaryRecord,
-    StoredMeasurements, StoredObservation, TelemetryRepository, UpsertOutcome,
+    StoredMeasurements, StoredObservation, StoredReading, TelemetryRepository, UpsertOutcome,
 };
 use uuid::Uuid;
 
@@ -62,7 +62,7 @@ struct Channel {
 
 /// Counters the readings of a source carried last, which the next reading's
 /// interval energy is measured against.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct Baseline {
     /// Lifetime counters of the devices of the previous reading that had any.
     devices: Option<LifetimeCounters>,
@@ -470,42 +470,182 @@ fn reading(
         .zip(measurements.grid_export_power_watts)
         .map(|(import, export)| import - export);
 
-    // What the logger states for the system wins; otherwise the counters of
-    // the devices say what the system generated since the reading before.
-    let derived = derive_generation(&counters, baseline.devices.as_ref());
-    if measurements.generation_lifetime_wh.is_none() {
-        measurements.generation_lifetime_wh = derived.lifetime_wh;
-        if generation_energy.is_none() && derived.energy_wh.is_some() {
-            generation_energy = derived.energy_wh;
-            flags = flags | QualityFlags::DERIVED;
-        }
-        if derived.counter_reset {
-            flags = flags | QualityFlags::COUNTER_RESET;
-        }
-    } else if generation_energy.is_none() {
-        let (energy, reset) = counter_energy(
-            measurements.generation_lifetime_wh,
-            baseline.generation_lifetime_wh,
-        );
-        generation_energy = energy;
-        flags = match (energy, reset) {
-            (Some(_), _) => flags | QualityFlags::DERIVED,
-            (None, true) => flags | QualityFlags::COUNTER_RESET,
-            (None, false) => flags,
-        };
+    let derivation = Derivation {
+        generation: generation_energy.is_none(),
+        consumption: consumption_energy.is_none(),
+        generation_counter: if measurements.generation_lifetime_wh.is_none() {
+            GenerationCounter::Devices
+        } else {
+            GenerationCounter::System
+        },
+    };
+    let energy = derive_energy(
+        derivation,
+        &counters,
+        &measurements,
+        (generation_energy, consumption_energy),
+        baseline,
+    );
+    measurements.generation_lifetime_wh = energy.generation_lifetime_wh;
+    generation_energy = energy.generation_wh;
+    consumption_energy = energy.consumption_wh;
+    flags = flags | energy.flags;
+    advance(baseline, counters, &measurements);
+
+    let channel_values: Vec<(ChannelId, i64)> = values.into_iter().collect();
+    let mut provenance = serde_json::json!({ "sourceKind": INGESTION_SOURCE_KIND });
+    if fills_gap {
+        provenance["origin"] = ENERGY_SAMPLE_ORIGIN.into();
     }
-    if consumption_energy.is_none() {
-        let (energy, reset) = counter_energy(
+    provenance[DERIVATION] = derivation.to_json();
+    let mut observation = StoredObservation {
+        id: ObservationId::new(),
+        system_id,
+        measured_at,
+        received_at,
+        source_kind: INGESTION_SOURCE_KIND.to_owned(),
+        source_identity: source.key.clone(),
+        idempotency_identity: None,
+        quality_flags: i32::from(flags.bits()),
+        generation_power_watts: generation_power,
+        generation_energy_wh: generation_energy,
+        consumption_power_watts: consumption_power,
+        consumption_energy_wh: consumption_energy,
+        provenance,
+        canonical_hash: [0; 32],
+        version: 1,
+        data_source_id: source.data_source_id,
+        measurements,
+    };
+    observation.canonical_hash = reading_hash(&observation, &channel_values, fills_gap);
+    ObservationUpsert {
+        observation,
+        channel_values,
+        fills_gap,
+    }
+}
+
+/// Provenance member that records how the interval energy of a reading is
+/// derived, so that it can be derived again when earlier readings arrive later.
+const DERIVATION: &str = "energyDerivation";
+
+/// The counter the generated energy of a reading is derived from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum GenerationCounter {
+    /// The lifetime counters of the devices.
+    Devices,
+    /// The lifetime counter the logger stated for the system.
+    System,
+}
+
+/// Which interval energy of a reading the logger left to be derived, and from
+/// which counter.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct Derivation {
+    generation: bool,
+    consumption: bool,
+    generation_counter: GenerationCounter,
+}
+
+impl Derivation {
+    fn to_json(self) -> serde_json::Value {
+        serde_json::json!({
+            "generation": self.generation,
+            "consumption": self.consumption,
+            "generationCounter": match self.generation_counter {
+                GenerationCounter::Devices => "devices",
+                GenerationCounter::System => "system",
+            },
+        })
+    }
+
+    /// Reads what a stored reading recorded; a reading without the record is
+    /// never derived again.
+    fn of(provenance: &serde_json::Value) -> Option<Self> {
+        let record = provenance.get(DERIVATION)?;
+        Some(Self {
+            generation: record.get("generation")?.as_bool()?,
+            consumption: record.get("consumption")?.as_bool()?,
+            generation_counter: match record.get("generationCounter")?.as_str()? {
+                "devices" => GenerationCounter::Devices,
+                "system" => GenerationCounter::System,
+                _ => return None,
+            },
+        })
+    }
+}
+
+/// The energy values of a reading after derivation.
+struct DerivedEnergy {
+    generation_lifetime_wh: Option<i64>,
+    generation_wh: Option<i64>,
+    consumption_wh: Option<i64>,
+    /// `DERIVED` and `COUNTER_RESET` as the derivation found them.
+    flags: QualityFlags,
+}
+
+/// Derives the interval energy the logger did not state from the counters of
+/// the reading and those of the reading before. What the logger states for
+/// the system wins; otherwise the counters of the devices say what the system
+/// generated since the reading before.
+fn derive_energy(
+    derivation: Derivation,
+    counters: &LifetimeCounters,
+    measurements: &StoredMeasurements,
+    (generation_wh, consumption_wh): (Option<i64>, Option<i64>),
+    baseline: &Baseline,
+) -> DerivedEnergy {
+    let mut energy = DerivedEnergy {
+        generation_lifetime_wh: measurements.generation_lifetime_wh,
+        generation_wh,
+        consumption_wh,
+        flags: QualityFlags::NONE,
+    };
+    match derivation.generation_counter {
+        GenerationCounter::Devices => {
+            let derived = derive_generation(counters, baseline.devices.as_ref());
+            energy.generation_lifetime_wh = derived.lifetime_wh;
+            if derivation.generation {
+                energy.generation_wh = derived.energy_wh;
+                if derived.energy_wh.is_some() {
+                    energy.flags = energy.flags | QualityFlags::DERIVED;
+                }
+            }
+            if derived.counter_reset {
+                energy.flags = energy.flags | QualityFlags::COUNTER_RESET;
+            }
+        }
+        GenerationCounter::System if derivation.generation => {
+            let (derived, reset) = counter_energy(
+                measurements.generation_lifetime_wh,
+                baseline.generation_lifetime_wh,
+            );
+            energy.generation_wh = derived;
+            energy.flags = energy.flags | derivation_flags(derived, reset);
+        }
+        GenerationCounter::System => {}
+    }
+    if derivation.consumption {
+        let (derived, reset) = counter_energy(
             measurements.consumption_lifetime_wh,
             baseline.consumption_lifetime_wh,
         );
-        consumption_energy = energy;
-        flags = match (energy, reset) {
-            (Some(_), _) => flags | QualityFlags::DERIVED,
-            (None, true) => flags | QualityFlags::COUNTER_RESET,
-            (None, false) => flags,
-        };
+        energy.consumption_wh = derived;
+        energy.flags = energy.flags | derivation_flags(derived, reset);
     }
+    energy
+}
+
+fn derivation_flags(energy: Option<i64>, reset: bool) -> QualityFlags {
+    match (energy, reset) {
+        (Some(_), _) => QualityFlags::DERIVED,
+        (None, true) => QualityFlags::COUNTER_RESET,
+        (None, false) => QualityFlags::NONE,
+    }
+}
+
+/// Moves the baseline on to a reading.
+fn advance(baseline: &mut Baseline, counters: LifetimeCounters, measurements: &StoredMeasurements) {
     if !counters.is_empty() {
         baseline.devices = Some(counters);
     }
@@ -515,17 +655,24 @@ fn reading(
     baseline.consumption_lifetime_wh = measurements
         .consumption_lifetime_wh
         .or(baseline.consumption_lifetime_wh);
+}
 
-    let channel_values: Vec<(ChannelId, i64)> = values.into_iter().collect();
-    let quality_flags = i32::from(flags.bits());
-    // The hash covers what a reader can see of the reading, so that a value
-    // that matured replaces its predecessor and an unchanged one does not.
-    let canonical_hash = *blake3::hash(
+/// The hash of what a reader can see of a reading, so that a value that
+/// matured replaces its predecessor and an unchanged one does not.
+fn reading_hash(
+    observation: &StoredObservation,
+    channel_values: &[(ChannelId, i64)],
+    fills_gap: bool,
+) -> [u8; 32] {
+    let measurements = &observation.measurements;
+    let mut channels: Vec<(ChannelId, i64)> = channel_values.to_vec();
+    channels.sort_unstable();
+    *blake3::hash(
         serde_json::json!({
-            "generationPowerWatts": generation_power,
-            "generationEnergyWh": generation_energy,
-            "consumptionPowerWatts": consumption_power,
-            "consumptionEnergyWh": consumption_energy,
+            "generationPowerWatts": observation.generation_power_watts,
+            "generationEnergyWh": observation.generation_energy_wh,
+            "consumptionPowerWatts": observation.consumption_power_watts,
+            "consumptionEnergyWh": observation.consumption_energy_wh,
             "generationLifetimeWh": measurements.generation_lifetime_wh,
             "consumptionLifetimeWh": measurements.consumption_lifetime_wh,
             "grid": [
@@ -542,9 +689,9 @@ fn reading(
             "temperature": measurements.temperature_millidegrees_c,
             "voltage": measurements.voltage_millivolts,
             "message": measurements.message,
-            "qualityFlags": quality_flags,
+            "qualityFlags": observation.quality_flags,
             "fillsGap": fills_gap,
-            "channels": channel_values
+            "channels": channels
                 .iter()
                 .map(|(channel, value)| (channel.to_string(), *value))
                 .collect::<Vec<_>>(),
@@ -552,37 +699,68 @@ fn reading(
         .to_string()
         .as_bytes(),
     )
-    .as_bytes();
-    ObservationUpsert {
-        observation: StoredObservation {
-            id: ObservationId::new(),
-            system_id,
-            measured_at,
-            received_at,
-            source_kind: INGESTION_SOURCE_KIND.to_owned(),
-            source_identity: source.key.clone(),
-            idempotency_identity: None,
+    .as_bytes()
+}
+
+/// The lifetime counters of a stored reading, by device.
+fn stored_counters(reading: &StoredReading) -> LifetimeCounters {
+    reading
+        .device_lifetime_wh
+        .iter()
+        .filter_map(|(key, value)| Some((device_channel(key)?.target.serial().to_owned(), *value)))
+        .collect()
+}
+
+/// Derives the interval energy of a stored reading again against the baseline
+/// and moves the baseline on to it. Returns the revised reading when its
+/// energy changed. Energy the logger stated is kept as it is.
+fn rederive(reading: &StoredReading, baseline: &mut Baseline) -> Option<ObservationUpsert> {
+    let stored = &reading.observation;
+    let counters = stored_counters(reading);
+    let derivation = Derivation::of(&stored.provenance);
+    let revised = derivation.and_then(|derivation| {
+        let energy = derive_energy(
+            derivation,
+            &counters,
+            &stored.measurements,
+            (
+                stored
+                    .generation_energy_wh
+                    .filter(|_| !derivation.generation),
+                stored
+                    .consumption_energy_wh
+                    .filter(|_| !derivation.consumption),
+            ),
+            baseline,
+        );
+        let derived_bits = i32::from((QualityFlags::DERIVED | QualityFlags::COUNTER_RESET).bits());
+        let quality_flags = (stored.quality_flags & !derived_bits) | i32::from(energy.flags.bits());
+        if energy.generation_wh == stored.generation_energy_wh
+            && energy.consumption_wh == stored.consumption_energy_wh
+            && quality_flags == stored.quality_flags
+        {
+            return None;
+        }
+        let fills_gap = stored
+            .provenance
+            .get("origin")
+            .and_then(serde_json::Value::as_str)
+            == Some(ENERGY_SAMPLE_ORIGIN);
+        let mut observation = StoredObservation {
+            generation_energy_wh: energy.generation_wh,
+            consumption_energy_wh: energy.consumption_wh,
             quality_flags,
-            generation_power_watts: generation_power,
-            generation_energy_wh: generation_energy,
-            consumption_power_watts: consumption_power,
-            consumption_energy_wh: consumption_energy,
-            provenance: if fills_gap {
-                serde_json::json!({
-                    "sourceKind": INGESTION_SOURCE_KIND,
-                    "origin": ENERGY_SAMPLE_ORIGIN,
-                })
-            } else {
-                serde_json::json!({ "sourceKind": INGESTION_SOURCE_KIND })
-            },
-            canonical_hash,
-            version: 1,
-            data_source_id: source.data_source_id,
-            measurements,
-        },
-        channel_values,
-        fills_gap,
-    }
+            ..stored.clone()
+        };
+        observation.canonical_hash = reading_hash(&observation, &reading.channel_values, fills_gap);
+        Some(ObservationUpsert {
+            observation,
+            channel_values: reading.channel_values.clone(),
+            fills_gap,
+        })
+    });
+    advance(baseline, counters, &stored.measurements);
+    revised
 }
 
 /// Counts what became of the items of a list.
@@ -696,30 +874,74 @@ impl IngestApiUseCases for StorageIngestApi {
             baseline.generation_lifetime_wh = latest.generation.map(|(_, value)| value);
             baseline.consumption_lifetime_wh = latest.consumption.map(|(_, value)| value);
 
+            // Readings stored earlier between and right after the moments of
+            // the request are measured against the moments before them, so
+            // that history delivered after live readings neither leaves the
+            // first live reading without energy nor counts a gap twice.
+            let last = moments.keys().next_back().copied().unwrap_or(first);
+            let stored: BTreeMap<i64, StoredReading> = repositories
+                .ingest
+                .readings_through(system_id, &source.key, first, last)
+                .await
+                .map_err(unavailable)?
+                .into_iter()
+                .map(|reading| (reading.observation.measured_at, reading))
+                .collect();
+            let times: BTreeSet<i64> = moments.keys().chain(stored.keys()).copied().collect();
             let mut rejected = Vec::new();
-            let readings: Vec<ObservationUpsert> = moments
-                .iter()
-                .map(|(at, moment)| {
-                    reading(
+            let mut readings = Vec::with_capacity(moments.len());
+            let mut revisions = Vec::new();
+            for at in times {
+                let held = stored.get(&at);
+                let Some(moment) = moments.get(&at) else {
+                    revisions.extend(held.and_then(|held| rederive(held, &mut baseline)));
+                    continue;
+                };
+                let live = held.filter(|held| {
+                    held.observation
+                        .provenance
+                        .get("origin")
+                        .and_then(serde_json::Value::as_str)
+                        != Some(ENERGY_SAMPLE_ORIGIN)
+                });
+                match live {
+                    // Samples never replace a live reading, which therefore
+                    // stays what the next reading is measured against.
+                    Some(live) if moment.measurement.is_none() => {
+                        readings.push(reading(
+                            system_id,
+                            &source,
+                            at,
+                            received_at,
+                            moment,
+                            &channels,
+                            &mut baseline.clone(),
+                            &mut rejected,
+                        ));
+                        revisions.extend(rederive(live, &mut baseline));
+                    }
+                    _ => readings.push(reading(
                         system_id,
                         &source,
-                        *at,
+                        at,
                         received_at,
                         moment,
                         &channels,
                         &mut baseline,
                         &mut rejected,
-                    )
-                })
-                .collect();
+                    )),
+                }
+            }
+            let count = readings.len();
+            readings.extend(revisions);
             let outcomes = repositories
                 .ingest
                 .upsert_observations(&readings)
                 .await
                 .map_err(unavailable)?;
             // Only measurements are counted; a reading built from samples is
-            // counted with its samples.
-            for (reading, outcome) in readings.iter().zip(outcomes) {
+            // counted with its samples, and a revised reading not at all.
+            for (reading, outcome) in readings.iter().zip(outcomes).take(count) {
                 if reading.fills_gap {
                     continue;
                 }

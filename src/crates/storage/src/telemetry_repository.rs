@@ -620,7 +620,7 @@ async fn sqlite_idempotency(
     row.map(|row| sqlite_idempotency_row(&row)).transpose()
 }
 #[cfg(feature = "sqlite")]
-fn sqlite_observation(
+pub(crate) fn sqlite_observation(
     r: &sqlx::sqlite::SqliteRow,
 ) -> Result<StoredObservation, TelemetryRepositoryError> {
     Ok(StoredObservation {
@@ -733,7 +733,7 @@ async fn pg_idempotency(
     row.map(|row| pg_idempotency_row(&row)).transpose()
 }
 #[cfg(feature = "postgres")]
-fn pg_observation(
+pub(crate) fn pg_observation(
     r: &sqlx::postgres::PgRow,
 ) -> Result<StoredObservation, TelemetryRepositoryError> {
     Ok(StoredObservation {

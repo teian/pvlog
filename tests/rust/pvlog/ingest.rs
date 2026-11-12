@@ -759,6 +759,15 @@ async fn archive_samples_fill_gaps(fixture: Fixture) -> Result<(), Box<dyn Error
     assert_eq!(replaced.id, filled.id);
     assert_eq!(replaced.generation_power_watts, Some(1_500));
     assert_eq!(replaced.generation_energy_wh, Some(81 + 41));
+    // What the samples filled in after it is measured against it.
+    assert_eq!(
+        fixture.reading(2).await?.generation_energy_wh,
+        Some(79 + 39)
+    );
+    assert_eq!(
+        fixture.reading(3).await?.generation_energy_wh,
+        Some(80 + 40)
+    );
     assert_eq!(fixture.readings(0, 4).await?.len(), 4);
 
     assert_eq!(
@@ -1233,6 +1242,77 @@ async fn the_contract_fixture_reads_back(fixture: Fixture) -> Result<(), Box<dyn
     Ok(())
 }
 
+/// History that arrives after live readings is measured against, and the live
+/// reading after it is measured again against the history, so that no energy
+/// is missing at the seam and none is counted twice across a gap.
+#[allow(clippy::too_many_lines)]
+async fn history_arrives_after_live_readings(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    // Step k of the logger: both inverters and the consumption meter count on.
+    let live = |step: i64| {
+        json!({
+            "measuredAt": START + step * STEP,
+            "system": { "consumptionLifetimeWh": 400 + 20 * step },
+            "devices": [
+                inverter(ROOF, 1_000, 10_000 + 100 * step),
+                inverter(GARAGE, 500, 2_000 + 50 * step),
+            ],
+        })
+    };
+    let send = |steps: std::ops::RangeInclusive<i64>| {
+        fixture.send(request(
+            json!({ "measurements": steps.map(live).collect::<Vec<_>>() }),
+        ))
+    };
+
+    // The logger delivers live readings first; the first has nothing to be
+    // measured against.
+    send(3..=4).await?;
+    let first_live = fixture.reading(3).await?;
+    assert_eq!(first_live.generation_energy_wh, None);
+    assert_eq!(first_live.consumption_energy_wh, None);
+
+    // Its stored history follows, and the first live reading is measured
+    // against the last reading of the history.
+    let history = send(0..=2).await?;
+    assert_eq!(counts(&history)[0], (3, 0));
+    let seam = fixture.reading(3).await?;
+    assert_eq!(seam.id, first_live.id);
+    assert_eq!(seam.generation_energy_wh, Some(100 + 50));
+    assert_eq!(seam.consumption_energy_wh, Some(20));
+    assert!(flagged(&seam, QualityFlags::DERIVED));
+    assert_eq!(fixture.reading(4).await?.generation_energy_wh, Some(150));
+    // Sending the live readings again finds them as they are stored.
+    assert_eq!(counts(&send(3..=4).await?)[0], (0, 2));
+
+    // After an outage the next live reading spans the gap ...
+    send(10..=10).await?;
+    assert_eq!(fixture.reading(10).await?.generation_energy_wh, Some(900));
+    assert_eq!(fixture.reading(10).await?.consumption_energy_wh, Some(120));
+    // ... until the history of the gap arrives; then the gap is not counted twice.
+    assert_eq!(counts(&send(5..=9).await?)[0], (5, 0));
+    assert_eq!(fixture.reading(10).await?.generation_energy_wh, Some(150));
+    assert_eq!(fixture.reading(10).await?.consumption_energy_wh, Some(20));
+    let total: i64 = fixture
+        .readings(1, 11)
+        .await?
+        .iter()
+        .filter_map(|reading| reading.generation_energy_wh)
+        .sum();
+    assert_eq!(total, 10 * 150);
+
+    // Energy the logger stated for a reading is kept as it was stated.
+    let mut stated = live(20);
+    stated["system"]["generationEnergyWh"] = json!(999);
+    fixture
+        .send(request(json!({ "measurements": [stated] })))
+        .await?;
+    send(19..=19).await?;
+    let kept = fixture.reading(20).await?;
+    assert_eq!(kept.generation_energy_wh, Some(999));
+    assert_eq!(kept.consumption_energy_wh, Some(20));
+    Ok(())
+}
+
 macro_rules! on_both_databases {
     ($($scenario:ident => $sqlite:ident, $postgres:ident;)*) => {$(
         #[tokio::test]
@@ -1275,6 +1355,9 @@ on_both_databases! {
     history_arrives_in_bulk =>
         sqlite_accepts_years_old_history_in_bulk,
         postgres_accepts_years_old_history_in_bulk_when_configured;
+    history_arrives_after_live_readings =>
+        sqlite_measures_live_readings_again_against_later_history,
+        postgres_measures_live_readings_again_against_later_history_when_configured;
 }
 
 fn clock() -> Arc<dyn Clock> {

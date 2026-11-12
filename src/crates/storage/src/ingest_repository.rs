@@ -64,6 +64,18 @@ pub struct DeviceCounters {
     pub lifetime_wh: BTreeMap<String, i64>,
 }
 
+/// A stored reading of a source together with the values of its measurement
+/// channels, as needed to derive its interval energy again.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StoredReading {
+    pub observation: StoredObservation,
+    /// Scaled values of the measurement channels of the reading.
+    pub channel_values: Vec<(ChannelId, i64)>,
+    /// Lifetime counters of the devices, in watt-hours by the channel key they
+    /// were stored under.
+    pub device_lifetime_wh: BTreeMap<String, i64>,
+}
+
 /// One archive energy sample of a device.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EnergySampleRecord {
@@ -119,6 +131,15 @@ pub trait IngestRepository: Send + Sync {
         source_identity: &str,
         before: i64,
     ) -> Result<Option<DeviceCounters>, TelemetryRepositoryError>;
+    /// Reads the readings of a source measured from `from` through `to` and
+    /// the first one after `to`, oldest first.
+    async fn readings_through(
+        &self,
+        system_id: SystemId,
+        source_identity: &str,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<StoredReading>, TelemetryRepositoryError>;
     /// Stores energy samples by device and time and returns how many were new
     /// or changed. Either all samples are stored or none.
     async fn save_energy_samples(
@@ -204,6 +225,46 @@ fn time_range(items: &[ObservationUpsert]) -> (i64, i64) {
         times().min().unwrap_or_default(),
         times().max().unwrap_or_default(),
     )
+}
+
+/// Joins stored readings with their channel values, given as
+/// `(observation, channel, channel key, value)`.
+fn stored_readings(
+    observations: Vec<StoredObservation>,
+    values: Vec<(Uuid, ChannelId, String, i64)>,
+) -> Vec<StoredReading> {
+    let mut by_observation: HashMap<Uuid, StoredReading> = HashMap::new();
+    let order: Vec<Uuid> = observations.iter().map(|o| o.id.as_uuid()).collect();
+    for observation in observations {
+        by_observation.insert(
+            observation.id.as_uuid(),
+            StoredReading {
+                observation,
+                channel_values: Vec::new(),
+                device_lifetime_wh: BTreeMap::new(),
+            },
+        );
+    }
+    for (observation, channel, key, value) in values {
+        if let Some(reading) = by_observation.get_mut(&observation) {
+            reading.channel_values.push((channel, value));
+            if is_device_lifetime_key(&key) {
+                reading.device_lifetime_wh.insert(key, value);
+            }
+        }
+    }
+    order
+        .into_iter()
+        .filter_map(|id| by_observation.remove(&id))
+        .collect()
+}
+
+/// Whether a channel key is the lifetime energy counter of a device, as the
+/// pattern `inv.%.energy.lifetime` of the queries matches it.
+fn is_device_lifetime_key(key: &str) -> bool {
+    key.strip_prefix("inv.")
+        .and_then(|rest| rest.strip_suffix(".energy.lifetime"))
+        .is_some_and(|serial| !serial.is_empty())
 }
 
 /// The channels a batch wrote, each with whether any written value is not zero.
@@ -436,6 +497,75 @@ impl IngestRepository for SqliteIngestRepository {
             measured_at,
             lifetime_wh,
         }))
+    }
+
+    async fn readings_through(
+        &self,
+        system_id: SystemId,
+        source_identity: &str,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<StoredReading>, TelemetryRepositoryError> {
+        // The readings of the range and the first one after it.
+        const RANGE: &str = "h.system_id=?1 AND h.source_kind=?2 AND h.source_identity=?3 \
+             AND h.measured_at>=?4 AND h.measured_at<=(SELECT COALESCE(MIN(n.measured_at),?5) \
+             FROM telemetry_hot n WHERE n.system_id=?1 AND n.source_kind=?2 \
+             AND n.source_identity=?3 AND n.measured_at>?5)";
+        let mut connection = self.account.acquire().await?;
+        let observations = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "SELECT h.observation_id,h.system_id,h.measured_at,h.received_at,h.source_kind,\
+             h.source_identity,h.idempotency_identity,h.quality_flags,h.generation_power_watts,\
+             h.generation_energy_wh,h.consumption_power_watts,h.consumption_energy_wh,\
+             h.provenance_json,h.canonical_hash,h.version,h.data_source_id,\
+             h.generation_lifetime_wh,h.consumption_lifetime_wh,h.grid_import_power_watts,\
+             h.grid_import_energy_wh,h.grid_export_power_watts,h.grid_export_energy_wh,\
+             h.net_grid_power_watts,h.battery_power_watts,h.battery_energy_wh,\
+             h.battery_state_basis_points,h.temperature_millidegrees_c,h.voltage_millivolts,\
+             h.message FROM telemetry_hot h WHERE {RANGE} ORDER BY h.measured_at"
+        )))
+        .bind(blob(system_id.as_uuid()))
+        .bind(INGESTION_SOURCE_KIND)
+        .bind(source_identity)
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut *connection)
+        .await?
+        .iter()
+        .map(crate::telemetry_repository::sqlite_observation)
+        .collect::<Result<Vec<_>, _>>()?;
+        if observations.is_empty() {
+            return Ok(Vec::new());
+        }
+        let invalid = || TelemetryRepositoryError::InvalidRecord("channel value");
+        let values = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "SELECT v.observation_id AS observation_id,v.channel_id AS channel_id,\
+             c.channel_key AS channel_key,v.integer_value AS value FROM telemetry_hot h \
+             JOIN telemetry_hot_extended_values v ON v.observation_id=h.observation_id \
+             JOIN channel_definitions c ON c.id=v.channel_id \
+             WHERE {RANGE} AND v.integer_value IS NOT NULL"
+        )))
+        .bind(blob(system_id.as_uuid()))
+        .bind(INGESTION_SOURCE_KIND)
+        .bind(source_identity)
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut *connection)
+        .await?
+        .iter()
+        .map(|row| {
+            Ok((
+                Uuid::from_slice(&row.get::<Vec<u8>, _>("observation_id"))
+                    .map_err(|_| invalid())?,
+                Uuid::from_slice(&row.get::<Vec<u8>, _>("channel_id"))
+                    .ok()
+                    .and_then(|id| ChannelId::from_uuid(id).ok())
+                    .ok_or_else(invalid)?,
+                row.get("channel_key"),
+                row.get("value"),
+            ))
+        })
+        .collect::<Result<Vec<_>, TelemetryRepositoryError>>()?;
+        Ok(stored_readings(observations, values))
     }
 
     async fn save_energy_samples(
@@ -933,6 +1063,80 @@ impl IngestRepository for PostgresIngestRepository {
                 .map(|row| (row.get("channel_key"), row.get("value")))
                 .collect(),
         }))
+    }
+
+    async fn readings_through(
+        &self,
+        system_id: SystemId,
+        source_identity: &str,
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<StoredReading>, TelemetryRepositoryError> {
+        // The readings of the range and the first one after it.
+        const RANGE: &str = "h.account_id=$1 AND h.system_id=$2 AND h.source_kind=$3 \
+             AND h.source_identity=$4 AND h.measured_at>=$5 \
+             AND h.measured_at<=(SELECT COALESCE(MIN(n.measured_at),$6) \
+             FROM telemetry.hot_observations n WHERE n.account_id=$1 AND n.system_id=$2 \
+             AND n.source_kind=$3 AND n.source_identity=$4 AND n.measured_at>$6)";
+        let mut connection = self.connection().await?;
+        let observations = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "SELECT h.observation_id,h.system_id,h.measured_at,h.received_at,h.source_kind,\
+             h.source_identity,h.idempotency_identity,h.quality_flags,h.generation_power_watts,\
+             h.generation_energy_wh,h.consumption_power_watts,h.consumption_energy_wh,\
+             h.provenance,h.canonical_hash,h.version,h.data_source_id,\
+             h.generation_lifetime_wh,h.consumption_lifetime_wh,h.grid_import_power_watts,\
+             h.grid_import_energy_wh,h.grid_export_power_watts,h.grid_export_energy_wh,\
+             h.net_grid_power_watts,h.battery_power_watts,h.battery_energy_wh,\
+             h.battery_state_basis_points,h.temperature_millidegrees_c,h.voltage_millivolts,\
+             h.message FROM telemetry.hot_observations h WHERE {RANGE} ORDER BY h.measured_at"
+        )))
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .bind(INGESTION_SOURCE_KIND)
+        .bind(source_identity)
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut connection)
+        .await?
+        .iter()
+        .map(crate::telemetry_repository::pg_observation)
+        .collect::<Result<Vec<_>, _>>()?;
+        if observations.is_empty() {
+            connection.close().await?;
+            return Ok(Vec::new());
+        }
+        let rows = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "SELECT v.observation_id AS observation_id,v.channel_id AS channel_id,\
+             c.channel_key AS channel_key,v.integer_value AS value \
+             FROM telemetry.hot_observations h \
+             JOIN telemetry.hot_extended_values v \
+               ON v.account_id=h.account_id AND v.observation_id=h.observation_id \
+             JOIN account_data.channel_definitions c \
+               ON c.account_id=v.account_id AND c.id=v.channel_id \
+             WHERE {RANGE} AND v.integer_value IS NOT NULL"
+        )))
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .bind(INGESTION_SOURCE_KIND)
+        .bind(source_identity)
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        let values = rows
+            .iter()
+            .map(|row| {
+                Ok((
+                    row.get("observation_id"),
+                    ChannelId::from_uuid(row.get("channel_id"))
+                        .map_err(|_| TelemetryRepositoryError::InvalidRecord("channel value"))?,
+                    row.get("channel_key"),
+                    row.get("value"),
+                ))
+            })
+            .collect::<Result<Vec<_>, TelemetryRepositoryError>>()?;
+        Ok(stored_readings(observations, values))
     }
 
     async fn save_energy_samples(

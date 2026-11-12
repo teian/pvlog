@@ -114,6 +114,13 @@ the energy of that interval is unknown rather than too small.
 A source without device detail sends `system` alone. Its lifetime counters are
 turned into interval energy in the same way.
 
+History may arrive after live readings, for example when a logger delivers
+live data first and backfills its archive later. The derived interval energy of
+the stored readings that follow or lie between the delivered ones is then
+derived again against them, so the first live reading after the history gets
+its energy and the energy of a gap is not counted twice. Energy the logger
+stated is never replaced.
+
 Archive energy samples are stored for their device. For a time that has no
 measurement, the samples of that time supply the system's power and interval
 energy. A measurement that arrives later for the same time replaces what the

@@ -115,7 +115,8 @@ pub use ingest_repository::PostgresIngestRepository;
 pub use ingest_repository::SqliteIngestRepository;
 pub use ingest_repository::{
     DeviceCounters, ENERGY_SAMPLE_ORIGIN, EnergySampleFilter, EnergySampleRecord,
-    INGESTION_SOURCE_KIND, IngestRepository, IngestionMarkRecord, ObservationUpsert, UpsertOutcome,
+    INGESTION_SOURCE_KIND, IngestRepository, IngestionMarkRecord, ObservationUpsert, StoredReading,
+    UpsertOutcome,
 };
 pub use integrity_planner::{
     IntegrityIssue, IntegrityReport, IntegritySnapshot, RepairAction, plan_integrity_repairs,
