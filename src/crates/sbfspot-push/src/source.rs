@@ -607,8 +607,8 @@ impl SpotValues {
             operating_time_hours: row.try_get("OperatingTime")?,
             feed_in_time_hours: row.try_get("FeedInTime")?,
             signal_percent: row.try_get("BT_Signal")?,
-            status: row.try_get("Status")?,
-            grid_relay: row.try_get("GridRelay")?,
+            status: raw_text(row, "Status")?,
+            grid_relay: raw_text(row, "GridRelay")?,
             temperature: row.try_get("Temperature")?,
         })
     }
@@ -718,12 +718,23 @@ fn scaled(value: Option<f64>, factor: f64) -> Option<i64> {
         .map(|value| value as i64)
 }
 
-/// Reads a text column, treating blank text as absent.
+/// Reads a text column, treating blank text as absent. Older `SBFspot`
+/// versions stored text in Latin-1, so text that is not UTF-8 is read as
+/// Latin-1 instead of failing the whole pass.
 fn text(row: &SqliteRow, column: &str) -> Result<Option<String>, SbfspotError> {
-    Ok(row
-        .try_get::<Option<String>, _>(column)?
+    Ok(raw_text(row, column)?
         .map(|text| text.trim().to_owned())
         .filter(|text| !text.is_empty()))
+}
+
+/// Reads a text column as UTF-8, or as Latin-1 when it is not UTF-8.
+fn raw_text(row: &SqliteRow, column: &str) -> Result<Option<String>, SbfspotError> {
+    Ok(row
+        .try_get_unchecked::<Option<Vec<u8>>, _>(column)?
+        .map(|bytes| match String::from_utf8(bytes) {
+            Ok(text) => text,
+            Err(error) => error.into_bytes().into_iter().map(char::from).collect(),
+        }))
 }
 
 async fn table_exists(pool: &SqlitePool, name: &str) -> Result<bool, SbfspotError> {

@@ -664,3 +664,46 @@ fn sample_reading() -> Reading {
         devices: Vec::new(),
     }
 }
+
+#[tokio::test]
+async fn text_that_older_sbfspot_versions_stored_in_latin_1_is_read() {
+    let directory = tempdir().expect("temp directory");
+    let path = directory.path().join("SBFspot.db");
+    // `Ger\xE4t` is "Gerät" in Latin-1; newer versions store UTF-8.
+    database(
+        &path,
+        &[
+            SCHEMA,
+            &[
+                "INSERT INTO DayData VALUES (1000, 2000123456, 10000000, 2300, 0)",
+                "INSERT INTO EventData VALUES \
+                 (1, 900, 2000123456, 9360, 10100, 'Event', 'Info', \
+                  CAST(X'476572E474' AS TEXT), 'Grid', NULL, NULL, NULL), \
+                 (2, 950, 2000123456, 9360, 10100, 'Event', 'Info', 'Gerät', 'Grid', \
+                  NULL, NULL, NULL)",
+                "INSERT INTO SpotData (TimeStamp, Serial, Pac1, Status, GridRelay) VALUES \
+                 (1000, 2000123456, 2300, CAST(X'4F4B' AS TEXT), 'Closed')",
+            ],
+        ],
+    )
+    .await
+    .close()
+    .await;
+
+    let source = SbfspotSource::open(&path).await.expect("open source");
+    let events = source
+        .read_events_after(
+            EventPosition {
+                timestamp: 0,
+                serial: 0,
+                entry_id: 0,
+            },
+            10,
+        )
+        .await
+        .expect("read events");
+    let groups: Vec<_> = events.iter().map(|event| event.group.as_deref()).collect();
+    assert_eq!(groups, vec![Some("Gerät"), Some("Gerät")]);
+    let readings = source.read_after(0, 10).await.expect("read readings");
+    assert_eq!(values(&readings[0], ROOF).get("status"), Some(&307));
+}
