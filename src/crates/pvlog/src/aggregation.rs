@@ -381,6 +381,7 @@ async fn rebuild_system(
     while day_from < chunk_end {
         let (_, _, day_end) = window(zone, Resolution::Day, local_time(zone, day_from)?)?;
         let day_to = day_end.min(chunk_end);
+        let touched = day_to > run.touched.0 && day_from < run.touched.1;
         if let Some(samples) = plant_samples(&mut transaction, &blob, day_from, day_to).await? {
             report.systems_rebuilt = 1;
             // The system bucket keeps using the plant-wide columns; per-string
@@ -396,6 +397,7 @@ async fn rebuild_system(
                     &context(scope_kind, scope_id.clone()),
                     &scope_samples,
                     coarse.entry((scope_kind, scope_id)).or_default(),
+                    touched,
                 )
                 .await?;
                 report.merge(written);
@@ -445,6 +447,10 @@ struct RebuildRun {
     /// Time stamped on everything the rebuild writes; readings received later
     /// are pending for the next rebuild.
     calculated_at: i64,
+    /// Local days that received readings, as `[start, end)`. Outside them the
+    /// quarter-hour, hour and day aggregates are already current; their
+    /// readings are still read for the month and year they belong to.
+    touched: (i64, i64),
 }
 
 /// Continues the running rebuild of a system, or starts one for the local
@@ -464,10 +470,12 @@ async fn rebuild_run(
     .await
     .map_err(|_| AggregationError::Unavailable)?
     {
+        let (next_start, range_end) = (row.get("next_start"), row.get("range_end"));
         return Ok(Some(RebuildRun {
-            next_start: row.get("next_start"),
-            range_end: row.get("range_end"),
+            next_start,
+            range_end,
             calculated_at: row.get("calculated_at"),
+            touched: (next_start, range_end),
         }));
     }
     let watermark: Option<i64> = sqlx::query_scalar(
@@ -507,10 +515,13 @@ async fn rebuild_run(
     };
     // Yearly buckets are the coarsest, so whole local years cover every finer
     // bucket the touched observations belong to.
+    let (_, first_day, _) = window(zone, Resolution::Day, local_time(zone, first)?)?;
+    let (_, _, last_day_end) = window(zone, Resolution::Day, local_time(zone, last)?)?;
     Ok(Some(RebuildRun {
         next_start: year_start(zone, first)?,
         range_end: next_year_start(zone, last)?,
         calculated_at: Utc::now().timestamp_millis(),
+        touched: (first_day, last_day_end),
     }))
 }
 
@@ -660,15 +671,16 @@ struct AggregateContext {
 #[derive(Default)]
 struct CoarseBuckets(BTreeMap<(&'static str, i64, String), (Resolution, Bucket)>);
 
-/// Writes the quarter-hour, hour and day rollups of a day's samples plus the
-/// daily summaries they imply, and folds the samples into the month and year
-/// buckets written once the year is done.
+/// Folds a day's samples into the month and year buckets written once the
+/// year is done and, for a day that received readings, writes its
+/// quarter-hour, hour and day rollups plus the daily summaries they imply.
 #[cfg(feature = "sqlite")]
 async fn write_aggregates(
     connection: &mut sqlx::SqliteConnection,
     context: &AggregateContext,
     samples: &[Sample],
     coarse: &mut CoarseBuckets,
+    touched: bool,
 ) -> Result<AggregationReport, AggregationError> {
     let mut report = AggregationReport::default();
     let mut daily: BTreeMap<String, Bucket> = BTreeMap::new();
@@ -692,6 +704,9 @@ async fn write_aggregates(
                 }
             }
         }
+    }
+    if !touched {
+        return Ok(report);
     }
     write_rollups(&mut *connection, context, &rollups).await?;
     report.rollups_written += u64::try_from(rollups.len()).unwrap_or(u64::MAX);

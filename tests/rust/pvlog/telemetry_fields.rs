@@ -530,6 +530,74 @@ async fn sqlite_aggregates_years_of_history_one_year_per_cycle() -> Result<(), B
     Ok(())
 }
 
+/// A new reading rewrites the fine aggregates of its own day only, while its
+/// month and year still count every reading.
+#[tokio::test]
+async fn sqlite_rewrites_only_the_days_that_received_readings() -> Result<(), Box<dyn Error>> {
+    let fixture = Fixture::sqlite().await?;
+    let Some(account) = &fixture.sqlite else {
+        return Ok(());
+    };
+    let system = fixture.system_id.as_uuid().as_bytes().to_vec();
+    // Noon of 1 and 2 June 2026 (UTC, the fixture's timezone).
+    let (first_day, second_day) = (1_780_315_200_000_i64, 1_780_401_600_000_i64);
+    let ingest = |measured_at: i64, energy: i64| {
+        let mut reading = fixture.reading(0);
+        reading.observed_at =
+            UtcTimestamp::from_epoch_millis(measured_at).unwrap_or_else(|_| unreachable!());
+        reading.received_at = reading.observed_at;
+        reading.idempotency_key = measured_at.to_string();
+        reading.generation_energy = interval(energy);
+        reading
+    };
+    fixture
+        .clock
+        .0
+        .store(second_day + 3_600_000, Ordering::SeqCst);
+    fixture.telemetry.ingest(ingest(first_day, 100)).await?;
+    fixture.telemetry.ingest(ingest(second_day, 200)).await?;
+    pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
+    let rollup = |resolution: &'static str, start: i64| {
+        let system = system.clone();
+        async move {
+            let mut connection = account.acquire().await?;
+            let row: (Option<i64>, i64) = sqlx::query_as(
+                "SELECT generation_energy_sum_wh,calculated_at FROM telemetry_rollups \
+                 WHERE system_id=? AND scope_kind='system' AND resolution=? \
+                 AND bucket_start<=? AND bucket_end>? ",
+            )
+            .bind(system)
+            .bind(resolution)
+            .bind(start)
+            .bind(start)
+            .fetch_one(&mut *connection)
+            .await?;
+            Ok::<_, Box<dyn Error>>(row)
+        }
+    };
+    let (_, first_built) = rollup("day", first_day).await?;
+
+    fixture.clock.0.store(
+        chrono::Utc::now().timestamp_millis() + 3_600_000,
+        Ordering::SeqCst,
+    );
+    fixture
+        .telemetry
+        .ingest(ingest(second_day + 900_000, 50))
+        .await?;
+    pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
+
+    assert_eq!(
+        rollup("day", first_day).await?,
+        (Some(100), first_built),
+        "the day without new readings stays as it was"
+    );
+    assert_eq!(rollup("day", second_day).await?.0, Some(250));
+    assert_eq!(rollup("month", second_day).await?.0, Some(350));
+    assert_eq!(rollup("year", second_day).await?.0, Some(350));
+    Ok(())
+}
+
 /// The statements that fill the measurement columns from the provenance of
 /// readings stored before those columns were written.
 fn backfill_statements(migration: &str) -> Vec<String> {
