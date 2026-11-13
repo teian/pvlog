@@ -388,6 +388,9 @@ fn lazy_account_pool(
                 sqlx::query("PRAGMA synchronous = NORMAL")
                     .execute(&mut *connection)
                     .await?;
+                sqlx::query("PRAGMA cache_size = -65536")
+                    .execute(&mut *connection)
+                    .await?;
                 let bound_account: Vec<u8> = sqlx::query_scalar(
                     "SELECT account_id FROM pvlog_account_identity WHERE singleton = 1",
                 )

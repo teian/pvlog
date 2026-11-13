@@ -526,6 +526,92 @@ async fn bound_channels_are_aggregated(fixture: Fixture) -> Result<(), Box<dyn E
     Ok(())
 }
 
+/// History of several local years is built one year after another; a counter
+/// carries its last value of one year over to the first bucket of the next.
+async fn history_of_several_years_is_aggregated(fixture: Fixture) -> Result<(), Box<dyn Error>> {
+    let on_inverter = Some(("inverter", Some(fixture.inverter)));
+    let lifetime = fixture
+        .channel(
+            "inv.1.energy.lifetime",
+            "counter",
+            "Wh",
+            "counter_delta",
+            on_inverter,
+        )
+        .await?;
+    let power = fixture
+        .channel("inv.1.ac.l1.power", "integer", "W", "mean", on_inverter)
+        .await?;
+    // Weeks before, the last minutes of the year before, and the first
+    // minutes of the year.
+    for (measured_at, counter, watts) in [
+        (YEAR - 40 * DAY, 1_000, 100),
+        (YEAR - 10 * MINUTE, 1_500, 200),
+        (YEAR + 5 * MINUTE, 1_600, 300),
+        (YEAR + 10 * MINUTE, 1_650, 500),
+    ] {
+        fixture
+            .reading(measured_at, START, &[(lifetime, counter), (power, watts)])
+            .await?;
+    }
+    assert!(fixture.rebuild().await? > 0);
+    assert_eq!(fixture.rebuild().await?, 0);
+
+    let last_day = fixture
+        .channels
+        .channel_rollup_buckets(lifetime, "day", YEAR - DAY, YEAR)
+        .await?;
+    assert_eq!(
+        last_day
+            .iter()
+            .map(|day| (day.bucket_start, day.point_count, day.counter_delta))
+            .collect::<Vec<_>>(),
+        vec![(YEAR - DAY, 1, Some(500))]
+    );
+    let days = fixture
+        .aggregates("inverter", Some(fixture.inverter), "day")
+        .await?;
+    assert_eq!(
+        buckets(&days, "inv.1.energy.lifetime"),
+        vec![(YEAR, Some(150), 1_600, 1_650, 2)]
+    );
+    assert_eq!(
+        buckets(&days, "inv.1.ac.l1.power"),
+        vec![(YEAR, Some(400), 300, 500, 2)]
+    );
+    let years = fixture
+        .aggregates("inverter", Some(fixture.inverter), "year")
+        .await?;
+    assert_eq!(
+        buckets(&years, "inv.1.energy.lifetime"),
+        vec![(YEAR, Some(150), 1_600, 1_650, 2)]
+    );
+    // Every local year with a value has its own year bucket.
+    assert_eq!(
+        fixture
+            .channels
+            .channel_rollup_buckets(lifetime, "year", YEAR - 366 * DAY, YEAR + 366 * DAY)
+            .await?
+            .len(),
+        2
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_aggregates_history_of_several_years() -> Result<(), Box<dyn Error>> {
+    history_of_several_years_is_aggregated(Fixture::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_aggregates_history_of_several_years_when_configured() -> Result<(), Box<dyn Error>>
+{
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    history_of_several_years_is_aggregated(Fixture::postgres(url).await?).await
+}
+
 #[tokio::test]
 async fn sqlite_aggregates_bound_channels_and_rebuilds_on_rebinding() -> Result<(), Box<dyn Error>>
 {

@@ -78,6 +78,25 @@ pub struct ChannelValueRecord {
     pub value: i64,
 }
 
+/// The channel values of one stored reading.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ReadingChannelValues {
+    pub observation_id: ObservationId,
+    pub measured_at: i64,
+    /// Each channel with its scaled integer value.
+    pub values: Vec<(ChannelId, i64)>,
+}
+
+/// Each channel of the readings once, with whether any of its values is not zero.
+fn touched_channels(readings: &[ReadingChannelValues]) -> Vec<(ChannelId, bool)> {
+    let mut touched: std::collections::BTreeMap<ChannelId, bool> =
+        std::collections::BTreeMap::new();
+    for (channel, value) in readings.iter().flat_map(|reading| &reading.values) {
+        *touched.entry(*channel).or_default() |= *value != 0;
+    }
+    touched.into_iter().collect()
+}
+
 /// Aggregate of one channel over one local-calendar bucket.
 ///
 /// The sums are kept so that a coarser bucket can be merged from finer ones.
@@ -180,6 +199,23 @@ pub trait ChannelRepository: Send + Sync {
         measured_at: i64,
         values: &[(ChannelId, i64)],
         received_at: i64,
+    ) -> Result<(), AccountRepositoryError> {
+        self.write_readings_values(
+            &[ReadingChannelValues {
+                observation_id,
+                measured_at,
+                values: values.to_vec(),
+            }],
+            received_at,
+        )
+        .await
+    }
+    /// Stores the channel values of several stored readings at once, in one
+    /// transaction. Writing the same reading again replaces its values.
+    async fn write_readings_values(
+        &self,
+        readings: &[ReadingChannelValues],
+        received_at: i64,
     ) -> Result<(), AccountRepositoryError>;
     /// Reads the values of a channel measured in `[from, to)`, oldest first.
     async fn channel_values(
@@ -188,6 +224,15 @@ pub trait ChannelRepository: Send + Sync {
         from: i64,
         to: i64,
     ) -> Result<Vec<ChannelValueRecord>, AccountRepositoryError>;
+    /// Reads the values of several channels of one system measured in
+    /// `[from, to)` in one pass, oldest first, each with its channel.
+    async fn system_channel_values(
+        &self,
+        system_id: SystemId,
+        channel_ids: &[ChannelId],
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<(ChannelId, ChannelValueRecord)>, AccountRepositoryError>;
     /// Reads the timezone of a system, in which its aggregates are bucketed.
     async fn system_timezone(
         &self,
@@ -603,41 +648,104 @@ impl ChannelRepository for SqliteChannelRepository {
         Ok(retired)
     }
 
-    async fn write_channel_values(
+    async fn write_readings_values(
         &self,
-        observation_id: ObservationId,
-        _measured_at: i64,
-        values: &[(ChannelId, i64)],
+        readings: &[ReadingChannelValues],
         received_at: i64,
     ) -> Result<(), AccountRepositoryError> {
-        if values.is_empty() {
+        // Three values a row stays well below the bound parameters SQLite allows.
+        const ROWS_PER_STATEMENT: usize = 300;
+        let rows: Vec<(ObservationId, ChannelId, i64)> = readings
+            .iter()
+            .flat_map(|reading| {
+                reading
+                    .values
+                    .iter()
+                    .map(|(channel, value)| (reading.observation_id, *channel, *value))
+            })
+            .collect();
+        if rows.is_empty() {
             return Ok(());
         }
         let mut writer = self.account.acquire_writer().await?;
-        for (channel, value) in values {
-            sqlx::query(
+        let mut transaction = writer.connection().begin().await?;
+        for chunk in rows.chunks(ROWS_PER_STATEMENT) {
+            let mut statement = sqlx::QueryBuilder::new(
                 "INSERT INTO telemetry_hot_extended_values \
-                 (observation_id,channel_id,integer_value) VALUES (?,?,?) \
-                 ON CONFLICT(observation_id,channel_id) DO UPDATE SET \
+                 (observation_id,channel_id,integer_value) ",
+            );
+            statement.push_values(chunk, |mut row, (observation, channel, value)| {
+                row.push_bind(blob(observation.as_uuid()))
+                    .push_bind(blob(channel.as_uuid()))
+                    .push_bind(*value);
+            });
+            statement.push(
+                " ON CONFLICT(observation_id,channel_id) DO UPDATE SET \
                  integer_value=excluded.integer_value",
-            )
-            .bind(blob(observation_id.as_uuid()))
-            .bind(blob(channel.as_uuid()))
-            .bind(value)
-            .execute(writer.connection())
-            .await?;
+            );
+            statement.build().execute(&mut *transaction).await?;
+        }
+        for (channel, nonzero) in touched_channels(readings) {
             sqlx::query(
-                "UPDATE channel_definitions SET last_value_at=?,first_nonzero_at=\
-                 COALESCE(first_nonzero_at,CASE WHEN ?<>0 THEN ? END) WHERE id=?",
+                "UPDATE channel_definitions SET last_value_at=?1,first_nonzero_at=\
+                 COALESCE(first_nonzero_at,CASE WHEN ?2 THEN ?1 END) WHERE id=?3",
             )
             .bind(received_at)
-            .bind(value)
-            .bind(received_at)
+            .bind(nonzero)
             .bind(blob(channel.as_uuid()))
-            .execute(writer.connection())
+            .execute(&mut *transaction)
             .await?;
         }
+        transaction.commit().await?;
         Ok(())
+    }
+
+    async fn system_channel_values(
+        &self,
+        system_id: SystemId,
+        channel_ids: &[ChannelId],
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<(ChannelId, ChannelValueRecord)>, AccountRepositoryError> {
+        if channel_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut connection = self.account.acquire().await?;
+        // The system's readings of the range, each with the values of the
+        // asked channels it carries.
+        let mut statement = sqlx::QueryBuilder::new(
+            "SELECT v.channel_id AS channel_id,h.measured_at AS measured_at,\
+             v.integer_value AS value FROM telemetry_hot h \
+             CROSS JOIN telemetry_hot_extended_values v ON v.observation_id=h.observation_id \
+             WHERE h.system_id=",
+        );
+        statement
+            .push_bind(blob(system_id.as_uuid()))
+            .push(" AND h.measured_at>=")
+            .push_bind(from)
+            .push(" AND h.measured_at<")
+            .push_bind(to)
+            .push(" AND v.channel_id IN (");
+        let mut ids = statement.separated(",");
+        for channel_id in channel_ids {
+            ids.push_bind(blob(channel_id.as_uuid()));
+        }
+        statement.push(") ORDER BY h.measured_at");
+        statement
+            .build()
+            .fetch_all(&mut *connection)
+            .await?
+            .iter()
+            .map(|row| {
+                Ok((
+                    channel_id(sqlite_uuid(&row.get::<Vec<u8>, _>("channel_id"))?)?,
+                    ChannelValueRecord {
+                        measured_at: row.get("measured_at"),
+                        value: row.get("value"),
+                    },
+                ))
+            })
+            .collect()
     }
 
     async fn channel_values(
@@ -648,11 +756,13 @@ impl ChannelRepository for SqliteChannelRepository {
     ) -> Result<Vec<ChannelValueRecord>, AccountRepositoryError> {
         let mut connection = self.account.acquire().await?;
         Ok(sqlx::query(
+            // Through the system's readings of the range rather than every
+            // value of the channel, which would be read to keep a few.
             "SELECT h.measured_at AS measured_at,v.integer_value AS value \
-             FROM telemetry_hot_extended_values v \
-             JOIN telemetry_hot h ON h.observation_id=v.observation_id \
-             WHERE v.channel_id=? AND h.measured_at>=? AND h.measured_at<? \
-             ORDER BY h.measured_at",
+             FROM telemetry_hot h CROSS JOIN telemetry_hot_extended_values v \
+             ON v.observation_id=h.observation_id AND v.channel_id=?1 \
+             WHERE h.system_id=(SELECT system_id FROM channel_definitions WHERE id=?1) \
+             AND h.measured_at>=?2 AND h.measured_at<?3 ORDER BY h.measured_at",
         )
         .bind(blob(channel_id.as_uuid()))
         .bind(from)
@@ -688,9 +798,10 @@ impl ChannelRepository for SqliteChannelRepository {
         let mut connection = self.account.acquire().await?;
         Ok(sqlx::query(
             "SELECT h.measured_at AS measured_at,v.integer_value AS value \
-             FROM telemetry_hot_extended_values v \
-             JOIN telemetry_hot h ON h.observation_id=v.observation_id \
-             WHERE v.channel_id=? AND h.measured_at<? ORDER BY h.measured_at DESC LIMIT 1",
+             FROM telemetry_hot h CROSS JOIN telemetry_hot_extended_values v \
+             ON v.observation_id=h.observation_id AND v.channel_id=?1 \
+             WHERE h.system_id=(SELECT system_id FROM channel_definitions WHERE id=?1) \
+             AND h.measured_at<?2 ORDER BY h.measured_at DESC LIMIT 1",
         )
         .bind(blob(channel_id.as_uuid()))
         .bind(before)
@@ -708,27 +819,56 @@ impl ChannelRepository for SqliteChannelRepository {
     ) -> Result<Vec<PendingChannelRollup>, AccountRepositoryError> {
         let mut connection = self.account.acquire().await?;
         sqlx::query(
-            "WITH pending AS (\
+            // Only channels that received a value since their watermark are
+            // looked at: the time of their newest value tells, and a value
+            // received at the very watermark is told by counting those. Their
+            // values are read from the readings received since the oldest of
+            // their watermarks, through the receive-time index, rather than
+            // every value ever stored. A channel without a watermark is built
+            // over the whole time the system has readings, which the
+            // measurement-time index tells without reading a value.
+            "WITH bound AS MATERIALIZED (\
+               SELECT c.id,c.rollup_watermark,c.rollup_watermark_values \
+               FROM channel_definitions c \
+               WHERE c.system_id=?1 AND c.lifecycle='active' AND c.target_kind<>'unassigned' \
+               AND c.rollup_watermark IS NOT NULL AND (c.last_value_at>c.rollup_watermark \
+                 OR (c.last_value_at=c.rollup_watermark AND (\
+                   SELECT COUNT(*) FROM telemetry_hot h INDEXED BY telemetry_hot_received_idx \
+                   CROSS JOIN telemetry_hot_extended_values v \
+                   ON v.observation_id=h.observation_id AND v.channel_id=c.id \
+                   WHERE h.received_at=c.rollup_watermark AND h.system_id=?1\
+                 )<>c.rollup_watermark_values))),\
+             pending AS (\
                SELECT v.channel_id AS channel_id,MIN(h.measured_at) AS first_measured_at,\
                MAX(h.measured_at) AS last_measured_at,MAX(h.received_at) AS last_received_at,\
                COUNT(*) AS value_count \
-               FROM channel_definitions c \
-               JOIN telemetry_hot_extended_values v ON v.channel_id=c.id \
-               JOIN telemetry_hot h ON h.observation_id=v.observation_id \
-               WHERE c.system_id=? AND c.lifecycle='active' AND c.target_kind<>'unassigned' \
-               AND (c.rollup_watermark IS NULL OR h.received_at>=c.rollup_watermark) \
-               GROUP BY v.channel_id) \
+               FROM telemetry_hot h INDEXED BY telemetry_hot_received_idx \
+               CROSS JOIN telemetry_hot_extended_values v ON v.observation_id=h.observation_id \
+               CROSS JOIN bound b ON b.id=v.channel_id \
+               WHERE h.received_at>=(SELECT COALESCE(MIN(rollup_watermark),\
+                 9223372036854775807) FROM bound) \
+               AND h.system_id=?1 AND h.received_at>=b.rollup_watermark \
+               GROUP BY v.channel_id \
+               UNION ALL \
+               SELECT c.id,\
+               (SELECT MIN(measured_at) FROM telemetry_hot WHERE system_id=?1),\
+               (SELECT MAX(measured_at) FROM telemetry_hot WHERE system_id=?1),\
+               c.last_value_at,NULL FROM channel_definitions c \
+               WHERE c.system_id=?1 AND c.lifecycle='active' AND c.target_kind<>'unassigned' \
+               AND c.rollup_watermark IS NULL AND c.last_value_at IS NOT NULL) \
              SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,c.unit,c.scale,\
              c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,\
              c.last_value_at,c.first_nonzero_at,c.updated_at,NULL AS last_value,\
              p.first_measured_at,p.last_measured_at,p.last_received_at,\
-             (SELECT COUNT(*) FROM telemetry_hot_extended_values v \
-              JOIN telemetry_hot h ON h.observation_id=v.observation_id \
-              WHERE v.channel_id=c.id AND h.received_at=p.last_received_at) \
+             (SELECT COUNT(*) FROM telemetry_hot h \
+              CROSS JOIN telemetry_hot_extended_values v \
+              ON v.observation_id=h.observation_id AND v.channel_id=c.id \
+              WHERE h.received_at=p.last_received_at AND h.system_id=?1) \
               AS last_received_values \
              FROM pending p JOIN channel_definitions c ON c.id=p.channel_id \
-             WHERE c.rollup_watermark IS NULL OR p.last_received_at>c.rollup_watermark \
-             OR p.value_count<>c.rollup_watermark_values ORDER BY c.channel_key",
+             WHERE p.first_measured_at IS NOT NULL AND (c.rollup_watermark IS NULL \
+             OR p.last_received_at>c.rollup_watermark \
+             OR p.value_count<>c.rollup_watermark_values) ORDER BY c.channel_key",
         )
         .bind(blob(system_id.as_uuid()))
         .fetch_all(&mut *connection)
@@ -771,30 +911,31 @@ impl ChannelRepository for SqliteChannelRepository {
             .await?;
         }
         if channel.target_kind != "unassigned" {
-            for rollup in rollups {
-                sqlx::query(
+            // 15 bound values a row stays well below the parameters SQLite allows.
+            for chunk in rollups.chunks(500) {
+                let mut statement = sqlx::QueryBuilder::new(
                     "INSERT INTO channel_rollups (system_id,channel_id,target_kind,target_id,\
                      resolution,bucket_start,bucket_end,point_count,value_sum,value_min,\
-                     value_max,value_first,value_last,counter_delta,calculated_at) \
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                )
-                .bind(blob(channel.system_id.as_uuid()))
-                .bind(blob(channel.id.as_uuid()))
-                .bind(&channel.target_kind)
-                .bind(channel.target_id.map(blob))
-                .bind(&rollup.resolution)
-                .bind(rollup.bucket_start)
-                .bind(rollup.bucket_end)
-                .bind(rollup.point_count)
-                .bind(rollup.value_sum)
-                .bind(rollup.value_min)
-                .bind(rollup.value_max)
-                .bind(rollup.value_first)
-                .bind(rollup.value_last)
-                .bind(rollup.counter_delta)
-                .bind(calculated_at)
-                .execute(&mut *transaction)
-                .await?;
+                     value_max,value_first,value_last,counter_delta,calculated_at) ",
+                );
+                statement.push_values(chunk, |mut row, rollup| {
+                    row.push_bind(blob(channel.system_id.as_uuid()))
+                        .push_bind(blob(channel.id.as_uuid()))
+                        .push_bind(channel.target_kind.clone())
+                        .push_bind(channel.target_id.map(blob))
+                        .push_bind(rollup.resolution.clone())
+                        .push_bind(rollup.bucket_start)
+                        .push_bind(rollup.bucket_end)
+                        .push_bind(rollup.point_count)
+                        .push_bind(rollup.value_sum)
+                        .push_bind(rollup.value_min)
+                        .push_bind(rollup.value_max)
+                        .push_bind(rollup.value_first)
+                        .push_bind(rollup.value_last)
+                        .push_bind(rollup.counter_delta)
+                        .push_bind(calculated_at);
+                });
+                statement.build().execute(&mut *transaction).await?;
             }
         }
         transaction.commit().await?;
@@ -1201,46 +1342,91 @@ impl ChannelRepository for PostgresChannelRepository {
         Ok(updated > 0)
     }
 
-    async fn write_channel_values(
+    async fn write_readings_values(
         &self,
-        observation_id: ObservationId,
-        measured_at: i64,
-        values: &[(ChannelId, i64)],
+        readings: &[ReadingChannelValues],
         received_at: i64,
     ) -> Result<(), AccountRepositoryError> {
-        if values.is_empty() {
+        if readings.iter().all(|reading| reading.values.is_empty()) {
             return Ok(());
         }
         let mut connection = self.connection().await?;
-        for (channel, value) in values {
-            sqlx::query(
-                "INSERT INTO telemetry.hot_extended_values \
-                 (account_id,observation_id,measured_at,channel_id,integer_value) \
-                 VALUES ($1,$2,$3,$4,$5) \
-                 ON CONFLICT(account_id,observation_id,measured_at,channel_id) DO UPDATE SET \
-                 integer_value=excluded.integer_value",
-            )
-            .bind(self.account_id.as_uuid())
-            .bind(observation_id.as_uuid())
-            .bind(measured_at)
-            .bind(channel.as_uuid())
-            .bind(value)
-            .execute(&mut connection)
-            .await?;
+        let mut transaction = connection.begin().await?;
+        for reading in readings {
+            for (channel, value) in &reading.values {
+                sqlx::query(
+                    "INSERT INTO telemetry.hot_extended_values \
+                     (account_id,observation_id,measured_at,channel_id,integer_value) \
+                     VALUES ($1,$2,$3,$4,$5) \
+                     ON CONFLICT(account_id,observation_id,measured_at,channel_id) DO UPDATE SET \
+                     integer_value=excluded.integer_value",
+                )
+                .bind(self.account_id.as_uuid())
+                .bind(reading.observation_id.as_uuid())
+                .bind(reading.measured_at)
+                .bind(channel.as_uuid())
+                .bind(value)
+                .execute(&mut *transaction)
+                .await?;
+            }
+        }
+        for (channel, nonzero) in touched_channels(readings) {
             sqlx::query(
                 "UPDATE account_data.channel_definitions SET last_value_at=$3,\
-                 first_nonzero_at=COALESCE(first_nonzero_at,CASE WHEN $4<>0 THEN $3 END) \
+                 first_nonzero_at=COALESCE(first_nonzero_at,CASE WHEN $4 THEN $3 END) \
                  WHERE account_id=$1 AND id=$2",
             )
             .bind(self.account_id.as_uuid())
             .bind(channel.as_uuid())
             .bind(received_at)
-            .bind(value)
-            .execute(&mut connection)
+            .bind(nonzero)
+            .execute(&mut *transaction)
             .await?;
         }
+        transaction.commit().await?;
         connection.close().await?;
         Ok(())
+    }
+
+    async fn system_channel_values(
+        &self,
+        system_id: SystemId,
+        channel_ids: &[ChannelId],
+        from: i64,
+        to: i64,
+    ) -> Result<Vec<(ChannelId, ChannelValueRecord)>, AccountRepositoryError> {
+        if channel_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<Uuid> = channel_ids.iter().map(|id| id.as_uuid()).collect();
+        let mut connection = self.connection().await?;
+        let rows = sqlx::query(
+            "SELECT v.channel_id,v.measured_at,v.integer_value AS value \
+             FROM telemetry.hot_extended_values v \
+             JOIN account_data.channel_definitions c \
+               ON c.account_id=v.account_id AND c.id=v.channel_id \
+             WHERE v.account_id=$1 AND c.system_id=$2 AND v.channel_id=ANY($3) \
+             AND v.measured_at>=$4 AND v.measured_at<$5 ORDER BY v.measured_at",
+        )
+        .bind(self.account_id.as_uuid())
+        .bind(system_id.as_uuid())
+        .bind(&ids)
+        .bind(from)
+        .bind(to)
+        .fetch_all(&mut connection)
+        .await?;
+        connection.close().await?;
+        rows.iter()
+            .map(|row| {
+                Ok((
+                    channel_id(row.get("channel_id"))?,
+                    ChannelValueRecord {
+                        measured_at: row.get("measured_at"),
+                        value: row.get("value"),
+                    },
+                ))
+            })
+            .collect()
     }
 
     async fn channel_values(

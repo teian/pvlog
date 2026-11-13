@@ -5,7 +5,10 @@
 //! batch outcomes. Aggregates are rebuilt asynchronously by the worker's
 //! aggregation cycle rather than inside the write path.
 
-use std::{collections::BTreeSet, sync::Arc};
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use pvlog_application::{
@@ -17,13 +20,14 @@ use pvlog_application::{
     normalize_observation, scaled_channel_value, validate_reported_devices,
 };
 use pvlog_domain::{
-    AccountId, ApiCredentialId, CanonicalObservation, ChannelId, DataSourceId, EnergyReading,
-    ExtendedValue, GridFlow, ObservationId, ObservationSourceKind, SystemId,
+    AccountId, ApiCredentialId, CanonicalObservation, DataSourceId, EnergyReading, ExtendedValue,
+    GridFlow, ObservationId, ObservationSourceKind, SystemId,
 };
 use pvlog_storage::{
     ChannelRecord, ChannelRegistration, ChannelRepository, DataSourceRepository, DatabaseTarget,
-    DiscoveredDeviceRecord, ManagementRepository, ObservationInsertOutcome, ReportedDeviceRecord,
-    StoredMeasurements, StoredObservation, TelemetryRepository, TelemetryRepositoryError,
+    DiscoveredDeviceRecord, ManagementRepository, ObservationInsertOutcome, ReadingChannelValues,
+    ReportedDeviceRecord, StoredMeasurements, StoredObservation, TelemetryRepository,
+    TelemetryRepositoryError,
 };
 
 const MAXIMUM_BATCH_ITEMS: usize = 1_000;
@@ -226,7 +230,13 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         }
         let channels = self.channel_repository(system_id).await?;
         let (command, rejected_channels) = self
-            .resolve_channels(channels.as_ref(), system_id, command, received_at)
+            .resolve_channels(
+                channels.as_ref(),
+                &mut KnownChannels::default(),
+                system_id,
+                command,
+                received_at,
+            )
             .await?;
         let mut observation = normalize_observation(command).map_err(invalid)?;
         let repository = self.repository(system_id).await?;
@@ -289,10 +299,17 @@ impl ModernTelemetryUseCases for StorageTelemetryApi {
         }
 
         let channels = self.channel_repository(system_id).await?;
+        let mut known = KnownChannels::default();
         let mut outcomes = Vec::with_capacity(commands.len());
         for (index, command) in commands.into_iter().enumerate() {
             let (command, rejected_channels) = self
-                .resolve_channels(channels.as_ref(), system_id, command, received_at)
+                .resolve_channels(
+                    channels.as_ref(),
+                    &mut known,
+                    system_id,
+                    command,
+                    received_at,
+                )
                 .await?;
             let status = match normalize_observation(command) {
                 Err(_) => BatchItemStatus::Invalid,
@@ -351,12 +368,19 @@ impl StorageTelemetryApi {
         repository: &dyn TelemetryRepository,
     ) -> Result<BatchIngestionResult, ModernTelemetryError> {
         let channels = self.channel_repository(system_id).await?;
+        let mut known = KnownChannels::default();
         let mut observations = Vec::with_capacity(commands.len());
         let mut rejected = Vec::with_capacity(commands.len());
         let mut stored = Vec::with_capacity(commands.len());
         for command in commands {
             let (command, rejected_channels) = self
-                .resolve_channels(channels.as_ref(), system_id, command, received_at)
+                .resolve_channels(
+                    channels.as_ref(),
+                    &mut known,
+                    system_id,
+                    command,
+                    received_at,
+                )
                 .await?;
             rejected.push(rejected_channels);
             let mut observation = normalize_observation(command).map_err(invalid)?;
@@ -384,9 +408,14 @@ impl StorageTelemetryApi {
         {
             return Err(ModernTelemetryError::Invalid);
         }
-        for observation in &observations {
-            write_channel_values(channels.as_ref(), observation, received_at).await?;
-        }
+        let readings = observations
+            .iter()
+            .map(reading_channel_values)
+            .collect::<Result<Vec<_>, _>>()?;
+        channels
+            .write_readings_values(&readings, received_at)
+            .await
+            .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))?;
         Ok(BatchIngestionResult {
             outcomes: rejected
                 .into_iter()
@@ -408,12 +437,13 @@ impl StorageTelemetryApi {
     async fn resolve_channels(
         &self,
         repository: &dyn ChannelRepository,
+        known: &mut KnownChannels,
         system_id: SystemId,
         command: NormalizeObservation,
         received_at: i64,
     ) -> Result<(NormalizeObservation, Vec<RejectedChannel>), ModernTelemetryError> {
         let (command, rejected, new_devices) =
-            resolve_channels(repository, system_id, command, received_at).await?;
+            resolve_channels(repository, known, system_id, command, received_at).await?;
         let reported = &command.supplements.devices;
         if new_devices.is_empty() && reported.is_empty() {
             return Ok((command, rejected));
@@ -526,6 +556,11 @@ fn reported_device_record(device: &ReportedDevice) -> ReportedDeviceRecord {
 /// and the serials of devices whose channels were registered just now.
 type ResolvedChannels = (NormalizeObservation, Vec<RejectedChannel>, BTreeSet<String>);
 
+/// The channels a request has resolved so far, by key, so that the readings
+/// of one batch look up the channel definitions only once.
+#[derive(Default)]
+struct KnownChannels(HashMap<String, ChannelRecord>);
+
 /// Resolves wire channel keys to channels and their values to scaled integers.
 ///
 /// A key never seen before is registered, so a newly wired meter is retained
@@ -533,6 +568,7 @@ type ResolvedChannels = (NormalizeObservation, Vec<RejectedChannel>, BTreeSet<St
 /// left out and reported; the rest of the reading goes on.
 async fn resolve_channels(
     repository: &dyn ChannelRepository,
+    known: &mut KnownChannels,
     system_id: SystemId,
     mut command: NormalizeObservation,
     received_at: i64,
@@ -544,6 +580,7 @@ async fn resolve_channels(
     let registrations: Vec<ChannelRegistration> = command
         .channel_readings
         .iter()
+        .filter(|(key, _)| !known.0.contains_key(*key))
         .map(|(key, reading)| {
             let typing = channel_typing_for(key, reading);
             ChannelRegistration {
@@ -556,13 +593,19 @@ async fn resolve_channels(
             }
         })
         .collect();
-    let channels = repository
-        .register_channels(system_id, &registrations, received_at)
-        .await
-        .map_err(|_| unavailable())?;
+    if !registrations.is_empty() {
+        let registered = repository
+            .register_channels(system_id, &registrations, received_at)
+            .await
+            .map_err(|_| unavailable())?;
+        for channel in registered {
+            known.0.insert(channel.channel_key.clone(), channel);
+        }
+    }
     let mut rejected = Vec::new();
     let mut new_devices = BTreeSet::new();
-    for ((key, reading), channel) in command.channel_readings.iter().zip(&channels) {
+    for (key, reading) in &command.channel_readings {
+        let channel = known.0.get_mut(key).ok_or_else(unavailable)?;
         // A channel registered by this very reading belongs to a device that
         // may be unknown; later readings need not ask again.
         if channel.discovered_at == Some(received_at)
@@ -570,7 +613,9 @@ async fn resolve_channels(
             && let Some(device) = device_channel(key)
         {
             new_devices.insert(device.target.serial().to_owned());
+            channel.last_value_at = Some(received_at);
         }
+        let channel = &*channel;
         let typing = channel_typing(channel).ok_or_else(unavailable)?;
         match scaled_channel_value(&typing, reading) {
             Ok(value) => {
@@ -610,28 +655,37 @@ async fn write_channel_values(
     if observation.values.extended.is_empty() {
         return Ok(());
     }
-    let values: Vec<(ChannelId, i64)> = observation
-        .values
-        .extended
-        .iter()
-        .map(|(channel, value)| {
-            (
-                *channel,
-                match value {
-                    ExtendedValue::Integer(number) | ExtendedValue::DecimalScaled(number) => {
-                        *number
-                    }
-                    ExtendedValue::Boolean(flag) => i64::from(*flag),
-                },
-            )
-        })
-        .collect();
-    let measured_at = i64::try_from(observation.observed_at.epoch_millis())
-        .map_err(|_| ModernTelemetryError::Invalid)?;
     repository
-        .write_channel_values(observation.id, measured_at, &values, received_at)
+        .write_readings_values(&[reading_channel_values(observation)?], received_at)
         .await
         .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))
+}
+
+/// The channel values of a reading as they are stored.
+fn reading_channel_values(
+    observation: &CanonicalObservation,
+) -> Result<ReadingChannelValues, ModernTelemetryError> {
+    Ok(ReadingChannelValues {
+        observation_id: observation.id,
+        measured_at: i64::try_from(observation.observed_at.epoch_millis())
+            .map_err(|_| ModernTelemetryError::Invalid)?,
+        values: observation
+            .values
+            .extended
+            .iter()
+            .map(|(channel, value)| {
+                (
+                    *channel,
+                    match value {
+                        ExtendedValue::Integer(number) | ExtendedValue::DecimalScaled(number) => {
+                            *number
+                        }
+                        ExtendedValue::Boolean(flag) => i64::from(*flag),
+                    },
+                )
+            })
+            .collect(),
+    })
 }
 
 /// Projects a canonical observation onto the persisted hot-row columns.

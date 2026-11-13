@@ -10,13 +10,13 @@
 //! that mark, so rebinding rebuilds a channel's aggregates under its new
 //! target on the next cycle.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use chrono_tz::Tz;
 use pvlog_domain::{ChannelId, SystemId};
 use pvlog_storage::{
     ChannelRecord, ChannelRepository, ChannelRollupRecord, ChannelValueRecord, DatabaseTarget,
-    ManagementRepository,
+    ManagementRepository, PendingChannelRollup,
 };
 
 use crate::aggregation::{
@@ -90,10 +90,10 @@ pub async fn rebuild_channel_rollups(
         .map_err(unavailable)?
         .and_then(|timezone| timezone.parse().ok())
         .ok_or(AggregationError::Timezone)?;
-    let mut written = 0_u64;
+    // The whole local days of each channel to rebuild: every finer bucket lies
+    // within one of them. A counter starts from the value measured before.
+    let mut runs = Vec::with_capacity(pending.len());
     for pending in pending {
-        let channel = &pending.channel;
-        // Whole local days: every finer bucket lies within one of them.
         let (_, days_from, _) = window(
             zone,
             Resolution::Day,
@@ -104,42 +104,74 @@ pub async fn rebuild_channel_rollups(
             Resolution::Day,
             local_time(zone, pending.last_measured_at)?,
         )?;
-        let values = repository
-            .channel_values(channel.id, days_from, days_to)
-            .await
-            .map_err(unavailable)?;
-        let counter = channel.aggregation == "counter_delta";
-        let predecessor = if counter {
+        let counter = pending.channel.aggregation == "counter_delta";
+        let previous = if counter {
             repository
-                .channel_value_before(channel.id, days_from)
+                .channel_value_before(pending.channel.id, days_from)
                 .await
                 .map_err(unavailable)?
                 .map(|value| value.value)
         } else {
             None
         };
-        let mut fine = Vec::new();
-        for resolution in FINE {
-            fine.extend(bucket_values(
-                zone,
-                resolution,
-                channel.id,
-                &values,
-                counter,
-                predecessor,
-            )?);
-        }
-        replace(
-            repository,
-            channel,
-            FINE,
+        runs.push(ChannelRun {
+            pending,
             days_from,
             days_to,
-            &fine,
-            calculated_at,
-        )
-        .await?;
+            counter,
+            previous,
+        });
+    }
+    let (Some(start), Some(end)) = (
+        runs.iter().map(|run| run.days_from).min(),
+        runs.iter().map(|run| run.days_to).max(),
+    ) else {
+        return Ok(0);
+    };
 
+    // One local year at a time, with the values of every pending channel read
+    // in one pass: years of history are neither read channel by channel nor
+    // held in memory at once. The next year is read while the aggregates of
+    // the current one are written.
+    let mut years = Vec::new();
+    let mut year_from = year_start(zone, start)?;
+    while year_from < end {
+        let year_to = next_year_start(zone, year_from)?;
+        years.push((year_from.max(start), year_to.min(end)));
+        year_from = year_to;
+    }
+    let read = |(from, to): (i64, i64), channels: Vec<ChannelId>| async move {
+        repository
+            .system_channel_values(system_id, &channels, from, to)
+            .await
+            .map_err(|_| AggregationError::Unavailable)
+    };
+    let mut written = 0_u64;
+    let mut next = match years.first() {
+        Some(&year) => Some(read(year, channels_within(&runs, year)).await?),
+        None => None,
+    };
+    for (index, &year) in years.iter().enumerate() {
+        let values = next.take().unwrap_or_default();
+        let following = years
+            .get(index + 1)
+            .map(|&year| read(year, channels_within(&runs, year)));
+        let (built, following) = tokio::join!(
+            build_year(repository, zone, calculated_at, &mut runs, year, values),
+            async {
+                match following {
+                    Some(reading) => Some(reading.await),
+                    None => None,
+                }
+            }
+        );
+        written += built?;
+        next = following.transpose()?;
+    }
+
+    for run in runs {
+        let pending = &run.pending;
+        let channel = &pending.channel;
         // Whole local years: the months and the year the touched days belong to.
         let years_from = year_start(zone, pending.first_measured_at)?;
         let years_to = next_year_start(zone, pending.last_measured_at)?;
@@ -169,9 +201,79 @@ pub async fn rebuild_channel_rollups(
             )
             .await
             .map_err(unavailable)?;
-        written += u64::try_from(fine.len() + coarse.len()).unwrap_or(u64::MAX);
+        written += u64::try_from(coarse.len()).unwrap_or(u64::MAX);
     }
     Ok(written)
+}
+
+/// The pending channels with days to rebuild in `[from, to)`.
+fn channels_within(runs: &[ChannelRun], (from, to): (i64, i64)) -> Vec<ChannelId> {
+    runs.iter()
+        .filter(|run| run.days_from < to && run.days_to > from)
+        .map(|run| run.pending.channel.id)
+        .collect()
+}
+
+/// Rebuilds the quarter-hour, hour and day aggregates of the pending channels
+/// within `[from, to)` from their values there, oldest first, and returns how
+/// many were written.
+async fn build_year(
+    repository: &dyn ChannelRepository,
+    zone: Tz,
+    calculated_at: i64,
+    runs: &mut [ChannelRun],
+    (from, to): (i64, i64),
+    values: Vec<(ChannelId, ChannelValueRecord)>,
+) -> Result<u64, AggregationError> {
+    let mut by_channel: HashMap<ChannelId, Vec<ChannelValueRecord>> = HashMap::new();
+    for (channel_id, value) in values {
+        by_channel.entry(channel_id).or_default().push(value);
+    }
+    let mut written = 0_u64;
+    for run in runs
+        .iter_mut()
+        .filter(|run| run.days_from < to && run.days_to > from)
+    {
+        let channel = &run.pending.channel;
+        let (low, high) = (run.days_from.max(from), run.days_to.min(to));
+        let values: Vec<ChannelValueRecord> = by_channel
+            .remove(&channel.id)
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|value| (low..high).contains(&value.measured_at))
+            .collect();
+        let mut fine = Vec::new();
+        for resolution in FINE {
+            fine.extend(bucket_values(
+                zone,
+                resolution,
+                channel.id,
+                &values,
+                run.counter,
+                run.previous,
+            )?);
+        }
+        replace(repository, channel, FINE, low, high, &fine, calculated_at).await?;
+        if run.counter
+            && let Some(last) = values.last()
+        {
+            run.previous = Some(last.value);
+        }
+        written += u64::try_from(fine.len()).unwrap_or(u64::MAX);
+    }
+    Ok(written)
+}
+
+/// What a cycle rebuilds of one channel.
+struct ChannelRun {
+    pending: PendingChannelRollup,
+    /// Start of the first local day to rebuild.
+    days_from: i64,
+    /// End of the last local day to rebuild.
+    days_to: i64,
+    counter: bool,
+    /// For a counter, the value measured before the next one to aggregate.
+    previous: Option<i64>,
 }
 
 /// Stores the aggregates of some resolutions in place of the ones in the range.
@@ -213,8 +315,19 @@ fn bucket_values(
 ) -> Result<Vec<ChannelRollupRecord>, AggregationError> {
     let mut buckets: BTreeMap<i64, ChannelRollupRecord> = BTreeMap::new();
     let mut previous = predecessor;
+    // The values come oldest first, so the bucket of the previous value is
+    // usually the bucket of this one too; it is looked up only when left.
+    let mut current: Option<(i64, i64)> = None;
     for value in values {
-        let (_, start, end) = window(zone, resolution, local_time(zone, value.measured_at)?)?;
+        let (start, end) = match current {
+            Some((start, end)) if (start..end).contains(&value.measured_at) => (start, end),
+            _ => {
+                let (_, start, end) =
+                    window(zone, resolution, local_time(zone, value.measured_at)?)?;
+                current = Some((start, end));
+                (start, end)
+            }
+        };
         let growth = previous.map(|previous| (value.value - previous).max(0));
         let bucket = buckets.entry(start).or_insert(ChannelRollupRecord {
             channel_id,

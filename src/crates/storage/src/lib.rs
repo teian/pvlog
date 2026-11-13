@@ -72,7 +72,7 @@ pub use channel_repository::PostgresChannelRepository;
 pub use channel_repository::SqliteChannelRepository;
 pub use channel_repository::{
     ChannelBindingRecord, ChannelRecord, ChannelRegistration, ChannelRepository,
-    ChannelRollupRecord, ChannelValueRecord, PendingChannelRollup,
+    ChannelRollupRecord, ChannelValueRecord, PendingChannelRollup, ReadingChannelValues,
 };
 pub use compaction::{
     CompactionError, CompactionKey, CompactionPhase, CompactionRepository, CompactionService,
