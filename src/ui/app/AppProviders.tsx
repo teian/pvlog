@@ -3,6 +3,7 @@ import type { PropsWithChildren } from "react";
 import { useState } from "react";
 import { BrowserRouter } from "react-router";
 
+import { retryQueryOnce } from "@/shared/api/queryRetry";
 import { RuntimeConfigProvider, type RuntimeConfig } from "@/shared/config";
 
 /** Application provider properties. */
@@ -23,7 +24,7 @@ export function AppProviders({ children, runtimeConfig }: AppProvidersProps) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            retry: 1,
+            retry: retryQueryOnce,
             staleTime: 0,
           },
         },
