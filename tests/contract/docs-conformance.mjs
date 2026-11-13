@@ -11,6 +11,7 @@ const documents = [
   "docs/guides/operator-recovery.md",
   "docs/guides/system-setup.md",
   "docs/guides/pvoutput-migration.md",
+  "docs/guides/demo-data.md",
   "docs/guides/uploader-integration.md",
   "docs/guides/ingestion-api.md",
   "docs/guides/smalog-export.md",

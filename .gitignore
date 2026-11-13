@@ -61,6 +61,7 @@ deploy/compose/.env.override
 
 # Local databases, imports, and runtime state
 /data/
+/demo-data/
 /var/
 /tmp/
 *.sqlite
