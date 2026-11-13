@@ -526,9 +526,15 @@ async fn run_worker(target: &DatabaseTarget, interval_seconds: u64) -> Result<()
     let management = compose_management_repository(target)?;
     tracing::info!(interval_seconds = interval.as_secs(), "worker started");
 
+    // Listening once for the whole run keeps a signal that arrives during a
+    // cycle; a listener made anew for each turn would miss it, and the worker
+    // would go on after being asked to stop.
+    let shutdown = tokio::signal::ctrl_c();
+    tokio::pin!(shutdown);
     loop {
         tokio::select! {
-            _ = tokio::signal::ctrl_c() => {
+            biased;
+            _ = &mut shutdown => {
                 tracing::info!("worker received shutdown signal");
                 return Ok(());
             }
