@@ -211,3 +211,34 @@ fn enabled_forecasting_rejects_missing_adapter_and_unbounded_policy() {
     assert!(issues.iter().any(|issue| issue.contains("336 hours")));
     assert!(issues.iter().any(|issue| issue.contains("concurrency")));
 }
+
+#[test]
+fn sqlite_page_cache_defaults_to_64_mib_and_is_bounded() {
+    let secrets = json!({
+        "session_secret": "session-secret-that-is-at-least-32-bytes",
+        "credential_encryption_key": "encryption-key-that-is-at-least-32-bytes"
+    });
+    let config = config_from_json(json!({ "security": secrets }));
+    assert_eq!(config.database.sqlite.cache_size_mib, 64);
+
+    let config = config_from_json(json!({
+        "security": secrets,
+        "database": { "sqlite": { "cache_size_mib": 16 } }
+    }));
+    assert_eq!(config.database.sqlite.cache_size_mib, 16);
+
+    for invalid in [0, 4_097] {
+        let config: RuntimeConfig = Figment::from(Serialized::defaults(json!({
+            "security": secrets,
+            "database": { "sqlite": { "cache_size_mib": invalid } }
+        })))
+        .extract()
+        .unwrap_or_else(|error| panic!("configuration shape must decode: {error}"));
+        let issues = match config.validate() {
+            Err(ConfigError::Validation(issues)) => issues,
+            Ok(()) => panic!("expected a page cache validation error for {invalid}"),
+            Err(error) => panic!("expected validation error, received: {error}"),
+        };
+        assert!(issues.iter().any(|issue| issue.contains("cache_size_mib")));
+    }
+}

@@ -311,6 +311,7 @@ impl ProjectionSetup {
                 busy_timeout: Duration::from_secs(1),
                 acquire_timeout: Duration::from_secs(1),
                 idle_pool_timeout: Duration::from_mins(1),
+                cache_size_kib: 2_048,
             },
         )?;
         let account = router.route(account_id).await?;

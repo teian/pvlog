@@ -121,6 +121,11 @@ impl RuntimeConfig {
                         "database.sqlite.management_path and accounts_dir must differ".to_owned(),
                     );
                 }
+                if !(1..=4_096).contains(&self.database.sqlite.cache_size_mib) {
+                    issues.push(
+                        "database.sqlite.cache_size_mib must be between 1 and 4096".to_owned(),
+                    );
+                }
             }
             DatabaseBackend::Postgres => {
                 let url = self.database.postgres.url.expose_secret();
@@ -276,6 +281,10 @@ pub struct SqliteConfig {
     pub management_path: PathBuf,
     /// Directory containing opaque per-account database files.
     pub accounts_dir: PathBuf,
+    /// Page cache of each account database connection in MiB. Rebuilding
+    /// aggregates is faster with more; a process keeps up to four connections
+    /// per account database open.
+    pub cache_size_mib: u32,
 }
 
 impl Default for SqliteConfig {
@@ -283,6 +292,7 @@ impl Default for SqliteConfig {
         Self {
             management_path: PathBuf::from("data/management.sqlite3"),
             accounts_dir: PathBuf::from("data/accounts"),
+            cache_size_mib: 64,
         }
     }
 }

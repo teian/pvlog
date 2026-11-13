@@ -31,6 +31,9 @@ pub struct SqliteAccountPoolConfig {
     pub acquire_timeout: Duration,
     /// Minimum unused time before an unreferenced account pool can be evicted.
     pub idle_pool_timeout: Duration,
+    /// Page cache of each account connection in KiB. A larger cache speeds up
+    /// rebuilding aggregates; every open connection may fill its own.
+    pub cache_size_kib: u32,
 }
 
 impl Default for SqliteAccountPoolConfig {
@@ -41,9 +44,18 @@ impl Default for SqliteAccountPoolConfig {
             busy_timeout: Duration::from_secs(5),
             acquire_timeout: Duration::from_secs(10),
             idle_pool_timeout: Duration::from_mins(5),
+            cache_size_kib: 64 * 1024,
         }
     }
 }
+
+/// Limits of the routers shared within the process.
+static SHARED_CONFIG: std::sync::OnceLock<SqliteAccountPoolConfig> = std::sync::OnceLock::new();
+
+/// The routers shared within the process, one per pair of database locations.
+static SHARED_ROUTERS: std::sync::OnceLock<
+    std::sync::Mutex<HashMap<(PathBuf, PathBuf), SqliteAccountPoolRouter>>,
+> = std::sync::OnceLock::new();
 
 /// Process-local bounded pool registry for account databases.
 #[derive(Clone, Debug)]
@@ -80,8 +92,15 @@ impl SqliteAccountPoolRouter {
         })
     }
 
-    /// Returns the process's router for these databases with the default
-    /// limits, creating it on first use.
+    /// Sets the limits of the routers [`Self::shared`] creates. Only the
+    /// first call counts, and only before the first shared router exists;
+    /// reports whether these limits apply.
+    pub fn configure_shared(config: SqliteAccountPoolConfig) -> bool {
+        SHARED_CONFIG.set(config).is_ok()
+    }
+
+    /// Returns the process's router for these databases, creating it on first
+    /// use with the limits set by [`Self::configure_shared`] or the default ones.
     ///
     /// Every caller shares its account pools and writer lanes: a router made
     /// anew for each request would open and close the account database each
@@ -94,10 +113,7 @@ impl SqliteAccountPoolRouter {
         management_path: PathBuf,
         accounts_dir: PathBuf,
     ) -> Result<Self, SqliteRoutingError> {
-        static ROUTERS: std::sync::OnceLock<
-            std::sync::Mutex<HashMap<(PathBuf, PathBuf), SqliteAccountPoolRouter>>,
-        > = std::sync::OnceLock::new();
-        let mut routers = ROUTERS
+        let mut routers = SHARED_ROUTERS
             .get_or_init(Default::default)
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -105,11 +121,10 @@ impl SqliteAccountPoolRouter {
         if let Some(router) = routers.get(&key) {
             return Ok(router.clone());
         }
-        let router = Self::new(
-            key.0.clone(),
-            key.1.clone(),
-            SqliteAccountPoolConfig::default(),
-        )?;
+        let config = SHARED_CONFIG
+            .get_or_init(SqliteAccountPoolConfig::default)
+            .clone();
+        let router = Self::new(key.0.clone(), key.1.clone(), config)?;
         routers.insert(key, router.clone());
         Ok(router)
     }
@@ -418,7 +433,8 @@ fn lazy_account_pool(
         .create_if_missing(false)
         .foreign_keys(true)
         .journal_mode(SqliteJournalMode::Wal)
-        .busy_timeout(config.busy_timeout);
+        .busy_timeout(config.busy_timeout)
+        .pragma("cache_size", format!("-{}", config.cache_size_kib));
     SqlitePoolOptions::new()
         .min_connections(0)
         .max_connections(config.max_connections_per_account)
@@ -431,9 +447,6 @@ fn lazy_account_pool(
                     .execute(&mut *connection)
                     .await?;
                 sqlx::query("PRAGMA synchronous = NORMAL")
-                    .execute(&mut *connection)
-                    .await?;
-                sqlx::query("PRAGMA cache_size = -65536")
                     .execute(&mut *connection)
                     .await?;
                 // A statement that writes many rows keeps a journal for undoing

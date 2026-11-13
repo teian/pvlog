@@ -168,6 +168,12 @@ async fn main() -> Result<(), StartupError> {
     let config = RuntimeConfig::load()?;
     let telemetry = init_observability(&config)?;
     let target = database_target(&config);
+    pvlog_storage::SqliteAccountPoolRouter::configure_shared(
+        pvlog_storage::SqliteAccountPoolConfig {
+            cache_size_kib: config.database.sqlite.cache_size_mib.saturating_mul(1_024),
+            ..pvlog_storage::SqliteAccountPoolConfig::default()
+        },
+    );
 
     let result = match cli.command {
         Command::Server => run_server(&config, &target).await,

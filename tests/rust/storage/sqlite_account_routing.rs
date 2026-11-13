@@ -51,7 +51,11 @@ async fn account_connections_enforce_pragmas_binding_and_serialized_writers()
         .await?;
     assert_eq!(foreign_keys, 1);
     assert_eq!(journal_mode, "wal");
+    let cache_size: i64 = sqlx::query_scalar("PRAGMA cache_size")
+        .fetch_one(&mut *connection)
+        .await?;
     assert_eq!(busy_timeout, 1_234);
+    assert_eq!(cache_size, -2_048);
     drop(connection);
 
     let first_writer = account.acquire_writer().await?;
@@ -181,6 +185,7 @@ impl RoutingSetup {
                 busy_timeout: Duration::from_millis(1_234),
                 acquire_timeout: Duration::from_secs(1),
                 idle_pool_timeout,
+                cache_size_kib: 2_048,
             },
         )
     }
