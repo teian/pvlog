@@ -15,7 +15,7 @@ use chrono_tz::Tz;
 use pvlog_domain::{AccountId, SystemId};
 use pvlog_storage::{DatabaseTarget, ManagementRepository};
 #[cfg(feature = "sqlite")]
-use sqlx::Row;
+use sqlx::{Connection as _, Row};
 use thiserror::Error;
 
 const RESOLUTIONS: [Resolution; 5] = [
@@ -287,7 +287,9 @@ async fn account_ids(
         .collect()
 }
 
-/// Rebuilds the rollups and daily summaries of one system for local years touched by observations received since the last rebuild, or after a channel binding changed.
+/// Rebuilds the rollups and daily summaries of one system for one local year of
+/// its pending range and records where the next cycle continues; see
+/// [`rebuild_run`] for what is pending.
 #[cfg(feature = "sqlite")]
 async fn rebuild_system(
     account: &pvlog_storage::RoutedSqliteAccount,
@@ -314,19 +316,125 @@ async fn rebuild_system(
         .get::<i64, _>("status_interval_seconds")
         .saturating_mul(1_000);
 
-    let watermark: Option<i64> =
-        sqlx::query_scalar(
-            "SELECT MAX(calculated_at) FROM telemetry_rollups WHERE system_id=? AND scope_kind='system'",
+    let Some(run) = rebuild_run(&mut connection, &blob, zone).await? else {
+        return Ok(AggregationReport::default());
+    };
+    // One local year at a time, each in its own transaction: a rebuild of years
+    // of history neither holds everything in memory nor writes it in one go.
+    let chunk_end = next_year_start(zone, run.next_start)?.min(run.range_end);
+    let mut report = AggregationReport::default();
+    let mut transaction = connection
+        .begin()
+        .await
+        .map_err(|_| AggregationError::Unavailable)?;
+    if let Some(samples) = plant_samples(&mut transaction, &blob, run.next_start, chunk_end).await?
+    {
+        report.systems_rebuilt = 1;
+        // The system bucket keeps using the plant-wide columns; per-string
+        // buckets come from the channels bound to each string, and an inverter
+        // is the sum of the strings beneath it.
+        let scopes = metered_scopes(
+            &mut transaction,
+            &blob,
+            run.next_start,
+            chunk_end,
+            interval_millis,
         )
+        .await?;
+        for (scope_kind, scope_id, scope_samples) in
+            std::iter::once(("system", blob.clone(), samples)).chain(scopes)
+        {
+            let written = write_aggregates(
+                &mut transaction,
+                &AggregateContext {
+                    blob: blob.clone(),
+                    scope_kind,
+                    scope_id,
+                    timezone: timezone.clone(),
+                    zone,
+                    interval_millis,
+                    calculated_at: run.calculated_at,
+                },
+                &scope_samples,
+            )
+            .await?;
+            report.merge(written);
+        }
+    }
+    if chunk_end < run.range_end {
+        sqlx::query(
+            "INSERT INTO aggregation_progress (system_id,next_start,range_end,calculated_at) \
+             VALUES (?,?,?,?) ON CONFLICT(system_id) DO UPDATE SET next_start=excluded.next_start",
+        )
+        .bind(blob.clone())
+        .bind(chunk_end)
+        .bind(run.range_end)
+        .bind(run.calculated_at)
+        .execute(&mut *transaction)
+        .await
+        .map_err(|_| AggregationError::Unavailable)?;
+    } else {
+        sqlx::query("DELETE FROM aggregation_progress WHERE system_id=?")
             .bind(blob.clone())
-            .fetch_one(&mut *connection)
+            .execute(&mut *transaction)
             .await
             .map_err(|_| AggregationError::Unavailable)?;
+        rebuild_lifetime(&mut transaction, &blob, run.calculated_at).await?;
+    }
+    transaction
+        .commit()
+        .await
+        .map_err(|_| AggregationError::Unavailable)?;
+    Ok(report)
+}
+
+/// Where a rebuild of a system's aggregates stands.
+#[cfg(feature = "sqlite")]
+struct RebuildRun {
+    /// Start of the next local year to rebuild.
+    next_start: i64,
+    /// End of the last local year to rebuild.
+    range_end: i64,
+    /// Time stamped on everything the rebuild writes; readings received later
+    /// are pending for the next rebuild.
+    calculated_at: i64,
+}
+
+/// Continues the running rebuild of a system, or starts one for the local
+/// years touched by readings received since the last rebuild, or by every
+/// reading after a channel binding changed. `None` when nothing is pending.
+#[cfg(feature = "sqlite")]
+async fn rebuild_run(
+    connection: &mut sqlx::SqliteConnection,
+    blob: &[u8],
+    zone: Tz,
+) -> Result<Option<RebuildRun>, AggregationError> {
+    if let Some(row) = sqlx::query(
+        "SELECT next_start,range_end,calculated_at FROM aggregation_progress WHERE system_id=?",
+    )
+    .bind(blob.to_vec())
+    .fetch_optional(&mut *connection)
+    .await
+    .map_err(|_| AggregationError::Unavailable)?
+    {
+        return Ok(Some(RebuildRun {
+            next_start: row.get("next_start"),
+            range_end: row.get("range_end"),
+            calculated_at: row.get("calculated_at"),
+        }));
+    }
+    let watermark: Option<i64> = sqlx::query_scalar(
+        "SELECT MAX(calculated_at) FROM telemetry_rollups WHERE system_id=? AND scope_kind='system'",
+    )
+    .bind(blob.to_vec())
+    .fetch_one(&mut *connection)
+    .await
+    .map_err(|_| AggregationError::Unavailable)?;
     // A binding changed after the last rebuild re-attributes history, so every
     // retained observation is pending again, not only the newly received ones.
     let rebound: Option<i64> =
         sqlx::query_scalar("SELECT MAX(updated_at) FROM channel_definitions WHERE system_id=?")
-            .bind(blob.clone())
+            .bind(blob.to_vec())
             .fetch_one(&mut *connection)
             .await
             .map_err(|_| AggregationError::Unavailable)?;
@@ -338,7 +446,7 @@ async fn rebuild_system(
         "SELECT MIN(measured_at) AS first, MAX(measured_at) AS last FROM telemetry_hot \
          WHERE system_id=? AND received_at>?",
     )
-    .bind(blob.clone())
+    .bind(blob.to_vec())
     .bind(watermark.unwrap_or(i64::MIN))
     .fetch_optional(&mut *connection)
     .await
@@ -348,53 +456,15 @@ async fn rebuild_system(
         pending.map(|(first, _)| first),
         pending.map(|(_, last)| last),
     ) else {
-        return Ok(AggregationReport::default());
+        return Ok(None);
     };
-
-    // Yearly buckets are the coarsest, so widening to whole local years covers
-    // every finer bucket the touched observations belong to.
-    let start = year_start(zone, first)?;
-    let end = year_start(zone, last)?
-        .checked_add(1)
-        .ok_or(AggregationError::Timezone)?;
-    let end = next_year_start(zone, end)?;
-
-    let Some(samples) = plant_samples(&mut connection, &blob, start, end).await? else {
-        return Ok(AggregationReport::default());
-    };
-
-    let calculated_at = Utc::now().timestamp_millis();
-    let mut report = AggregationReport {
-        systems_rebuilt: 1,
-        ..AggregationReport::default()
-    };
-
-    // The system bucket keeps using the plant-wide columns; per-string buckets
-    // come from the channels bound to each string, and an inverter is the sum of
-    // the strings beneath it.
-    let scopes = metered_scopes(&mut connection, &blob, start, end, interval_millis).await?;
-    for (scope_kind, scope_id, scope_samples) in
-        std::iter::once(("system", blob.clone(), samples)).chain(scopes)
-    {
-        let written = write_aggregates(
-            &mut connection,
-            &AggregateContext {
-                blob: blob.clone(),
-                scope_kind,
-                scope_id,
-                timezone: timezone.clone(),
-                zone,
-                interval_millis,
-                calculated_at,
-            },
-            &scope_samples,
-        )
-        .await?;
-        report.merge(written);
-    }
-
-    rebuild_lifetime(&mut connection, &blob, calculated_at).await?;
-    Ok(report)
+    // Yearly buckets are the coarsest, so whole local years cover every finer
+    // bucket the touched observations belong to.
+    Ok(Some(RebuildRun {
+        next_start: year_start(zone, first)?,
+        range_end: next_year_start(zone, last)?,
+        calculated_at: Utc::now().timestamp_millis(),
+    }))
 }
 
 /// Reads the plant-wide observation columns for one range.
@@ -547,16 +617,17 @@ async fn write_aggregates(
 ) -> Result<AggregationReport, AggregationError> {
     let mut report = AggregationReport::default();
     let mut daily: BTreeMap<String, Bucket> = BTreeMap::new();
+    let mut rollups: Vec<(Resolution, Bucket)> = Vec::new();
     for resolution in RESOLUTIONS {
-        let buckets = bucket_samples(context.zone, resolution, samples)?;
-        for (label, bucket) in &buckets {
-            write_rollup(&mut *connection, context, resolution, bucket).await?;
-            report.rollups_written += 1;
+        for ((_, label), bucket) in bucket_samples(context.zone, resolution, samples)? {
             if resolution == Resolution::Day {
-                daily.insert(label.clone(), bucket.clone());
+                daily.insert(label, bucket.clone());
             }
+            rollups.push((resolution, bucket));
         }
     }
+    write_rollups(&mut *connection, context, &rollups).await?;
+    report.rollups_written += u64::try_from(rollups.len()).unwrap_or(u64::MAX);
     // Daily and lifetime summaries describe the plant, so only the system scope
     // contributes to them; per-string totals live in the rollups.
     if context.scope_kind == "system" {
@@ -568,70 +639,83 @@ async fn write_aggregates(
     Ok(report)
 }
 
-/// Inserts or updates the rollup row for a bucket at the given resolution and scope.
+/// Inserts or updates the rollup rows of buckets of one scope, many rows per
+/// statement.
 #[cfg(feature = "sqlite")]
-async fn write_rollup(
+async fn write_rollups(
     connection: &mut sqlx::SqliteConnection,
     context: &AggregateContext,
-    resolution: Resolution,
-    bucket: &Bucket,
+    rollups: &[(Resolution, Bucket)],
 ) -> Result<(), AggregationError> {
-    sqlx::query(
-        "INSERT INTO telemetry_rollups (system_id,scope_kind,scope_id,resolution,\
-         bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,\
-         generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,\
-         generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,\
-         quality_flags,coverage_basis_points,calculated_at,\
-         grid_import_energy_sum_wh,grid_export_energy_sum_wh,\
-         temperature_min_millidegrees_c,temperature_max_millidegrees_c,\
-         voltage_mean_millivolts,battery_energy_delta_wh) \
-         VALUES (?,?,?,?,?,?,?,1,1,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) \
-         ON CONFLICT(system_id,scope_kind,scope_id,resolution,bucket_start,generation) DO UPDATE SET \
-         bucket_end=excluded.bucket_end,point_count=excluded.point_count,\
-         expected_count=excluded.expected_count,\
-         generation_energy_sum_wh=excluded.generation_energy_sum_wh,\
-         consumption_energy_sum_wh=excluded.consumption_energy_sum_wh,\
-         generation_power_min_watts=excluded.generation_power_min_watts,\
-         generation_power_max_watts=excluded.generation_power_max_watts,\
-         generation_power_first_watts=excluded.generation_power_first_watts,\
-         generation_power_last_watts=excluded.generation_power_last_watts,\
-         quality_flags=excluded.quality_flags,\
-         coverage_basis_points=excluded.coverage_basis_points,\
-         calculated_at=excluded.calculated_at,\
-         grid_import_energy_sum_wh=excluded.grid_import_energy_sum_wh,\
-         grid_export_energy_sum_wh=excluded.grid_export_energy_sum_wh,\
-         temperature_min_millidegrees_c=excluded.temperature_min_millidegrees_c,\
-         temperature_max_millidegrees_c=excluded.temperature_max_millidegrees_c,\
-         voltage_mean_millivolts=excluded.voltage_mean_millivolts,\
-         battery_energy_delta_wh=excluded.battery_energy_delta_wh",
-    )
-    .bind(context.blob.clone())
-    .bind(context.scope_kind)
-    .bind(context.scope_id.clone())
-    .bind(resolution.name())
-    .bind(bucket.start)
-    .bind(bucket.end)
-    .bind(&context.timezone)
-    .bind(bucket.points)
-    .bind(bucket.expected(context.interval_millis))
-    .bind(bucket.generation_energy_wh)
-    .bind(bucket.consumption_energy_wh)
-    .bind(bucket.minimum_watts)
-    .bind(bucket.maximum_watts)
-    .bind(bucket.first_watts)
-    .bind(bucket.last_watts)
-    .bind(bucket.quality_flags)
-    .bind(bucket.coverage(context.interval_millis))
-    .bind(context.calculated_at)
-    .bind(bucket.grid_import_energy_wh)
-    .bind(bucket.grid_export_energy_wh)
-    .bind(bucket.minimum_temperature)
-    .bind(bucket.maximum_temperature)
-    .bind(bucket.mean_voltage())
-    .bind(bucket.battery_energy_delta())
-    .execute(connection)
-    .await
-    .map_err(|_| AggregationError::Unavailable)?;
+    // 24 bound values a row stays well below the parameters SQLite allows.
+    const ROWS_PER_STATEMENT: usize = 400;
+    for chunk in rollups.chunks(ROWS_PER_STATEMENT) {
+        let mut statement = sqlx::QueryBuilder::new(
+            "INSERT INTO telemetry_rollups (system_id,scope_kind,scope_id,resolution,\
+             bucket_start,bucket_end,timezone,generation,source_generation,point_count,\
+             expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,\
+             generation_power_min_watts,generation_power_max_watts,\
+             generation_power_first_watts,generation_power_last_watts,\
+             quality_flags,coverage_basis_points,calculated_at,\
+             grid_import_energy_sum_wh,grid_export_energy_sum_wh,\
+             temperature_min_millidegrees_c,temperature_max_millidegrees_c,\
+             voltage_mean_millivolts,battery_energy_delta_wh) ",
+        );
+        statement.push_values(chunk, |mut row, (resolution, bucket)| {
+            row.push_bind(context.blob.clone())
+                .push_bind(context.scope_kind)
+                .push_bind(context.scope_id.clone())
+                .push_bind(resolution.name())
+                .push_bind(bucket.start)
+                .push_bind(bucket.end)
+                .push_bind(context.timezone.clone())
+                .push("1")
+                .push("1")
+                .push_bind(bucket.points)
+                .push_bind(bucket.expected(context.interval_millis))
+                .push_bind(bucket.generation_energy_wh)
+                .push_bind(bucket.consumption_energy_wh)
+                .push_bind(bucket.minimum_watts)
+                .push_bind(bucket.maximum_watts)
+                .push_bind(bucket.first_watts)
+                .push_bind(bucket.last_watts)
+                .push_bind(bucket.quality_flags)
+                .push_bind(bucket.coverage(context.interval_millis))
+                .push_bind(context.calculated_at)
+                .push_bind(bucket.grid_import_energy_wh)
+                .push_bind(bucket.grid_export_energy_wh)
+                .push_bind(bucket.minimum_temperature)
+                .push_bind(bucket.maximum_temperature)
+                .push_bind(bucket.mean_voltage())
+                .push_bind(bucket.battery_energy_delta());
+        });
+        statement.push(
+            " ON CONFLICT(system_id,scope_kind,scope_id,resolution,bucket_start,generation) \
+             DO UPDATE SET \
+             bucket_end=excluded.bucket_end,point_count=excluded.point_count,\
+             expected_count=excluded.expected_count,\
+             generation_energy_sum_wh=excluded.generation_energy_sum_wh,\
+             consumption_energy_sum_wh=excluded.consumption_energy_sum_wh,\
+             generation_power_min_watts=excluded.generation_power_min_watts,\
+             generation_power_max_watts=excluded.generation_power_max_watts,\
+             generation_power_first_watts=excluded.generation_power_first_watts,\
+             generation_power_last_watts=excluded.generation_power_last_watts,\
+             quality_flags=excluded.quality_flags,\
+             coverage_basis_points=excluded.coverage_basis_points,\
+             calculated_at=excluded.calculated_at,\
+             grid_import_energy_sum_wh=excluded.grid_import_energy_sum_wh,\
+             grid_export_energy_sum_wh=excluded.grid_export_energy_sum_wh,\
+             temperature_min_millidegrees_c=excluded.temperature_min_millidegrees_c,\
+             temperature_max_millidegrees_c=excluded.temperature_max_millidegrees_c,\
+             voltage_mean_millivolts=excluded.voltage_mean_millivolts,\
+             battery_energy_delta_wh=excluded.battery_energy_delta_wh",
+        );
+        statement
+            .build()
+            .execute(&mut *connection)
+            .await
+            .map_err(|_| AggregationError::Unavailable)?;
+    }
     Ok(())
 }
 
@@ -756,12 +840,25 @@ fn bucket_samples(
     zone: Tz,
     resolution: Resolution,
     samples: &[Sample],
-) -> Result<BTreeMap<String, Bucket>, AggregationError> {
-    let mut buckets: BTreeMap<String, Bucket> = BTreeMap::new();
+) -> Result<BTreeMap<(i64, String), Bucket>, AggregationError> {
+    // Keyed by start as well: the hour repeated when the clocks go back has
+    // one label but two buckets.
+    let mut buckets: BTreeMap<(i64, String), Bucket> = BTreeMap::new();
+    // Neighbouring samples mostly share a bucket, whose window is then reused
+    // instead of being worked out again.
+    let mut current: Option<(String, i64, i64)> = None;
     for sample in samples {
-        let local = local_time(zone, sample.measured_at)?;
-        let (label, start, end) = window(zone, resolution, local)?;
-        let bucket = buckets.entry(label).or_insert(Bucket {
+        let (label, start, end) = match &current {
+            Some((label, start, end)) if (*start..*end).contains(&sample.measured_at) => {
+                (label.clone(), *start, *end)
+            }
+            _ => {
+                let found = window(zone, resolution, local_time(zone, sample.measured_at)?)?;
+                current = Some(found.clone());
+                found
+            }
+        };
+        let bucket = buckets.entry((start, label)).or_insert(Bucket {
             start,
             end,
             ..Bucket::default()
@@ -785,13 +882,12 @@ pub(crate) fn window(
     local: DateTime<Tz>,
 ) -> Result<(String, i64, i64), AggregationError> {
     let (label, start_local, end_local) = match resolution {
+        // Quarter-hours and hours step back from the instant itself instead of
+        // setting local clock fields: a local time that occurs twice when the
+        // clocks go back has no single instant, so the repeated hour is two
+        // buckets with the same label and different starts.
         Resolution::FifteenMinutes => {
-            let minute = (local.minute() / 15) * 15;
-            let start = local
-                .with_minute(minute)
-                .and_then(|value| value.with_second(0))
-                .and_then(|value| value.with_nanosecond(0))
-                .ok_or(AggregationError::Timezone)?;
+            let start = local - since_bucket_start(&local, local.minute() % 15);
             (
                 start.format("%Y-%m-%dT%H:%M").to_string(),
                 start,
@@ -799,11 +895,7 @@ pub(crate) fn window(
             )
         }
         Resolution::Hour => {
-            let start = local
-                .with_minute(0)
-                .and_then(|value| value.with_second(0))
-                .and_then(|value| value.with_nanosecond(0))
-                .ok_or(AggregationError::Timezone)?;
+            let start = local - since_bucket_start(&local, local.minute());
             (
                 start.format("%Y-%m-%dT%H").to_string(),
                 start,
@@ -848,6 +940,14 @@ pub(crate) fn window(
         start_local.timestamp_millis(),
         end_local.timestamp_millis(),
     ))
+}
+
+/// Time from the start of a bucket that began `minutes` whole minutes before
+/// the minute of `local`.
+fn since_bucket_start(local: &DateTime<Tz>, minutes: u32) -> chrono::Duration {
+    chrono::Duration::minutes(i64::from(minutes))
+        + chrono::Duration::seconds(i64::from(local.second()))
+        + chrono::Duration::nanoseconds(i64::from(local.nanosecond()))
 }
 
 /// First instant of a local date, choosing the earlier option at a DST overlap.

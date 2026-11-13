@@ -380,6 +380,156 @@ async fn postgres_stores_grid_flows_when_configured() -> Result<(), Box<dyn Erro
     grid_flows(Fixture::postgres(url).await?).await
 }
 
+/// Readings through the night the clocks go back are aggregated: the local
+/// hour from 02:00 to 03:00 occurs twice and becomes two hourly buckets.
+#[tokio::test]
+async fn sqlite_aggregates_the_hour_that_occurs_twice_when_the_clocks_go_back()
+-> Result<(), Box<dyn Error>> {
+    let fixture = Fixture::sqlite().await?;
+    let Some(account) = &fixture.sqlite else {
+        return Ok(());
+    };
+    let system = fixture.system_id.as_uuid().as_bytes().to_vec();
+    sqlx::query("UPDATE systems SET timezone='Europe/Berlin' WHERE id=?")
+        .bind(system.clone())
+        .execute(&mut *account.acquire().await?)
+        .await?;
+    // 2026-10-25 00:00 UTC is 02:00 summer time; 01:00 UTC is 02:00 winter time.
+    let night = 1_792_886_400_000_i64;
+    for quarter in 0..12 {
+        let measured_at = night - 3_600_000 + quarter * 900_000;
+        let mut reading = fixture.reading(0);
+        reading.observed_at = UtcTimestamp::from_epoch_millis(measured_at)?;
+        reading.received_at = reading.observed_at;
+        reading.idempotency_key = measured_at.to_string();
+        reading.generation_energy = interval(10);
+        fixture.telemetry.ingest(reading).await?;
+    }
+
+    pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
+    let mut connection = account.acquire().await?;
+    let hours: Vec<(i64, Option<i64>)> = sqlx::query_as(
+        "SELECT bucket_start,generation_energy_sum_wh FROM telemetry_rollups \
+         WHERE system_id=? AND scope_kind='system' AND resolution='hour' ORDER BY bucket_start",
+    )
+    .bind(system.clone())
+    .fetch_all(&mut *connection)
+    .await?;
+    // 01:00 summer time, 02:00 summer time, 02:00 winter time: one hour each.
+    assert_eq!(
+        hours,
+        vec![
+            (night - 3_600_000, Some(40)),
+            (night, Some(40)),
+            (night + 3_600_000, Some(40)),
+        ]
+    );
+    let quarters: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM telemetry_rollups \
+         WHERE system_id=? AND scope_kind='system' AND resolution='fifteen_minute'",
+    )
+    .bind(system.clone())
+    .fetch_one(&mut *connection)
+    .await?;
+    assert_eq!(quarters, 12);
+    let day: Option<i64> = sqlx::query_scalar(
+        "SELECT generation_energy_wh FROM system_daily_summaries WHERE system_id=? AND local_date='2026-10-25'",
+    )
+    .bind(system)
+    .fetch_one(&mut *connection)
+    .await?;
+    assert_eq!(day, Some(120));
+    Ok(())
+}
+
+/// History of several years is aggregated one local year per cycle, and a
+/// reading that arrives meanwhile is picked up once the rebuild finished.
+#[tokio::test]
+async fn sqlite_aggregates_years_of_history_one_year_per_cycle() -> Result<(), Box<dyn Error>> {
+    let fixture = Fixture::sqlite().await?;
+    let Some(account) = &fixture.sqlite else {
+        return Ok(());
+    };
+    let system = fixture.system_id.as_uuid().as_bytes().to_vec();
+    // Noon of 1 June 2024, 2025 and 2026 (UTC, the fixture's timezone).
+    let years = [1_717_243_200_000_i64, 1_748_779_200_000, 1_780_315_200_000];
+    let ingest = |measured_at: i64, energy: i64| {
+        let mut reading = fixture.reading(0);
+        reading.observed_at =
+            UtcTimestamp::from_epoch_millis(measured_at).unwrap_or_else(|_| unreachable!());
+        reading.received_at = reading.observed_at;
+        reading.idempotency_key = measured_at.to_string();
+        reading.generation_energy = interval(energy);
+        reading
+    };
+    // The aggregation stamps what it writes with the real time; the history
+    // arrived before it, the late reading after it.
+    fixture
+        .clock
+        .0
+        .store(years[2] + 3_600_000, Ordering::SeqCst);
+    for at in years {
+        fixture.telemetry.ingest(ingest(at, 100)).await?;
+    }
+    let yearly = || async {
+        let mut connection = account.acquire().await?;
+        let rows: Vec<(i64, Option<i64>)> = sqlx::query_as(
+            "SELECT bucket_start,generation_energy_sum_wh FROM telemetry_rollups \
+             WHERE system_id=? AND scope_kind='system' AND resolution='year' ORDER BY bucket_start",
+        )
+        .bind(system.clone())
+        .fetch_all(&mut *connection)
+        .await?;
+        let running: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM aggregation_progress")
+            .fetch_one(&mut *connection)
+            .await?;
+        Ok::<_, Box<dyn Error>>((rows.len(), running))
+    };
+
+    pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
+    assert_eq!(
+        yearly().await?,
+        (1, 1),
+        "the first year, and the rebuild runs on"
+    );
+    // A reading of the year already rebuilt arrives while the rebuild runs.
+    fixture.clock.0.store(
+        chrono::Utc::now().timestamp_millis() + 3_600_000,
+        Ordering::SeqCst,
+    );
+    fixture
+        .telemetry
+        .ingest(ingest(years[0] + 900_000, 50))
+        .await?;
+    pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
+    assert_eq!(yearly().await?, (2, 1));
+    pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
+    assert_eq!(
+        yearly().await?,
+        (3, 0),
+        "every year, and the rebuild is done"
+    );
+    // The next cycle rebuilds the year of the late reading.
+    pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
+    let mut connection = account.acquire().await?;
+    let first: Option<i64> = sqlx::query_scalar(
+        "SELECT generation_energy_sum_wh FROM telemetry_rollups \
+         WHERE system_id=? AND scope_kind='system' AND resolution='year' ORDER BY bucket_start LIMIT 1",
+    )
+    .bind(system.clone())
+    .fetch_one(&mut *connection)
+    .await?;
+    assert_eq!(first, Some(150));
+    let lifetime: Option<i64> = sqlx::query_scalar(
+        "SELECT generation_energy_wh FROM system_lifetime_summaries WHERE system_id=?",
+    )
+    .bind(system)
+    .fetch_one(&mut *connection)
+    .await?;
+    assert_eq!(lifetime, Some(350));
+    Ok(())
+}
+
 /// The statements that fill the measurement columns from the provenance of
 /// readings stored before those columns were written.
 fn backfill_statements(migration: &str) -> Vec<String> {
