@@ -366,9 +366,14 @@ macro_rules! sqlite_channel_select {
             "SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,",
             "c.unit,c.scale,c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,",
             "c.last_value_at,c.first_nonzero_at,c.updated_at,",
-            "(SELECT v.integer_value FROM telemetry_hot_extended_values v ",
-            "JOIN telemetry_hot h ON h.observation_id=v.observation_id ",
-            "WHERE v.channel_id=c.id ORDER BY h.measured_at DESC LIMIT 1) AS last_value ",
+            // Walking the system's readings newest first and probing each
+            // for the channel stops at the newest value; going through the
+            // channel's values instead would sort all of them.
+            "(SELECT v.integer_value FROM telemetry_hot h ",
+            "INDEXED BY telemetry_hot_system_time_idx ",
+            "CROSS JOIN telemetry_hot_extended_values v ",
+            "ON v.observation_id=h.observation_id AND v.channel_id=c.id ",
+            "WHERE h.system_id=c.system_id ORDER BY h.measured_at DESC LIMIT 1) AS last_value ",
             "FROM channel_definitions c ",
             $tail
         )
