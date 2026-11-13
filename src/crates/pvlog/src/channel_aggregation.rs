@@ -129,16 +129,17 @@ pub async fn rebuild_channel_rollups(
         return Ok(0);
     };
 
-    // One local year at a time, with the values of every pending channel read
+    // One local day at a time, with the values of every pending channel read
     // in one pass: years of history are neither read channel by channel nor
-    // held in memory at once. The next year is read while the aggregates of
-    // the current one are written.
-    let mut years = Vec::new();
-    let mut year_from = year_start(zone, start)?;
-    while year_from < end {
-        let year_to = next_year_start(zone, year_from)?;
-        years.push((year_from.max(start), year_to.min(end)));
-        year_from = year_to;
+    // held in memory at once, and every finer bucket lies within a day. The
+    // aggregates of a month are written together, while the next day is read.
+    let mut chunks = Vec::new();
+    let mut chunk_from = start;
+    while chunk_from < end {
+        let (_, _, day_end) = window(zone, Resolution::Day, local_time(zone, chunk_from)?)?;
+        let chunk_to = day_end.min(end);
+        chunks.push((chunk_from, chunk_to));
+        chunk_from = chunk_to;
     }
     let read = |(from, to): (i64, i64), channels: Vec<ChannelId>| async move {
         repository
@@ -147,17 +148,30 @@ pub async fn rebuild_channel_rollups(
             .map_err(|_| AggregationError::Unavailable)
     };
     let mut written = 0_u64;
-    let mut next = match years.first() {
-        Some(&year) => Some(read(year, channels_within(&runs, year)).await?),
+    let mut staged: BTreeMap<usize, Staged> = BTreeMap::new();
+    let mut next = match chunks.first() {
+        Some(&chunk) => Some(read(chunk, channels_within(&runs, chunk)).await?),
         None => None,
     };
-    for (index, &year) in years.iter().enumerate() {
-        let values = next.take().unwrap_or_default();
-        let following = years
+    for (index, &chunk) in chunks.iter().enumerate() {
+        build_chunk(
+            zone,
+            &mut runs,
+            chunk,
+            next.take().unwrap_or_default(),
+            &mut staged,
+        )?;
+        let (_, _, month_end) = window(zone, Resolution::Month, local_time(zone, chunk.0)?)?;
+        let ready = if chunk.1 >= month_end || index + 1 == chunks.len() {
+            std::mem::take(&mut staged)
+        } else {
+            BTreeMap::new()
+        };
+        let following = chunks
             .get(index + 1)
-            .map(|&year| read(year, channels_within(&runs, year)));
-        let (built, following) = tokio::join!(
-            build_year(repository, zone, calculated_at, &mut runs, year, values),
+            .map(|&chunk| read(chunk, channels_within(&runs, chunk)));
+        let (stored, following) = tokio::join!(
+            write_staged(repository, &runs, ready, calculated_at),
             async {
                 match following {
                     Some(reading) => Some(reading.await),
@@ -165,7 +179,7 @@ pub async fn rebuild_channel_rollups(
                 }
             }
         );
-        written += built?;
+        written += stored?;
         next = following.transpose()?;
     }
 
@@ -214,25 +228,34 @@ fn channels_within(runs: &[ChannelRun], (from, to): (i64, i64)) -> Vec<ChannelId
         .collect()
 }
 
-/// Rebuilds the quarter-hour, hour and day aggregates of the pending channels
-/// within `[from, to)` from their values there, oldest first, and returns how
-/// many were written.
-async fn build_year(
-    repository: &dyn ChannelRepository,
+/// The quarter-hour, hour and day aggregates of one channel built for
+/// consecutive days and not yet written.
+struct Staged {
+    /// Start of the first day they cover.
+    from: i64,
+    /// End of the last day they cover.
+    to: i64,
+    rollups: Vec<ChannelRollupRecord>,
+}
+
+/// Builds the quarter-hour, hour and day aggregates of the pending channels
+/// within `[from, to)` from their values there, oldest first, and stages them
+/// under each channel's run.
+fn build_chunk(
     zone: Tz,
-    calculated_at: i64,
     runs: &mut [ChannelRun],
     (from, to): (i64, i64),
     values: Vec<(ChannelId, ChannelValueRecord)>,
-) -> Result<u64, AggregationError> {
+    staged: &mut BTreeMap<usize, Staged>,
+) -> Result<(), AggregationError> {
     let mut by_channel: HashMap<ChannelId, Vec<ChannelValueRecord>> = HashMap::new();
     for (channel_id, value) in values {
         by_channel.entry(channel_id).or_default().push(value);
     }
-    let mut written = 0_u64;
-    for run in runs
+    for (index, run) in runs
         .iter_mut()
-        .filter(|run| run.days_from < to && run.days_to > from)
+        .enumerate()
+        .filter(|(_, run)| run.days_from < to && run.days_to > from)
     {
         let channel = &run.pending.channel;
         let (low, high) = (run.days_from.max(from), run.days_to.min(to));
@@ -242,9 +265,14 @@ async fn build_year(
             .into_iter()
             .filter(|value| (low..high).contains(&value.measured_at))
             .collect();
-        let mut fine = Vec::new();
+        let stage = staged.entry(index).or_insert(Staged {
+            from: low,
+            to: high,
+            rollups: Vec::new(),
+        });
+        stage.to = high;
         for resolution in FINE {
-            fine.extend(bucket_values(
+            stage.rollups.extend(bucket_values(
                 zone,
                 resolution,
                 channel.id,
@@ -253,13 +281,36 @@ async fn build_year(
                 run.previous,
             )?);
         }
-        replace(repository, channel, FINE, low, high, &fine, calculated_at).await?;
         if run.counter
             && let Some(last) = values.last()
         {
             run.previous = Some(last.value);
         }
-        written += u64::try_from(fine.len()).unwrap_or(u64::MAX);
+    }
+    Ok(())
+}
+
+/// Writes staged aggregates in place of the stored ones of the days they
+/// cover and returns how many were written.
+async fn write_staged(
+    repository: &dyn ChannelRepository,
+    runs: &[ChannelRun],
+    staged: BTreeMap<usize, Staged>,
+    calculated_at: i64,
+) -> Result<u64, AggregationError> {
+    let mut written = 0_u64;
+    for (index, stage) in staged {
+        replace(
+            repository,
+            &runs[index].pending.channel,
+            FINE,
+            stage.from,
+            stage.to,
+            &stage.rollups,
+            calculated_at,
+        )
+        .await?;
+        written += u64::try_from(stage.rollups.len()).unwrap_or(u64::MAX);
     }
     Ok(written)
 }

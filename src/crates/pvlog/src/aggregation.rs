@@ -131,6 +131,37 @@ impl Bucket {
         }
     }
 
+    /// Folds a bucket of the same window that follows this one in time into
+    /// it, as if its samples had been accepted here.
+    fn merge(&mut self, later: &Self) {
+        self.points += later.points;
+        self.generation_energy_wh += later.generation_energy_wh;
+        self.consumption_energy_wh += later.consumption_energy_wh;
+        self.quality_flags |= later.quality_flags;
+        add(&mut self.grid_import_energy_wh, later.grid_import_energy_wh);
+        add(&mut self.grid_export_energy_wh, later.grid_export_energy_wh);
+        self.minimum_temperature = extreme(
+            self.minimum_temperature,
+            later.minimum_temperature,
+            i64::min,
+        );
+        self.maximum_temperature = extreme(
+            self.maximum_temperature,
+            later.maximum_temperature,
+            i64::max,
+        );
+        self.voltage_sum += later.voltage_sum;
+        self.voltage_points += later.voltage_points;
+        self.first_battery_energy_wh = self
+            .first_battery_energy_wh
+            .or(later.first_battery_energy_wh);
+        self.last_battery_energy_wh = later.last_battery_energy_wh.or(self.last_battery_energy_wh);
+        self.minimum_watts = extreme(self.minimum_watts, later.minimum_watts, i64::min);
+        self.maximum_watts = extreme(self.maximum_watts, later.maximum_watts, i64::max);
+        self.first_watts = self.first_watts.or(later.first_watts);
+        self.last_watts = later.last_watts.or(self.last_watts);
+    }
+
     /// Change of the energy the battery holds across the bucket: positive when
     /// it was charged. Absent when no sample reported the stored energy.
     fn battery_energy_delta(&self) -> Option<i64> {
@@ -156,6 +187,14 @@ impl Bucket {
         i32::try_from((self.points * 10_000) / expected)
             .unwrap_or(10_000)
             .clamp(0, 10_000)
+    }
+}
+
+/// The smaller or larger of two values that may each be absent.
+fn extreme(left: Option<i64>, right: Option<i64>, pick: fn(i64, i64) -> i64) -> Option<i64> {
+    match (left, right) {
+        (Some(left), Some(right)) => Some(pick(left, right)),
+        (value, None) | (None, value) => value,
     }
 }
 
@@ -320,45 +359,54 @@ async fn rebuild_system(
     };
     // One local year at a time, each in its own transaction: a rebuild of years
     // of history neither holds everything in memory nor writes it in one go.
+    // Within the year the readings are read one local day at a time; the
+    // months and the year grow from the days and are written at the end.
     let chunk_end = next_year_start(zone, run.next_start)?.min(run.range_end);
+    let context = |scope_kind: &'static str, scope_id: Vec<u8>| AggregateContext {
+        blob: blob.clone(),
+        scope_kind,
+        scope_id,
+        timezone: timezone.clone(),
+        zone,
+        interval_millis,
+        calculated_at: run.calculated_at,
+    };
     let mut report = AggregationReport::default();
     let mut transaction = connection
         .begin()
         .await
         .map_err(|_| AggregationError::Unavailable)?;
-    if let Some(samples) = plant_samples(&mut transaction, &blob, run.next_start, chunk_end).await?
-    {
-        report.systems_rebuilt = 1;
-        // The system bucket keeps using the plant-wide columns; per-string
-        // buckets come from the channels bound to each string, and an inverter
-        // is the sum of the strings beneath it.
-        let scopes = metered_scopes(
-            &mut transaction,
-            &blob,
-            run.next_start,
-            chunk_end,
-            interval_millis,
-        )
-        .await?;
-        for (scope_kind, scope_id, scope_samples) in
-            std::iter::once(("system", blob.clone(), samples)).chain(scopes)
-        {
-            let written = write_aggregates(
-                &mut transaction,
-                &AggregateContext {
-                    blob: blob.clone(),
-                    scope_kind,
-                    scope_id,
-                    timezone: timezone.clone(),
-                    zone,
-                    interval_millis,
-                    calculated_at: run.calculated_at,
-                },
-                &scope_samples,
-            )
-            .await?;
-            report.merge(written);
+    let mut coarse: BTreeMap<(&'static str, Vec<u8>), CoarseBuckets> = BTreeMap::new();
+    let mut day_from = run.next_start;
+    while day_from < chunk_end {
+        let (_, _, day_end) = window(zone, Resolution::Day, local_time(zone, day_from)?)?;
+        let day_to = day_end.min(chunk_end);
+        if let Some(samples) = plant_samples(&mut transaction, &blob, day_from, day_to).await? {
+            report.systems_rebuilt = 1;
+            // The system bucket keeps using the plant-wide columns; per-string
+            // buckets come from the channels bound to each string, and an
+            // inverter is the sum of the strings beneath it.
+            let scopes =
+                metered_scopes(&mut transaction, &blob, day_from, day_to, interval_millis).await?;
+            for (scope_kind, scope_id, scope_samples) in
+                std::iter::once(("system", blob.clone(), samples)).chain(scopes)
+            {
+                let written = write_aggregates(
+                    &mut transaction,
+                    &context(scope_kind, scope_id.clone()),
+                    &scope_samples,
+                    coarse.entry((scope_kind, scope_id)).or_default(),
+                )
+                .await?;
+                report.merge(written);
+            }
         }
+        day_from = day_to;
+    }
+    for ((scope_kind, scope_id), buckets) in coarse {
+        let rollups: Vec<(Resolution, Bucket)> = buckets.0.into_values().collect();
+        write_rollups(&mut transaction, &context(scope_kind, scope_id), &rollups).await?;
+        report.rollups_written += u64::try_from(rollups.len()).unwrap_or(u64::MAX);
     }
     if chunk_end < run.range_end {
         sqlx::query(
@@ -607,22 +655,42 @@ struct AggregateContext {
     calculated_at: i64,
 }
 
-/// Writes every resolution's rollups plus the daily summaries they imply.
+/// The month and year buckets of one scope, growing day by day.
+#[cfg(feature = "sqlite")]
+#[derive(Default)]
+struct CoarseBuckets(BTreeMap<(&'static str, i64, String), (Resolution, Bucket)>);
+
+/// Writes the quarter-hour, hour and day rollups of a day's samples plus the
+/// daily summaries they imply, and folds the samples into the month and year
+/// buckets written once the year is done.
 #[cfg(feature = "sqlite")]
 async fn write_aggregates(
     connection: &mut sqlx::SqliteConnection,
     context: &AggregateContext,
     samples: &[Sample],
+    coarse: &mut CoarseBuckets,
 ) -> Result<AggregationReport, AggregationError> {
     let mut report = AggregationReport::default();
     let mut daily: BTreeMap<String, Bucket> = BTreeMap::new();
     let mut rollups: Vec<(Resolution, Bucket)> = Vec::new();
     for resolution in RESOLUTIONS {
-        for ((_, label), bucket) in bucket_samples(context.zone, resolution, samples)? {
-            if resolution == Resolution::Day {
-                daily.insert(label, bucket.clone());
+        for ((start, label), bucket) in bucket_samples(context.zone, resolution, samples)? {
+            match resolution {
+                Resolution::Month | Resolution::Year => {
+                    coarse
+                        .0
+                        .entry((resolution.name(), start, label))
+                        .and_modify(|(_, earlier)| earlier.merge(&bucket))
+                        .or_insert((resolution, bucket));
+                }
+                Resolution::Day => {
+                    daily.insert(label, bucket.clone());
+                    rollups.push((resolution, bucket));
+                }
+                Resolution::FifteenMinutes | Resolution::Hour => {
+                    rollups.push((resolution, bucket));
+                }
             }
-            rollups.push((resolution, bucket));
         }
     }
     write_rollups(&mut *connection, context, &rollups).await?;
