@@ -30,14 +30,10 @@ impl SqliteExternalIdentityRepository {
         Self { path }
     }
 
-    async fn connection(&self) -> Result<SqliteConnection, sqlx::Error> {
-        SqliteConnection::connect_with(
-            &SqliteConnectOptions::new()
-                .filename(&self.path)
-                .create_if_missing(false)
-                .foreign_keys(true),
-        )
-        .await
+    async fn connection(
+        &self,
+    ) -> Result<crate::management_pool::ManagementConnection, sqlx::Error> {
+        crate::management_pool::management_connection(&self.path).await
     }
 }
 
@@ -74,7 +70,7 @@ impl ExternalIdentityLinkingRepository for SqliteExternalIdentityRepository {
     async fn list_for_user(&self, user_id: UserId) -> Result<Vec<LinkedIdentityRecord>, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
         let rows = sqlx::query("SELECT id,connector_id,user_id,provider_subject,linked_at,last_authenticated_at FROM external_identities WHERE user_id=? ORDER BY linked_at,id")
-            .bind(blob(user_id.as_uuid())).fetch_all(&mut connection).await.map_err(port)?;
+            .bind(blob(user_id.as_uuid())).fetch_all(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         rows.iter().map(sqlite_identity).collect()
     }
@@ -86,7 +82,7 @@ impl ExternalIdentityLinkingRepository for SqliteExternalIdentityRepository {
     ) -> Result<Option<LinkedIdentityRecord>, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
         let row = sqlx::query("SELECT id,connector_id,user_id,provider_subject,linked_at,last_authenticated_at FROM external_identities WHERE connector_id=? AND provider_subject=?")
-            .bind(blob(connector_id.as_uuid())).bind(subject).fetch_optional(&mut connection).await.map_err(port)?;
+            .bind(blob(connector_id.as_uuid())).bind(subject).fetch_optional(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         row.as_ref().map(sqlite_identity).transpose()
     }
@@ -107,7 +103,7 @@ impl ExternalIdentityLinkingRepository for SqliteExternalIdentityRepository {
             .unwrap_or_else(|| "External user".to_owned());
         let mut connection = self.connection().await.map_err(port)?;
         sqlx::query("INSERT INTO users (id,email,display_name,status,email_verified_at,created_at,updated_at) VALUES (?,?,?,'active',?,?,?)")
-            .bind(blob(user_id.as_uuid())).bind(email).bind(display_name).bind(claims.email_verified.filter(|verified| *verified).map(|_| now)).bind(now).bind(now).execute(&mut connection).await.map_err(port)?;
+            .bind(blob(user_id.as_uuid())).bind(email).bind(display_name).bind(claims.email_verified.filter(|verified| *verified).map(|_| now)).bind(now).bind(now).execute(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         Ok(user_id)
     }
@@ -115,7 +111,7 @@ impl ExternalIdentityLinkingRepository for SqliteExternalIdentityRepository {
     async fn link(&self, identity: LinkedIdentityRecord) -> Result<(), PortError> {
         let mut connection = self.connection().await.map_err(port)?;
         sqlx::query("INSERT INTO external_identities (id,connector_id,user_id,provider_subject,linked_at,last_authenticated_at) VALUES (?,?,?,?,?,?)")
-            .bind(blob(identity.id.as_uuid())).bind(blob(identity.connector_id.as_uuid())).bind(blob(identity.user_id.as_uuid())).bind(identity.subject).bind(identity.linked_at_epoch_millis).bind(identity.last_login_at_epoch_millis).execute(&mut connection).await.map_err(port)?;
+            .bind(blob(identity.id.as_uuid())).bind(blob(identity.connector_id.as_uuid())).bind(blob(identity.user_id.as_uuid())).bind(identity.subject).bind(identity.linked_at_epoch_millis).bind(identity.last_login_at_epoch_millis).execute(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)
     }
 
@@ -128,7 +124,7 @@ impl ExternalIdentityLinkingRepository for SqliteExternalIdentityRepository {
         sqlx::query("UPDATE external_identities SET last_authenticated_at=? WHERE id=?")
             .bind(now)
             .bind(blob(identity_id.as_uuid()))
-            .execute(&mut connection)
+            .execute(&mut *connection)
             .await
             .map_err(port)?;
         connection.close().await.map_err(port)
@@ -141,7 +137,7 @@ impl ExternalIdentityLinkingRepository for SqliteExternalIdentityRepository {
     ) -> Result<Option<LinkedIdentityRecord>, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
         let row = sqlx::query("SELECT id,connector_id,user_id,provider_subject,linked_at,last_authenticated_at FROM external_identities WHERE id=? AND user_id=?")
-            .bind(blob(identity_id.as_uuid())).bind(blob(user_id.as_uuid())).fetch_optional(&mut connection).await.map_err(port)?;
+            .bind(blob(identity_id.as_uuid())).bind(blob(user_id.as_uuid())).fetch_optional(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         row.as_ref().map(sqlite_identity).transpose()
     }
@@ -151,7 +147,7 @@ impl ExternalIdentityLinkingRepository for SqliteExternalIdentityRepository {
         let exists =
             sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM local_credentials WHERE user_id=?)")
                 .bind(blob(user_id.as_uuid()))
-                .fetch_one(&mut connection)
+                .fetch_one(&mut *connection)
                 .await
                 .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -163,7 +159,7 @@ impl ExternalIdentityLinkingRepository for SqliteExternalIdentityRepository {
         let count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM external_identities WHERE user_id=?")
                 .bind(blob(user_id.as_uuid()))
-                .fetch_one(&mut connection)
+                .fetch_one(&mut *connection)
                 .await
                 .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -174,7 +170,7 @@ impl ExternalIdentityLinkingRepository for SqliteExternalIdentityRepository {
         let mut connection = self.connection().await.map_err(port)?;
         sqlx::query("DELETE FROM external_identities WHERE id=?")
             .bind(blob(identity_id.as_uuid()))
-            .execute(&mut connection)
+            .execute(&mut *connection)
             .await
             .map_err(port)?;
         connection.close().await.map_err(port)

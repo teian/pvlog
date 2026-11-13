@@ -11,8 +11,6 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "postgres")]
 use sqlx::PgConnection;
 use sqlx::{Connection as _, Row as _};
-#[cfg(feature = "sqlite")]
-use sqlx::{SqliteConnection, sqlite::SqliteConnectOptions};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -273,14 +271,10 @@ impl SqliteManagementRepository {
     }
 
     #[cfg(feature = "sqlite")]
-    async fn connection(&self) -> Result<SqliteConnection, sqlx::Error> {
-        SqliteConnection::connect_with(
-            &SqliteConnectOptions::new()
-                .filename(&self.path)
-                .create_if_missing(false)
-                .foreign_keys(true),
-        )
-        .await
+    async fn connection(
+        &self,
+    ) -> Result<crate::management_pool::ManagementConnection, sqlx::Error> {
+        crate::management_pool::management_connection(&self.path).await
     }
 }
 
@@ -321,7 +315,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(&record.status)
         .bind(record.created_at)
         .bind(record.updated_at)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -333,7 +327,7 @@ impl ManagementRepository for SqliteManagementRepository {
             "SELECT id, email, display_name, status, created_at, updated_at FROM users WHERE id = ?",
         )
         .bind(uuid_blob(id.as_uuid()))
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| sqlite_user(&row)).transpose()
@@ -356,7 +350,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(record.created_by.map(|id| uuid_blob(id.as_uuid())))
         .bind(record.created_at)
         .bind(record.updated_at)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -372,7 +366,7 @@ impl ManagementRepository for SqliteManagementRepository {
              FROM accounts WHERE id = ?",
         )
         .bind(uuid_blob(id.as_uuid()))
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| sqlite_account(&row)).transpose()
@@ -392,7 +386,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(uuid_blob(record.account_id.as_uuid()))
         .bind(record.created_at)
         .bind(record.updated_at)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -408,7 +402,7 @@ impl ManagementRepository for SqliteManagementRepository {
              WHERE system_id = ?",
         )
         .bind(uuid_blob(system_id.as_uuid()))
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| sqlite_system_registry(&row)).transpose()
@@ -433,7 +427,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(record.joined_at)
         .bind(record.created_at)
         .bind(record.updated_at)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -456,7 +450,7 @@ impl ManagementRepository for SqliteManagementRepository {
         )
         .bind(uuid_blob(account_id.as_uuid()))
         .bind(uuid_blob(user_id.as_uuid()))
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| sqlite_membership(&row)).transpose()
@@ -475,7 +469,7 @@ impl ManagementRepository for SqliteManagementRepository {
              ORDER BY account.slug",
         )
         .bind(uuid_blob(user_id.as_uuid()))
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter().map(sqlite_account).collect()
@@ -490,7 +484,7 @@ impl ManagementRepository for SqliteManagementRepository {
             "SELECT system_id FROM system_registry WHERE account_id=? ORDER BY system_id",
         )
         .bind(uuid_blob(account_id.as_uuid()))
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.into_iter().map(system_id_from_blob).collect()
@@ -504,7 +498,7 @@ impl ManagementRepository for SqliteManagementRepository {
             "SELECT system_id, account_id, created_at, updated_at FROM system_registry \
              ORDER BY account_id, system_id",
         )
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter().map(sqlite_system_registry).collect()
@@ -530,7 +524,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(record.idle_expires_at)
         .bind(record.absolute_expires_at)
         .bind(record.revoked_at)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -553,7 +547,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(digest.as_slice())
         .bind(now)
         .bind(now)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| sqlite_session(&row)).transpose()
@@ -568,7 +562,7 @@ impl ManagementRepository for SqliteManagementRepository {
         sqlx::query("UPDATE sessions SET revoked_at=COALESCE(revoked_at, ?) WHERE id=?")
             .bind(now)
             .bind(uuid_blob(session_id.as_uuid()))
-            .execute(&mut connection)
+            .execute(&mut *connection)
             .await?;
         connection.close().await?;
         Ok(())
@@ -589,7 +583,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(now)
         .bind(uuid_blob(user_id.as_uuid()))
         .bind(i64::from(keep))
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -666,7 +660,7 @@ impl ManagementRepository for SqliteManagementRepository {
             "SELECT id FROM api_credentials WHERE account_id=? ORDER BY created_at DESC,id DESC",
         )
         .bind(uuid_blob(account_id.as_uuid()))
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         let mut credentials = Vec::with_capacity(rows.len());
@@ -693,7 +687,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(now)
         .bind(uuid_blob(account_id.as_uuid()))
         .bind(uuid_blob(credential_id.as_uuid()))
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(result.rows_affected() == 1)
@@ -789,7 +783,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(permission_name(permission))
         .bind(now)
         .bind(system_id.map(|id| uuid_blob(id.as_uuid())))
-        .fetch_one(&mut connection)
+        .fetch_one(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(allowed)
@@ -836,7 +830,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(permission_name(permission))
         .bind(now)
         .bind(system_id.map(|id| uuid_blob(id.as_uuid())))
-        .fetch_one(&mut connection)
+        .fetch_one(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(allowed)
@@ -864,7 +858,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(uuid_blob(user_id.as_uuid()))
         .bind(now)
         .bind(permission_name(permission))
-        .fetch_one(&mut connection)
+        .fetch_one(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(allowed)
@@ -880,7 +874,7 @@ impl ManagementRepository for SqliteManagementRepository {
              FROM account_database_registry WHERE account_id = ?",
         )
         .bind(uuid_blob(account_id.as_uuid()))
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| {
@@ -917,7 +911,7 @@ impl ManagementRepository for SqliteManagementRepository {
         .bind(record.previous_event_hash.map(|hash| hash.to_vec()))
         .bind(record.event_hash.as_slice())
         .bind(serde_json::to_string(&record.safe_metadata)?)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -936,7 +930,7 @@ impl ManagementRepository for SqliteManagementRepository {
         )
         .bind(uuid_blob(account_id.as_uuid()))
         .bind(limit)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter().map(sqlite_audit).collect()
@@ -1848,7 +1842,7 @@ async fn sqlite_credential_by(
     if let Some(value) = now {
         query = query.bind(value);
     }
-    let row = query.fetch_optional(&mut connection).await?;
+    let row = query.fetch_optional(&mut *connection).await?;
     let Some(row) = row else {
         connection.close().await?;
         return Ok(None);
@@ -1858,7 +1852,7 @@ async fn sqlite_credential_by(
         "SELECT scope FROM api_credential_scopes WHERE credential_id=? ORDER BY scope",
     )
     .bind(uuid_blob(id.as_uuid()))
-    .fetch_all(&mut connection)
+    .fetch_all(&mut *connection)
     .await?
     .into_iter()
     .collect();

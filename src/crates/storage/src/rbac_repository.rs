@@ -13,9 +13,9 @@ use pvlog_domain::{
 };
 #[cfg(feature = "postgres")]
 use sqlx::PgConnection;
-use sqlx::{Connection as _, Row as _};
 #[cfg(feature = "sqlite")]
-use sqlx::{SqliteConnection, sqlite::SqliteConnectOptions};
+use sqlx::SqliteConnection;
+use sqlx::{Connection as _, Row as _};
 use uuid::Uuid;
 
 #[cfg(feature = "sqlite")]
@@ -29,14 +29,10 @@ impl SqliteRbacRepository {
     pub fn new(path: PathBuf) -> Self {
         Self { path }
     }
-    async fn connection(&self) -> Result<SqliteConnection, sqlx::Error> {
-        SqliteConnection::connect_with(
-            &SqliteConnectOptions::new()
-                .filename(&self.path)
-                .create_if_missing(false)
-                .foreign_keys(true),
-        )
-        .await
+    async fn connection(
+        &self,
+    ) -> Result<crate::management_pool::ManagementConnection, sqlx::Error> {
+        crate::management_pool::management_connection(&self.path).await
     }
 }
 
@@ -70,9 +66,9 @@ impl RbacRepository for SqliteRbacRepository {
     async fn roles(&self, account_id: Option<AccountId>) -> Result<Vec<RbacRoleRecord>, PortError> {
         let mut c = self.connection().await.map_err(port)?;
         let rows = if let Some(account) = account_id {
-            sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM rbac_roles WHERE account_id=? ORDER BY name,id").bind(blob(account.as_uuid())).fetch_all(&mut c).await.map_err(port)?
+            sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM rbac_roles WHERE account_id=? ORDER BY name,id").bind(blob(account.as_uuid())).fetch_all(&mut *c).await.map_err(port)?
         } else {
-            sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM rbac_roles WHERE account_id IS NULL ORDER BY name,id").fetch_all(&mut c).await.map_err(port)?
+            sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM rbac_roles WHERE account_id IS NULL ORDER BY name,id").fetch_all(&mut *c).await.map_err(port)?
         };
         let mut result = Vec::with_capacity(rows.len());
         for row in rows {
@@ -83,7 +79,7 @@ impl RbacRepository for SqliteRbacRepository {
     }
     async fn role(&self, id: RoleId) -> Result<Option<RbacRoleRecord>, PortError> {
         let mut c = self.connection().await.map_err(port)?;
-        let row=sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM rbac_roles WHERE id=?").bind(blob(id.as_uuid())).fetch_optional(&mut c).await.map_err(port)?;
+        let row=sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM rbac_roles WHERE id=?").bind(blob(id.as_uuid())).fetch_optional(&mut *c).await.map_err(port)?;
         let result = if let Some(row) = row {
             Some(sqlite_role(&mut c, &row).await?)
         } else {
@@ -130,7 +126,7 @@ impl RbacRepository for SqliteRbacRepository {
         let mut c = self.connection().await.map_err(port)?;
         let result = sqlx::query("DELETE FROM rbac_roles WHERE id=? AND role_kind='custom'")
             .bind(blob(id.as_uuid()))
-            .execute(&mut c)
+            .execute(&mut *c)
             .await
             .map_err(port)?;
         c.close().await.map_err(port)?;
@@ -143,7 +139,7 @@ impl RbacRepository for SqliteRbacRepository {
     ) -> Result<Vec<RoleAssignment>, PortError> {
         let (pt, pid) = principal_parts(principal);
         let mut c = self.connection().await.map_err(port)?;
-        let rows=sqlx::query("SELECT id,role_id,principal_type,principal_id,scope_type,account_id,system_id,delegated_by,created_at,expires_at FROM rbac_role_assignments assignment WHERE principal_type=? AND principal_id=? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>?) AND (principal_type<>'user' OR EXISTS(SELECT 1 FROM users WHERE users.id=assignment.principal_id AND users.status='active')) AND (scope_type='instance' OR principal_type<>'user' OR EXISTS(SELECT 1 FROM memberships WHERE memberships.account_id=assignment.account_id AND memberships.user_id=assignment.principal_id AND memberships.status='active')) ORDER BY created_at,id").bind(pt).bind(blob(pid)).bind(now).fetch_all(&mut c).await.map_err(port)?;
+        let rows=sqlx::query("SELECT id,role_id,principal_type,principal_id,scope_type,account_id,system_id,delegated_by,created_at,expires_at FROM rbac_role_assignments assignment WHERE principal_type=? AND principal_id=? AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>?) AND (principal_type<>'user' OR EXISTS(SELECT 1 FROM users WHERE users.id=assignment.principal_id AND users.status='active')) AND (scope_type='instance' OR principal_type<>'user' OR EXISTS(SELECT 1 FROM memberships WHERE memberships.account_id=assignment.account_id AND memberships.user_id=assignment.principal_id AND memberships.status='active')) ORDER BY created_at,id").bind(pt).bind(blob(pid)).bind(now).fetch_all(&mut *c).await.map_err(port)?;
         c.close().await.map_err(port)?;
         rows.iter().map(sqlite_assignment).collect()
     }
@@ -166,7 +162,7 @@ impl RbacRepository for SqliteRbacRepository {
         )
         .bind(now)
         .bind(blob(id.as_uuid()))
-        .execute(&mut c)
+        .execute(&mut *c)
         .await
         .map_err(port)?;
         c.close().await.map_err(port)?;

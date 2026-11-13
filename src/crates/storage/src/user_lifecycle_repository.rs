@@ -14,8 +14,6 @@ use pvlog_domain::{CredentialDigest, PasswordHash, UserId, UserStatus};
 #[cfg(feature = "postgres")]
 use sqlx::PgConnection;
 use sqlx::{Connection as _, Row as _};
-#[cfg(feature = "sqlite")]
-use sqlx::{SqliteConnection, sqlite::SqliteConnectOptions};
 use uuid::Uuid;
 
 #[cfg(feature = "sqlite")]
@@ -31,14 +29,10 @@ impl SqliteUserLifecycleRepository {
         Self { path }
     }
 
-    async fn connection(&self) -> Result<SqliteConnection, sqlx::Error> {
-        SqliteConnection::connect_with(
-            &SqliteConnectOptions::new()
-                .filename(&self.path)
-                .create_if_missing(false)
-                .foreign_keys(true),
-        )
-        .await
+    async fn connection(
+        &self,
+    ) -> Result<crate::management_pool::ManagementConnection, sqlx::Error> {
+        crate::management_pool::management_connection(&self.path).await
     }
 }
 
@@ -82,7 +76,7 @@ impl UserLifecycleRepository for SqliteUserLifecycleRepository {
              WHERE user.status<>'deleted' ORDER BY lower(user.display_name),lower(user.email),user.id LIMIT ?",
         )
         .bind(i64::from(limit))
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -98,7 +92,7 @@ impl UserLifecycleRepository for SqliteUserLifecycleRepository {
              WHERE user.id=?",
         )
         .bind(blob(id.as_uuid()))
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -122,7 +116,7 @@ impl UserLifecycleRepository for SqliteUserLifecycleRepository {
         .bind(record.disabled_at)
         .bind(record.created_at)
         .bind(record.updated_at)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -147,7 +141,7 @@ impl UserLifecycleRepository for SqliteUserLifecycleRepository {
         .bind(display_name)
         .bind(now)
         .bind(blob(id.as_uuid()))
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -166,7 +160,7 @@ impl UserLifecycleRepository for SqliteUserLifecycleRepository {
         .bind(blob(invitation.invited_by.as_uuid()))
         .bind(invitation.expires_at)
         .bind(invitation.created_at)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -546,7 +540,7 @@ impl LocalCredentialRepository for SqliteUserLifecycleRepository {
              WHERE user.email=?",
         )
         .bind(normalized_email)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -565,7 +559,7 @@ impl LocalCredentialRepository for SqliteUserLifecycleRepository {
              WHERE user.id=?",
         )
         .bind(blob(user_id.as_uuid()))
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -591,7 +585,7 @@ impl LocalCredentialRepository for SqliteUserLifecycleRepository {
         .bind(changed_at)
         .bind(rehash_required)
         .bind(blob(user_id.as_uuid()))
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -613,7 +607,7 @@ impl LocalCredentialRepository for SqliteUserLifecycleRepository {
         .bind(i64::from(maximum_attempts))
         .bind(locked_until)
         .bind(blob(user_id.as_uuid()))
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -626,7 +620,7 @@ impl LocalCredentialRepository for SqliteUserLifecycleRepository {
             "UPDATE local_credentials SET failed_attempts=0,locked_until=NULL WHERE user_id=?",
         )
         .bind(blob(user_id.as_uuid()))
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -814,7 +808,7 @@ async fn sqlite_status_update(
     .bind(disabled_at)
     .bind(now)
     .bind(blob(id.as_uuid()))
-    .execute(&mut connection)
+    .execute(&mut *connection)
     .await
     .map_err(port)?;
     connection.close().await.map_err(port)?;

@@ -11,8 +11,6 @@ use serde_json::Value;
 #[cfg(feature = "postgres")]
 use sqlx::PgConnection;
 use sqlx::{Connection as _, Row as _};
-#[cfg(feature = "sqlite")]
-use sqlx::{SqliteConnection, sqlite::SqliteConnectOptions};
 use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -50,14 +48,10 @@ impl SqliteAdministrationRepository {
         Self { path }
     }
 
-    async fn connection(&self) -> Result<SqliteConnection, sqlx::Error> {
-        SqliteConnection::connect_with(
-            &SqliteConnectOptions::new()
-                .filename(&self.path)
-                .create_if_missing(false)
-                .foreign_keys(true),
-        )
-        .await
+    async fn connection(
+        &self,
+    ) -> Result<crate::management_pool::ManagementConnection, sqlx::Error> {
+        crate::management_pool::management_connection(&self.path).await
     }
 }
 
@@ -103,7 +97,7 @@ impl AdministrationRepository for SqliteAdministrationRepository {
              FROM global_configuration WHERE key=?",
         )
         .bind(key)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| sqlite_record(&row)).transpose()
@@ -129,7 +123,7 @@ impl AdministrationRepository for SqliteAdministrationRepository {
         .bind(&record.value_class)
         .bind(record.updated_by.map(|id| id.as_uuid().as_bytes().to_vec()))
         .bind(record.updated_at)
-        .fetch_one(&mut connection)
+        .fetch_one(&mut *connection)
         .await?;
         connection.close().await?;
         sqlite_record(&row)

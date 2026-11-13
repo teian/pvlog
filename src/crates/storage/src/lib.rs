@@ -28,6 +28,7 @@ mod history_import_repository;
 mod ingest_repository;
 mod integrity_planner;
 mod job_dispatch;
+mod management_pool;
 mod management_repository;
 mod merged_reader;
 mod migrations;
