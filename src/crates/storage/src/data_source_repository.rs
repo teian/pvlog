@@ -328,11 +328,17 @@ impl DataSourceRepository for SqliteDataSourceRepository {
     ) -> Result<Vec<DataSourceActivity>, AccountRepositoryError> {
         let mut connection = self.account.acquire().await?;
         sqlx::query(
-            "SELECT data_source_id,MAX(measured_at) AS last_measured_at,\
-             MAX(received_at) AS last_received_at,\
-             SUM(CASE WHEN received_at>=? THEN 1 ELSE 0 END) AS recent_readings \
-             FROM telemetry_hot WHERE system_id=? AND data_source_id IS NOT NULL \
-             GROUP BY data_source_id",
+            // Each figure is a lookup in an index of the source's readings,
+            // not a pass over all readings of the system.
+            "SELECT data_source_id,last_measured_at,last_received_at,recent_readings FROM (\
+             SELECT d.id AS data_source_id,\
+             (SELECT MAX(h.measured_at) FROM telemetry_hot h WHERE h.data_source_id=d.id) \
+              AS last_measured_at,\
+             (SELECT MAX(h.received_at) FROM telemetry_hot h WHERE h.data_source_id=d.id) \
+              AS last_received_at,\
+             (SELECT COUNT(*) FROM telemetry_hot h \
+              WHERE h.data_source_id=d.id AND h.received_at>=?1) AS recent_readings \
+             FROM data_sources d WHERE d.system_id=?2) WHERE last_received_at IS NOT NULL",
         )
         .bind(recent_since)
         .bind(blob(system_id.as_uuid()))

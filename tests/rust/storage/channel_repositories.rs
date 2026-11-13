@@ -468,6 +468,39 @@ async fn postgres_typed_channel_round_trip_when_configured() -> Result<(), Box<d
     typed_channel_round_trip(Store::postgres(url).await?).await
 }
 
+/// A channel's newest value is the one measured last, also when older
+/// readings arrive afterwards.
+async fn newest_value_survives_older_readings(store: Store) -> Result<(), Box<dyn Error>> {
+    let channel = store
+        .channels
+        .register_channel(
+            store.system_id,
+            &registration("dc.power", "integer", "W", 0),
+            START,
+        )
+        .await?;
+    store.values(2, &[(channel.id, 300)]).await?;
+    store.values(0, &[(channel.id, 100)]).await?;
+    assert_eq!(store.channel("dc.power").await?.last_value, Some(300));
+    store.values(3, &[(channel.id, 400)]).await?;
+    assert_eq!(store.channel("dc.power").await?.last_value, Some(400));
+    Ok(())
+}
+
+#[tokio::test]
+async fn sqlite_newest_value_survives_older_readings() -> Result<(), Box<dyn Error>> {
+    newest_value_survives_older_readings(Store::sqlite().await?).await
+}
+
+#[tokio::test]
+async fn postgres_newest_value_survives_older_readings_when_configured()
+-> Result<(), Box<dyn Error>> {
+    let Ok(url) = std::env::var("TEST_POSTGRES_URL") else {
+        return Ok(());
+    };
+    newest_value_survives_older_readings(Store::postgres(url).await?).await
+}
+
 /// Discovery, storage and binding behave the same on every database.
 #[allow(clippy::too_many_lines)]
 async fn channel_repository_contract(store: Store, other: Store) -> Result<(), Box<dyn Error>> {

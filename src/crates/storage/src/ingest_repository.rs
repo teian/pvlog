@@ -20,6 +20,9 @@ use uuid::Uuid;
 
 #[cfg(feature = "sqlite")]
 use crate::RoutedSqliteAccount;
+#[cfg(feature = "sqlite")]
+use crate::channel_repository::sqlite_touch_channels;
+use crate::channel_repository::{TouchedChannel, touch_channels};
 use crate::{SourceDailySummaryRecord, StoredObservation, TelemetryRepositoryError};
 
 /// Source kind every reading of the ingestion API is stored under.
@@ -280,20 +283,24 @@ fn is_device_lifetime_key(key: &str) -> bool {
         .is_some_and(|serial| !serial.is_empty())
 }
 
-/// The channels a batch wrote, each with whether any written value is not zero.
+/// The channels a batch wrote.
 fn touched_channels(
     items: &[ObservationUpsert],
     outcomes: &[UpsertOutcome],
-) -> Vec<(ChannelId, bool)> {
-    let mut touched: BTreeMap<ChannelId, bool> = BTreeMap::new();
-    for (item, outcome) in items.iter().zip(outcomes) {
-        if matches!(outcome, UpsertOutcome::Inserted | UpsertOutcome::Replaced) {
-            for (channel, value) in &item.channel_values {
-                *touched.entry(*channel).or_default() |= *value != 0;
-            }
-        }
-    }
-    touched.into_iter().collect()
+) -> Vec<TouchedChannel> {
+    touch_channels(
+        items
+            .iter()
+            .zip(outcomes)
+            .filter(|(_, outcome)| {
+                matches!(outcome, UpsertOutcome::Inserted | UpsertOutcome::Replaced)
+            })
+            .flat_map(|(item, _)| {
+                item.channel_values
+                    .iter()
+                    .map(|(channel, value)| (item.observation.measured_at, *channel, *value))
+            }),
+    )
 }
 
 /// `SQLite` ingestion repository for one routed account database.
@@ -450,17 +457,12 @@ impl IngestRepository for SqliteIngestRepository {
             sqlite_write_values(&mut transaction, id, &item.channel_values).await?;
             outcomes.push(outcome);
         }
-        for (channel, nonzero) in touched_channels(items, &outcomes) {
-            sqlx::query(
-                "UPDATE channel_definitions SET last_value_at=?1,first_nonzero_at=\
-                 COALESCE(first_nonzero_at,CASE WHEN ?2 THEN ?1 END) WHERE id=?3",
-            )
-            .bind(first.received_at)
-            .bind(nonzero)
-            .bind(blob(channel.as_uuid()))
-            .execute(&mut *transaction)
-            .await?;
-        }
+        sqlite_touch_channels(
+            &mut transaction,
+            &touched_channels(items, &outcomes),
+            first.received_at,
+        )
+        .await?;
         transaction.commit().await?;
         Ok(outcomes)
     }
@@ -1030,7 +1032,10 @@ impl IngestRepository for PostgresIngestRepository {
             .await?;
             outcomes.push(outcome);
         }
-        for (channel, nonzero) in touched_channels(items, &outcomes) {
+        for TouchedChannel {
+            channel, nonzero, ..
+        } in touched_channels(items, &outcomes)
+        {
             sqlx::query(
                 "UPDATE account_data.channel_definitions SET last_value_at=$1,first_nonzero_at=\
                  COALESCE(first_nonzero_at,CASE WHEN $2 THEN $1 END) \

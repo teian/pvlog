@@ -87,14 +87,77 @@ pub struct ReadingChannelValues {
     pub values: Vec<(ChannelId, i64)>,
 }
 
-/// Each channel of the readings once, with whether any of its values is not zero.
-fn touched_channels(readings: &[ReadingChannelValues]) -> Vec<(ChannelId, bool)> {
-    let mut touched: std::collections::BTreeMap<ChannelId, bool> =
+/// What a batch of written values changes about one channel.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct TouchedChannel {
+    pub(crate) channel: ChannelId,
+    /// Whether any of its values is not zero.
+    pub(crate) nonzero: bool,
+    /// Measurement time of its newest value in the batch.
+    pub(crate) newest_measured_at: i64,
+    /// Its newest value in the batch.
+    pub(crate) newest_value: i64,
+}
+
+/// Each channel of `(measured_at, channel, value)` once. Of values measured at
+/// the same time the later one counts as the newer.
+pub(crate) fn touch_channels(
+    values: impl IntoIterator<Item = (i64, ChannelId, i64)>,
+) -> Vec<TouchedChannel> {
+    let mut touched: std::collections::BTreeMap<ChannelId, TouchedChannel> =
         std::collections::BTreeMap::new();
-    for (channel, value) in readings.iter().flat_map(|reading| &reading.values) {
-        *touched.entry(*channel).or_default() |= *value != 0;
+    for (measured_at, channel, value) in values {
+        let entry = touched.entry(channel).or_insert(TouchedChannel {
+            channel,
+            nonzero: false,
+            newest_measured_at: measured_at,
+            newest_value: value,
+        });
+        entry.nonzero |= value != 0;
+        if measured_at >= entry.newest_measured_at {
+            entry.newest_measured_at = measured_at;
+            entry.newest_value = value;
+        }
     }
-    touched.into_iter().collect()
+    touched.into_values().collect()
+}
+
+/// Each channel of the readings once.
+fn touched_channels(readings: &[ReadingChannelValues]) -> Vec<TouchedChannel> {
+    touch_channels(readings.iter().flat_map(|reading| {
+        reading
+            .values
+            .iter()
+            .map(|(channel, value)| (reading.measured_at, *channel, *value))
+    }))
+}
+
+/// Records the values a batch wrote on their channels. The stored newest value
+/// only moves to one measured at the same time or later.
+#[cfg(feature = "sqlite")]
+pub(crate) async fn sqlite_touch_channels(
+    connection: &mut sqlx::SqliteConnection,
+    touched: &[TouchedChannel],
+    received_at: i64,
+) -> Result<(), sqlx::Error> {
+    for touched in touched {
+        // Every expression reads the row as it was before the update.
+        sqlx::query(
+            "UPDATE channel_definitions SET last_value_at=?1,first_nonzero_at=\
+             COALESCE(first_nonzero_at,CASE WHEN ?2 THEN ?1 END),\
+             last_value=CASE WHEN last_value_measured_at IS NULL \
+               OR ?4>=last_value_measured_at THEN ?5 ELSE last_value END,\
+             last_value_measured_at=MAX(COALESCE(last_value_measured_at,?4),?4) WHERE id=?3",
+        )
+        .bind(received_at)
+        .bind(touched.nonzero)
+        .bind(blob(touched.channel.as_uuid()))
+        .bind(touched.newest_measured_at)
+        .bind(touched.newest_value)
+        .execute(&mut *connection)
+        .await?;
+    }
+    Ok(())
 }
 
 /// Aggregate of one channel over one local-calendar bucket.
@@ -365,15 +428,9 @@ macro_rules! sqlite_channel_select {
         concat!(
             "SELECT c.id,c.system_id,c.channel_key,c.display_name,c.data_type,",
             "c.unit,c.scale,c.aggregation,c.target_kind,c.target_id,c.lifecycle,c.discovered_at,",
-            "c.last_value_at,c.first_nonzero_at,c.updated_at,",
-            // Walking the system's readings newest first and probing each
-            // for the channel stops at the newest value; going through the
-            // channel's values instead would sort all of them.
-            "(SELECT v.integer_value FROM telemetry_hot h ",
-            "INDEXED BY telemetry_hot_system_time_idx ",
-            "CROSS JOIN telemetry_hot_extended_values v ",
-            "ON v.observation_id=h.observation_id AND v.channel_id=c.id ",
-            "WHERE h.system_id=c.system_id ORDER BY h.measured_at DESC LIMIT 1) AS last_value ",
+            // Each write keeps the newest value on the channel, so reading it
+            // does not search the readings.
+            "c.last_value_at,c.first_nonzero_at,c.updated_at,c.last_value ",
             "FROM channel_definitions c ",
             $tail
         )
@@ -690,17 +747,7 @@ impl ChannelRepository for SqliteChannelRepository {
             );
             statement.build().execute(&mut *transaction).await?;
         }
-        for (channel, nonzero) in touched_channels(readings) {
-            sqlx::query(
-                "UPDATE channel_definitions SET last_value_at=?1,first_nonzero_at=\
-                 COALESCE(first_nonzero_at,CASE WHEN ?2 THEN ?1 END) WHERE id=?3",
-            )
-            .bind(received_at)
-            .bind(nonzero)
-            .bind(blob(channel.as_uuid()))
-            .execute(&mut *transaction)
-            .await?;
-        }
+        sqlite_touch_channels(&mut transaction, &touched_channels(readings), received_at).await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -1375,16 +1422,16 @@ impl ChannelRepository for PostgresChannelRepository {
                 .await?;
             }
         }
-        for (channel, nonzero) in touched_channels(readings) {
+        for touched in touched_channels(readings) {
             sqlx::query(
                 "UPDATE account_data.channel_definitions SET last_value_at=$3,\
                  first_nonzero_at=COALESCE(first_nonzero_at,CASE WHEN $4 THEN $3 END) \
                  WHERE account_id=$1 AND id=$2",
             )
             .bind(self.account_id.as_uuid())
-            .bind(channel.as_uuid())
+            .bind(touched.channel.as_uuid())
             .bind(received_at)
-            .bind(nonzero)
+            .bind(touched.nonzero)
             .execute(&mut *transaction)
             .await?;
         }
