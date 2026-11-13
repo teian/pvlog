@@ -99,21 +99,31 @@ pub async fn push_pending(
         ..PushSummary::default()
     };
 
-    loop {
-        let readings = source
-            .read_after(checkpoint.last_timestamp, config.batch_size)
-            .await?;
-        let Some(last_timestamp) = readings.last().map(|reading| reading.timestamp) else {
-            break;
-        };
+    let mut readings = source
+        .read_after(checkpoint.last_timestamp, config.batch_size)
+        .await?;
+    while let Some(last_timestamp) = readings.last().map(|reading| reading.timestamp) {
+        // The next batch is read while this one is sent; the checkpoint still
+        // advances only once PVLog accepted the batch.
+        let (sent, next) = tokio::join!(
+            async {
+                if config.dry_run {
+                    Ok(())
+                } else {
+                    client.send(&readings).await
+                }
+            },
+            source.read_after(last_timestamp, config.batch_size),
+        );
+        sent?;
         checkpoint.last_timestamp = last_timestamp;
         if !config.dry_run {
-            client.send(&readings).await?;
             store.save(checkpoint).await?;
         }
         summary.batches += 1;
         summary.observations += u64::try_from(readings.len()).unwrap_or(u64::MAX);
         summary.last_timestamp = Some(last_timestamp);
+        readings = next?;
     }
 
     // Events from before the start time are history nobody asked for.
