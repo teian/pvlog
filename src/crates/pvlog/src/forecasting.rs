@@ -94,10 +94,9 @@ impl StorageForecastApi {
             return Err(ForecastApiError::Unavailable);
         };
         let account_id = self.account_for(system_id).await?;
-        pvlog_storage::SqliteAccountPoolRouter::new(
+        pvlog_storage::SqliteAccountPoolRouter::shared(
             management_path.clone(),
             accounts_dir.clone(),
-            pvlog_storage::SqliteAccountPoolConfig::default(),
         )
         .map_err(|_| ForecastApiError::Unavailable)?
         .route(account_id)

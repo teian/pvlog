@@ -116,10 +116,9 @@ impl StorageIngestApi {
             } => {
                 #[cfg(feature = "sqlite")]
                 {
-                    let account = pvlog_storage::SqliteAccountPoolRouter::new(
+                    let account = pvlog_storage::SqliteAccountPoolRouter::shared(
                         management_path.clone(),
                         accounts_dir.clone(),
-                        pvlog_storage::SqliteAccountPoolConfig::default(),
                     )
                     .ok()?
                     .route(account_id)

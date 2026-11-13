@@ -11,8 +11,8 @@ use pvlog_application::{Clock, SetupFacts, setup_status};
 use pvlog_domain::{AccountId, SystemId};
 use pvlog_storage::{
     DataSourceRepository, DatabaseTarget, PostgresDataSourceRepository, PostgresSetupRepository,
-    SetupFactsRecord, SetupRepository, SqliteAccountPoolConfig, SqliteAccountPoolRouter,
-    SqliteDataSourceRepository, SqliteSetupRepository,
+    SetupFactsRecord, SetupRepository, SqliteAccountPoolRouter, SqliteDataSourceRepository,
+    SqliteSetupRepository,
 };
 
 /// Production setup use cases.
@@ -54,10 +54,9 @@ impl StorageSetupApi {
             } => {
                 #[cfg(feature = "sqlite")]
                 {
-                    let account = SqliteAccountPoolRouter::new(
+                    let account = SqliteAccountPoolRouter::shared(
                         management_path.clone(),
                         accounts_dir.clone(),
-                        SqliteAccountPoolConfig::default(),
                     )
                     .map_err(|_| SetupApiError::Unavailable)?
                     .route(account_id)

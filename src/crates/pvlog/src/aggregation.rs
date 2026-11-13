@@ -204,10 +204,9 @@ async fn plant_cycle(
     #[cfg(feature = "sqlite")]
     {
         for account_id in account_ids(management_path).await? {
-            let account = pvlog_storage::SqliteAccountPoolRouter::new(
+            let account = pvlog_storage::SqliteAccountPoolRouter::shared(
                 management_path.clone(),
                 accounts_dir.clone(),
-                pvlog_storage::SqliteAccountPoolConfig::default(),
             )
             .map_err(|_| AggregationError::Unavailable)?
             .route(account_id)

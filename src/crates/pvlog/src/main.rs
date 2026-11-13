@@ -373,10 +373,9 @@ async fn forecast_repositories(
             management_path,
             accounts_dir,
         } => {
-            let router = pvlog_storage::SqliteAccountPoolRouter::new(
+            let router = pvlog_storage::SqliteAccountPoolRouter::shared(
                 management_path.clone(),
                 accounts_dir.clone(),
-                pvlog_storage::SqliteAccountPoolConfig::default(),
             )
             .map_err(|error| StartupError::ForecastOperation(error.to_string()))?;
             let account = router
@@ -1169,10 +1168,9 @@ fn compose_system_lifecycle(
         } => {
             #[cfg(feature = "sqlite")]
             {
-                let router = pvlog_storage::SqliteAccountPoolRouter::new(
+                let router = pvlog_storage::SqliteAccountPoolRouter::shared(
                     management_path.clone(),
                     accounts_dir.clone(),
-                    pvlog_storage::SqliteAccountPoolConfig::default(),
                 )
                 .map_err(|_| StartupError::SystemLifecycleRouting)?;
                 Arc::new(pvlog_storage::SqliteSystemLifecycleRepository::new(

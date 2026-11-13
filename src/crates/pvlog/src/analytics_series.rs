@@ -538,10 +538,9 @@ impl AccountSeriesRepository {
         management_path: &std::path::Path,
         accounts_dir: &std::path::Path,
     ) -> Result<pvlog_storage::RoutedSqliteAccount, SeriesQueryRepositoryError> {
-        pvlog_storage::SqliteAccountPoolRouter::new(
+        pvlog_storage::SqliteAccountPoolRouter::shared(
             management_path.to_path_buf(),
             accounts_dir.to_path_buf(),
-            pvlog_storage::SqliteAccountPoolConfig::default(),
         )
         .map_err(|_| SeriesQueryRepositoryError::Unavailable)?
         .route(self.account_id)

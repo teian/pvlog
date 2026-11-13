@@ -5,8 +5,7 @@ use pvlog_api::{NotificationApiError, NotificationApiUseCases};
 use pvlog_domain::{AccountId, AlertRuleId, SystemId, WebhookDeliveryId, WebhookSubscriptionId};
 use pvlog_storage::{
     AlertRuleRecord, DatabaseTarget, OperationalRepository, PostgresOperationalRepository,
-    SqliteAccountPoolConfig, SqliteAccountPoolRouter, SqliteOperationalRepository,
-    WebhookSubscriptionRecord,
+    SqliteAccountPoolRouter, SqliteOperationalRepository, WebhookSubscriptionRecord,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -33,10 +32,9 @@ impl ManagementNotificationApi {
             } => {
                 #[cfg(feature = "sqlite")]
                 {
-                    let router = SqliteAccountPoolRouter::new(
+                    let router = SqliteAccountPoolRouter::shared(
                         management_path.clone(),
                         accounts_dir.clone(),
-                        SqliteAccountPoolConfig::default(),
                     )
                     .map_err(|_| NotificationApiError::Unavailable)?;
                     let account = router

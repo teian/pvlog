@@ -77,10 +77,9 @@ impl StorageTelemetryApi {
             } => {
                 #[cfg(feature = "sqlite")]
                 {
-                    let account = pvlog_storage::SqliteAccountPoolRouter::new(
+                    let account = pvlog_storage::SqliteAccountPoolRouter::shared(
                         management_path.clone(),
                         accounts_dir.clone(),
-                        pvlog_storage::SqliteAccountPoolConfig::default(),
                     )
                     .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))?
                     .route(account_id)
@@ -515,10 +514,9 @@ impl StorageTelemetryApi {
             return Err(ModernTelemetryError::Repository(PortError::Unavailable));
         };
         let account_id = self.account_for(system_id).await?;
-        pvlog_storage::SqliteAccountPoolRouter::new(
+        pvlog_storage::SqliteAccountPoolRouter::shared(
             management_path.clone(),
             accounts_dir.clone(),
-            pvlog_storage::SqliteAccountPoolConfig::default(),
         )
         .map_err(|_| ModernTelemetryError::Repository(PortError::Unavailable))?
         .route(account_id)

@@ -262,10 +262,9 @@ impl StorageAnalyticsApi {
         accounts_dir: &std::path::Path,
         account_id: AccountId,
     ) -> Result<pvlog_storage::RoutedSqliteAccount, ModernAnalyticsError> {
-        pvlog_storage::SqliteAccountPoolRouter::new(
+        pvlog_storage::SqliteAccountPoolRouter::shared(
             management_path.to_path_buf(),
             accounts_dir.to_path_buf(),
-            pvlog_storage::SqliteAccountPoolConfig::default(),
         )
         .map_err(|_| ModernAnalyticsError::Unavailable)?
         .route(account_id)

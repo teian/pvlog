@@ -19,8 +19,8 @@ use pvlog_storage::{
     AccountConfigurationRepository, AuditRecord, DataSourceActivity, DataSourceRecord,
     DataSourceRepository, DatabaseTarget, ManagementRepository,
     PostgresAccountConfigurationRepository, PostgresDataSourceRepository,
-    SqliteAccountConfigurationRepository, SqliteAccountPoolConfig, SqliteAccountPoolRouter,
-    SqliteDataSourceRepository, TestReadingRecord,
+    SqliteAccountConfigurationRepository, SqliteAccountPoolRouter, SqliteDataSourceRepository,
+    TestReadingRecord,
 };
 use secrecy::{ExposeSecret as _, SecretString};
 
@@ -80,10 +80,9 @@ impl StorageDataSourceApi {
             } => {
                 #[cfg(feature = "sqlite")]
                 {
-                    let account = SqliteAccountPoolRouter::new(
+                    let account = SqliteAccountPoolRouter::shared(
                         management_path.clone(),
                         accounts_dir.clone(),
-                        SqliteAccountPoolConfig::default(),
                     )
                     .map_err(|_| DataSourceApiError::Unavailable)?
                     .route(account_id)

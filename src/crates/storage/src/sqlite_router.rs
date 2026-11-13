@@ -10,7 +10,7 @@ use std::{
 use pvlog_domain::AccountId;
 use serde::Serialize;
 use sqlx::{
-    Connection as _, Row as _, Sqlite, SqliteConnection, SqlitePool,
+    Row as _, Sqlite, SqliteConnection, SqlitePool,
     pool::PoolConnection,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
 };
@@ -52,6 +52,9 @@ pub struct SqliteAccountPoolRouter {
     accounts_dir: PathBuf,
     config: SqliteAccountPoolConfig,
     state: Arc<Mutex<RouterState>>,
+    /// Connections to the management database for resolving routes, opened
+    /// on first use.
+    management: Arc<std::sync::OnceLock<SqlitePool>>,
 }
 
 impl SqliteAccountPoolRouter {
@@ -73,7 +76,42 @@ impl SqliteAccountPoolRouter {
             accounts_dir,
             config,
             state: Arc::new(Mutex::new(RouterState::default())),
+            management: Arc::default(),
         })
+    }
+
+    /// Returns the process's router for these databases with the default
+    /// limits, creating it on first use.
+    ///
+    /// Every caller shares its account pools and writer lanes: a router made
+    /// anew for each request would open and close the account database each
+    /// time, and closing its last connection checkpoints the write-ahead log.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for zero pool or connection limits.
+    pub fn shared(
+        management_path: PathBuf,
+        accounts_dir: PathBuf,
+    ) -> Result<Self, SqliteRoutingError> {
+        static ROUTERS: std::sync::OnceLock<
+            std::sync::Mutex<HashMap<(PathBuf, PathBuf), SqliteAccountPoolRouter>>,
+        > = std::sync::OnceLock::new();
+        let mut routers = ROUTERS
+            .get_or_init(Default::default)
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let key = (management_path, accounts_dir);
+        if let Some(router) = routers.get(&key) {
+            return Ok(router.clone());
+        }
+        let router = Self::new(
+            key.0.clone(),
+            key.1.clone(),
+            SqliteAccountPoolConfig::default(),
+        )?;
+        routers.insert(key, router.clone());
+        Ok(router)
     }
 
     /// Resolves an active account through management metadata and returns its lazy pool.
@@ -147,21 +185,28 @@ impl SqliteAccountPoolRouter {
         &self,
         account_id: AccountId,
     ) -> Result<ResolvedRoute, SqliteRoutingError> {
-        let options = SqliteConnectOptions::new()
-            .filename(&self.management_path)
-            .create_if_missing(false)
-            .foreign_keys(true)
-            .busy_timeout(self.config.busy_timeout);
-        let mut connection = SqliteConnection::connect_with(&options).await?;
+        let management = self.management.get_or_init(|| {
+            SqlitePoolOptions::new()
+                .min_connections(0)
+                .max_connections(self.config.max_connections_per_account)
+                .acquire_timeout(self.config.acquire_timeout)
+                .idle_timeout(Some(self.config.idle_pool_timeout))
+                .connect_lazy_with(
+                    SqliteConnectOptions::new()
+                        .filename(&self.management_path)
+                        .create_if_missing(false)
+                        .foreign_keys(true)
+                        .busy_timeout(self.config.busy_timeout),
+                )
+        });
         let row = sqlx::query(
             "SELECT opaque_locator, lifecycle_state FROM account_database_registry \
              WHERE account_id = ?",
         )
         .bind(account_id.as_uuid().as_bytes().as_slice())
-        .fetch_optional(&mut connection)
+        .fetch_optional(management)
         .await?
         .ok_or_else(|| SqliteRoutingError::RouteNotFound(account_id.to_string()))?;
-        connection.close().await?;
         let lifecycle: String = row.get("lifecycle_state");
         if lifecycle != "active" {
             return Err(SqliteRoutingError::RouteInactive {
@@ -389,6 +434,13 @@ fn lazy_account_pool(
                     .execute(&mut *connection)
                     .await?;
                 sqlx::query("PRAGMA cache_size = -65536")
+                    .execute(&mut *connection)
+                    .await?;
+                // A statement that writes many rows keeps a journal for undoing
+                // just itself; kept as a file, writing it costs a fifth of an
+                // ingest. Every write runs in a transaction that is undone as a
+                // whole on failure, so the journal never needs to outlive it.
+                sqlx::query("PRAGMA temp_store = MEMORY")
                     .execute(&mut *connection)
                     .await?;
                 let bound_account: Vec<u8> = sqlx::query_scalar(

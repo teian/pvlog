@@ -107,10 +107,9 @@ pub async fn daily_repositories(
         } => {
             #[cfg(feature = "sqlite")]
             {
-                let account = pvlog_storage::SqliteAccountPoolRouter::new(
+                let account = pvlog_storage::SqliteAccountPoolRouter::shared(
                     management_path.clone(),
                     accounts_dir.clone(),
-                    pvlog_storage::SqliteAccountPoolConfig::default(),
                 )
                 .map_err(|_| DailySummaryApiError::Unavailable)?
                 .route(account_id)

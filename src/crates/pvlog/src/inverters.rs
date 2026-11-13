@@ -15,7 +15,7 @@ use pvlog_domain::{
 use pvlog_storage::{
     AccountConfigurationRepository, DatabaseTarget, InverterRecord,
     PostgresAccountConfigurationRepository, PvStringRecord, SqliteAccountConfigurationRepository,
-    SqliteAccountPoolConfig, SqliteAccountPoolRouter,
+    SqliteAccountPoolRouter,
 };
 
 #[derive(Clone, Debug)]
@@ -41,10 +41,9 @@ impl ManagementInverterApi {
             } => {
                 #[cfg(feature = "sqlite")]
                 {
-                    let router = SqliteAccountPoolRouter::new(
+                    let router = SqliteAccountPoolRouter::shared(
                         management_path.clone(),
                         accounts_dir.clone(),
-                        SqliteAccountPoolConfig::default(),
                     )
                     .map_err(|_| InverterApiError::Unavailable)?;
                     let account = router

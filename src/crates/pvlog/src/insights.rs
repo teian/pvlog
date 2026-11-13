@@ -67,10 +67,9 @@ impl StorageInsightApi {
             return Err(InsightApiError::Unavailable);
         };
         let account_id = self.account_for(system_id).await?;
-        pvlog_storage::SqliteAccountPoolRouter::new(
+        pvlog_storage::SqliteAccountPoolRouter::shared(
             management_path.clone(),
             accounts_dir.clone(),
-            pvlog_storage::SqliteAccountPoolConfig::default(),
         )
         .map_err(|_| InsightApiError::Unavailable)?
         .route(account_id)

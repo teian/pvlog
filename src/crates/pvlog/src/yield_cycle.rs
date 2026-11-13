@@ -61,10 +61,9 @@ pub async fn run_cycle(
     {
         let mut report = report;
         for account_id in crate::aggregation::active_accounts(management_path).await? {
-            let account = pvlog_storage::SqliteAccountPoolRouter::new(
+            let account = pvlog_storage::SqliteAccountPoolRouter::shared(
                 management_path.clone(),
                 accounts_dir.clone(),
-                pvlog_storage::SqliteAccountPoolConfig::default(),
             )
             .map_err(|_| YieldCycleError::Unavailable)?
             .route(account_id)

@@ -9,7 +9,7 @@ use pvlog_api::{
 
 use crate::daily_summaries::{ALL_DATES, daily_repositories, daily_values};
 use pvlog_domain::{AccountId, SystemId};
-use pvlog_storage::{DatabaseTarget, SqliteAccountPoolConfig, SqliteAccountPoolRouter};
+use pvlog_storage::{DatabaseTarget, SqliteAccountPoolRouter};
 use sqlx::Row;
 #[cfg(feature = "postgres")]
 use sqlx::{Connection as _, PgConnection};
@@ -344,15 +344,11 @@ async fn sqlite_account(
     accounts_dir: &std::path::Path,
     account_id: AccountId,
 ) -> Result<pvlog_storage::RoutedSqliteAccount, ReportingApiError> {
-    SqliteAccountPoolRouter::new(
-        management_path.to_path_buf(),
-        accounts_dir.to_path_buf(),
-        SqliteAccountPoolConfig::default(),
-    )
-    .map_err(|_| ReportingApiError::Unavailable)?
-    .route(account_id)
-    .await
-    .map_err(|_| ReportingApiError::Unavailable)
+    SqliteAccountPoolRouter::shared(management_path.to_path_buf(), accounts_dir.to_path_buf())
+        .map_err(|_| ReportingApiError::Unavailable)?
+        .route(account_id)
+        .await
+        .map_err(|_| ReportingApiError::Unavailable)
 }
 
 #[cfg(feature = "sqlite")]

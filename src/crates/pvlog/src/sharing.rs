@@ -67,10 +67,9 @@ impl StorageSharingApi {
         account_id: AccountId,
     ) -> Result<pvlog_storage::RoutedSqliteAccount, SharingApiError> {
         let (management_path, accounts_dir) = self.paths()?;
-        pvlog_storage::SqliteAccountPoolRouter::new(
+        pvlog_storage::SqliteAccountPoolRouter::shared(
             management_path.to_path_buf(),
             accounts_dir.to_path_buf(),
-            pvlog_storage::SqliteAccountPoolConfig::default(),
         )
         .map_err(|_| SharingApiError::Unavailable)?
         .route(account_id)
