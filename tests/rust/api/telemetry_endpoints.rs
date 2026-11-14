@@ -338,8 +338,10 @@ impl ModernTelemetryUseCases for ChannelStub {
     ) -> Result<IngestedObservation, ModernTelemetryError> {
         *self.0.lock().map_err(|_| ModernTelemetryError::Invalid)? =
             command.channel_readings.clone();
-        *self.1.lock().map_err(|_| ModernTelemetryError::Invalid)? =
-            command.supplements.devices.clone();
+        self.1
+            .lock()
+            .map_err(|_| ModernTelemetryError::Invalid)?
+            .clone_from(&command.supplements.devices);
         let rejected_channels = command
             .channel_readings
             .keys()

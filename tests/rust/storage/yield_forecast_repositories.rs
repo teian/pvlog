@@ -202,11 +202,11 @@ async fn verify_contract(
             .complete_invalidation(invalidation.id, 6_000)
             .await?
     );
-    assert!(
+    assert_eq!(
         results
             .pending_invalidations(system_id, range(1_000, 3_000)?, 100)
-            .await?
-            .is_empty()
+            .await?,
+        [] as [pvlog_storage::YieldInvalidationRecord; 0]
     );
 
     assert!(

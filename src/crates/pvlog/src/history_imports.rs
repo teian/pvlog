@@ -495,8 +495,7 @@ async fn commit_days(
     let today = timezone
         .timestamp_millis_opt(received_at)
         .single()
-        .map(|now| now.format("%Y-%m-%d").to_string())
-        .unwrap_or_default();
+        .map_or_default(|now| now.format("%Y-%m-%d").to_string());
     let mut result = HistoryImportResult::default();
     let mut summaries = Vec::new();
     for day in &file.days {

@@ -228,7 +228,10 @@ async fn two_inverters_are_delivered_with_their_own_values_and_the_totals_of_the
         page[0].generation_energy_wh, None,
         "nothing was stored before it"
     );
-    assert!(page[1].devices.is_empty());
+    assert_eq!(
+        page[1].devices,
+        [] as [pvlog_sbfspot_push::DeviceIdentity; 0]
+    );
     assert_eq!(
         values(&page[0], ROOF),
         BTreeMap::from([("energy.lifetime", 10_000_000)]),
@@ -271,13 +274,16 @@ async fn the_values_that_exist_are_delivered_when_optional_tables_are_absent() {
         values(&readings[0], 1),
         BTreeMap::from([("energy.lifetime", 1_100)])
     );
-    assert!(readings[0].devices.is_empty());
-    assert!(
+    assert_eq!(
+        readings[0].devices,
+        [] as [pvlog_sbfspot_push::DeviceIdentity; 0]
+    );
+    assert_eq!(
         source
             .read_events_after(EventPosition::default(), 10)
             .await
-            .expect("read events")
-            .is_empty()
+            .expect("read events"),
+        [] as [pvlog_sbfspot_push::DeviceEvent; 0]
     );
     // The summary of a pass names the groups that could not be delivered.
     let summary = push_pending(
@@ -399,14 +405,11 @@ async fn capture(
         .and_then(|value| value.to_str().ok())
         .unwrap_or_default()
         .to_owned();
-    let outcomes: Vec<Value> = body["items"]
-        .as_array()
-        .map(|items| {
-            (0..items.len())
-                .map(|index| json!({ "index": index, "status": "inserted", "code": null }))
-                .collect()
-        })
-        .unwrap_or_default();
+    let outcomes: Vec<Value> = body["items"].as_array().map_or_default(|items| {
+        (0..items.len())
+            .map(|index| json!({ "index": index, "status": "inserted", "code": null }))
+            .collect()
+    });
     requests
         .lock()
         .expect("requests lock")

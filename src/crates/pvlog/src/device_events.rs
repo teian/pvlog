@@ -154,7 +154,7 @@ pub(crate) fn event_key(event_id: Option<&str>, occurred_at: i64, code: Option<i
         || {
             format!(
                 "at:{occurred_at}:{}",
-                code.map(|code| code.to_string()).unwrap_or_default()
+                code.map_or_default(|code| code.to_string())
             )
         },
         |id| format!("{SOURCE_IDENTIFIER}{id}"),

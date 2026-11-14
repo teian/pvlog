@@ -9,6 +9,8 @@
 use serde::Serialize;
 
 /// Facts about a system from which its setup status follows.
+// Each flag is an independent fact the status is derived from, not a state.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SetupFacts {
     pub has_location: bool,

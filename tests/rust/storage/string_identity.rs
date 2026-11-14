@@ -226,10 +226,10 @@ impl Fixture {
         repository: &dyn AccountConfigurationRepository,
     ) -> Result<(), Box<dyn Error>> {
         let mut updated = self.inverter.clone();
-        updated.name = "Inverter renamed".to_owned();
+        "Inverter renamed".clone_into(&mut updated.name);
         updated.updated_at = 2;
         updated.strings.remove(1);
-        updated.strings[0].name = "East renamed".to_owned();
+        "East renamed".clone_into(&mut updated.strings[0].name);
         updated.strings[0].updated_at = 2;
         // Capacity, orientation and tilt are enough to describe an array.
         let added = PvStringRecord {

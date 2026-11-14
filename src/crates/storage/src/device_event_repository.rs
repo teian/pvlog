@@ -348,7 +348,11 @@ impl DeviceEventRepository for PostgresDeviceEventRepository {
             .bind(event.system_id.as_uuid())
             .bind(&event.device_key)
             .bind(&event.event_key)
-            .bind(event.data_source_id.map(|id| id.as_uuid()))
+            .bind(
+                event
+                    .data_source_id
+                    .map(pvlog_domain::DataSourceId::as_uuid),
+            )
             .bind(event.occurred_at)
             .bind(event.code)
             .bind(event.message.as_deref())

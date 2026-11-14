@@ -12,6 +12,8 @@ use crate::AccountRepositoryError;
 use crate::RoutedSqliteAccount;
 
 /// Stored facts about one system at one instant.
+// Each flag is an independent fact, not a state.
+#[allow(clippy::struct_excessive_bools)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SetupFactsRecord {
     pub has_location: bool,

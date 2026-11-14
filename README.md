@@ -9,7 +9,7 @@ for larger deployments.
 
 ### Prerequisites
 
-- Rust 1.95.0; `rust-toolchain.toml` installs the required `rustfmt` and Clippy
+- Rust 1.100.0; `rust-toolchain.toml` installs the required `rustfmt` and Clippy
   components automatically through rustup
 - Bun 1.3.14 or newer, selected from `package.json`
 - SQLite development/runtime libraries; PostgreSQL 17 when developing against

@@ -116,11 +116,11 @@ async fn verify_contract(
         repository.observations(system_id, base, base + 10).await?,
         vec![first.clone()]
     );
-    assert!(
+    assert_eq!(
         other_account
             .observations(system_id, base, base + 20)
-            .await?
-            .is_empty()
+            .await?,
+        [] as [pvlog_storage::StoredObservation; 0]
     );
 
     let idempotency = IdempotencyRecord {

@@ -117,10 +117,12 @@ fn unhex(value: &str) -> Result<Vec<u8>, PaginationError> {
     }
     value
         .as_bytes()
-        .chunks_exact(2)
-        .map(|pair| {
-            let high = digit(pair[0])?;
-            let low = digit(pair[1])?;
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|&[high, low]| {
+            let high = digit(high)?;
+            let low = digit(low)?;
             Ok((high << 4) | low)
         })
         .collect()

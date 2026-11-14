@@ -93,8 +93,14 @@ fn a_working_system_with_missing_details_recommends_nothing() {
         has_reading: true,
         ..SetupFacts::default()
     });
-    assert!(states(&items, SetupItemState::Recommended).is_empty());
-    assert!(states(&items, SetupItemState::Blocked).is_empty());
+    assert_eq!(
+        states(&items, SetupItemState::Recommended),
+        [] as [pvlog_application::SetupItemKey; 0]
+    );
+    assert_eq!(
+        states(&items, SetupItemState::Blocked),
+        [] as [pvlog_application::SetupItemKey; 0]
+    );
     for key in [SetupItemKey::Tariff, SetupItemKey::Location] {
         assert_eq!(item(&items, key).state, SetupItemState::Optional);
     }

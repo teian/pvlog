@@ -383,7 +383,10 @@ impl ModernRequestAuthorizer for Authorizer {
         // Uploading needs the write permission, listing the read permission.
         assert_eq!(
             permission,
-            if action.ends_with(".store") {
+            if action
+                .rsplit_once('.')
+                .is_some_and(|(_, verb)| verb == "store")
+            {
                 Permission::TelemetryWrite
             } else {
                 Permission::TelemetryRead

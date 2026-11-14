@@ -47,5 +47,5 @@ fn verification_reports_every_layer_and_only_plans_explicit_repairs() {
             .repair_plan
             .contains(&RepairAction::RebuildSummary(system))
     );
-    assert!(!report.repair_plan.is_empty());
+    assert_ne!(report.repair_plan, [] as [pvlog_storage::RepairAction; 0]);
 }

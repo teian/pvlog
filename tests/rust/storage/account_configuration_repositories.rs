@@ -86,11 +86,9 @@ async fn verify_contract(
         repository.effective_inverters(system_id, 0).await?,
         vec![manual_inverter.clone()]
     );
-    assert!(
-        other_account
-            .effective_inverters(system_id, 0)
-            .await?
-            .is_empty()
+    assert_eq!(
+        other_account.effective_inverters(system_id, 0).await?,
+        [] as [pvlog_storage::InverterRecord; 0]
     );
     let mut inverted_shading = manual_inverter.clone();
     inverted_shading.strings[0].shading[0].to_minute_of_day = 400;
@@ -275,7 +273,10 @@ async fn verify_contract(
     let audit = audit_record(system_id);
     repository.append_audit(&audit).await?;
     assert_eq!(repository.audit(10).await?, vec![audit]);
-    assert!(other_account.audit(10).await?.is_empty());
+    assert_eq!(
+        other_account.audit(10).await?,
+        [] as [pvlog_storage::AccountAuditRecord; 0]
+    );
     Ok(())
 }
 

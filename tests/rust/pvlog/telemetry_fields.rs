@@ -182,13 +182,13 @@ fn flagged(observation: &StoredObservation, flag: QualityFlags) -> bool {
         .is_some_and(|flags| flags.contains(flag))
 }
 
-fn interval(value: i64) -> Option<EnergyInput> {
-    Some(EnergyInput {
+fn interval(value: i64) -> EnergyInput {
+    EnergyInput {
         value,
         unit: EnergyUnit::WattHours,
         cumulative: false,
         reset_sequence: 0,
-    })
+    }
 }
 
 async fn lifetime_counters(fixture: Fixture) -> Result<(), Box<dyn Error>> {
@@ -237,7 +237,7 @@ async fn lifetime_counters(fixture: Fixture) -> Result<(), Box<dyn Error>> {
     // Interval energy and a counter together: both are stored, the supplied
     // interval energy is used.
     let mut both = counter(4, 400, None);
-    both.generation_energy = interval(77);
+    both.generation_energy = Some(interval(77));
     fixture.telemetry.ingest(both).await?;
     let both = fixture.at(4).await?;
     assert_eq!(both.generation_energy_wh, Some(77));
@@ -402,7 +402,7 @@ async fn sqlite_aggregates_the_hour_that_occurs_twice_when_the_clocks_go_back()
         reading.observed_at = UtcTimestamp::from_epoch_millis(measured_at)?;
         reading.received_at = reading.observed_at;
         reading.idempotency_key = measured_at.to_string();
-        reading.generation_energy = interval(10);
+        reading.generation_energy = Some(interval(10));
         fixture.telemetry.ingest(reading).await?;
     }
 
@@ -459,7 +459,7 @@ async fn sqlite_aggregates_years_of_history_one_year_per_cycle() -> Result<(), B
             UtcTimestamp::from_epoch_millis(measured_at).unwrap_or_else(|_| unreachable!());
         reading.received_at = reading.observed_at;
         reading.idempotency_key = measured_at.to_string();
-        reading.generation_energy = interval(energy);
+        reading.generation_energy = Some(interval(energy));
         reading
     };
     // The aggregation stamps what it writes with the real time; the history
@@ -547,7 +547,7 @@ async fn sqlite_rewrites_only_the_days_that_received_readings() -> Result<(), Bo
             UtcTimestamp::from_epoch_millis(measured_at).unwrap_or_else(|_| unreachable!());
         reading.received_at = reading.observed_at;
         reading.idempotency_key = measured_at.to_string();
-        reading.generation_energy = interval(energy);
+        reading.generation_energy = Some(interval(energy));
         reading
     };
     fixture
@@ -1016,12 +1016,13 @@ async fn postgres_stores_typed_channel_values_and_names_contradictions_when_conf
     typed_channels(Fixture::postgres(url).await?).await
 }
 
+#[allow(clippy::too_many_lines)]
 async fn battery(fixture: Fixture) -> Result<(), Box<dyn Error>> {
     // The system's battery: state of charge, charging power and stored energy.
     let mut charging = fixture.reading(0);
     charging.battery_state_of_charge_basis_points = Some(6_250);
     charging.battery_power = Some((1_500, PowerUnit::Watts));
-    charging.battery_energy = interval(4_000);
+    charging.battery_energy = Some(interval(4_000));
     let accepted = fixture.telemetry.ingest(charging).await?.observation;
     assert_eq!(
         accepted.values.battery.map(|battery| battery.flow_state),
@@ -1034,7 +1035,7 @@ async fn battery(fixture: Fixture) -> Result<(), Box<dyn Error>> {
 
     let mut discharging = fixture.reading(1);
     discharging.battery_power = Some((-700, PowerUnit::Watts));
-    discharging.battery_energy = interval(3_900);
+    discharging.battery_energy = Some(interval(3_900));
     let accepted = fixture.telemetry.ingest(discharging).await?.observation;
     assert_eq!(
         accepted.values.battery.map(|battery| battery.flow_state),
@@ -1059,7 +1060,7 @@ async fn battery(fixture: Fixture) -> Result<(), Box<dyn Error>> {
         ));
     }
     let mut negative = fixture.reading(2);
-    negative.battery_energy = interval(-1);
+    negative.battery_energy = Some(interval(-1));
     assert!(matches!(
         fixture.telemetry.ingest(negative).await,
         Err(ModernTelemetryError::InvalidField("batteryEnergyWh"))
@@ -1519,7 +1520,7 @@ async fn daily_summaries(fixture: Fixture) -> Result<(), Box<dyn Error>> {
     }
     for step in 0..3 {
         let mut reading = fixture.reading(step);
-        reading.generation_energy = interval(100);
+        reading.generation_energy = Some(interval(100));
         fixture.telemetry.ingest(reading).await?;
     }
     pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
@@ -1743,7 +1744,10 @@ async fn device_daily_summaries(fixture: Fixture) -> Result<(), Box<dyn Error>> 
         .await
         .map_err(failed)?;
     assert_eq!(day.generation_energy_wh, Some(9_999));
-    assert!(day.supplied_devices.is_empty());
+    assert_eq!(
+        day.supplied_devices,
+        [] as [pvlog_api::SuppliedDeviceSummaryResponse; 0]
+    );
 
     assert_eq!(
         supply(device_yield(sparse_day, "not a serial", 1, 1, false)).await,

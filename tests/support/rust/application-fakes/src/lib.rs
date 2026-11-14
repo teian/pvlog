@@ -397,17 +397,17 @@ mod tests {
 
         let now = UtcTimestamp::from_epoch_millis(1_000)?;
         let range = TimeRange::new(now, UtcTimestamp::from_epoch_millis(2_000)?)?;
-        assert!(
+        assert_eq!(
             StaticInsolationProvider(Vec::new())
                 .query(SystemId::new(), range)
-                .await?
-                .is_empty()
+                .await?,
+            [] as [pvlog_application::InsolationPoint; 0]
         );
-        assert!(
+        assert_eq!(
             StaticSupplyProvider(Vec::new())
                 .query("region", range)
-                .await?
-                .is_empty()
+                .await?,
+            [] as [pvlog_application::SupplyPoint; 0]
         );
 
         let queue = InMemoryJobQueue::default();

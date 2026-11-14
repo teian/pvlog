@@ -218,7 +218,10 @@ fn string(tracker: Option<u8>, name: Option<&str>, capacity_watts: i64) -> Adopt
 #[allow(clippy::too_many_lines)]
 async fn discovered_devices_are_proposed(fixture: Fixture) -> Result<(), Box<dyn Error>> {
     let system_id = fixture.system_id;
-    assert!(fixture.proposals(true).await?.is_empty());
+    assert_eq!(
+        fixture.proposals(true).await?,
+        [] as [pvlog_api::DiscoveryProposalResponse; 0]
+    );
 
     // A logger reports an inverter nobody configured: three DC inputs, of
     // which the second delivers nothing, and tracker numbers with a gap.

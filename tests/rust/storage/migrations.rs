@@ -35,7 +35,10 @@ async fn sqlite_management_and_accounts_plan_apply_and_verify_independently()
             .iter()
             .all(|migration| migration.state == MigrationState::Applied)
     }));
-    assert!(migration_plan(&target).await?.is_empty());
+    assert_eq!(
+        migration_plan(&target).await?,
+        [] as [pvlog_storage::MigrationPlanItem; 0]
+    );
     ensure_schema_compatible(&target).await?;
     probe_database(&target).await?;
     Ok(())

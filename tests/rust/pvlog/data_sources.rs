@@ -181,7 +181,7 @@ async fn verify_lifecycle(
         BTreeSet::from([ApiScope::TelemetryWrite])
     );
     assert!(invalid(
-        verifier
+        &verifier
             .verify(
                 &key,
                 ApiScope::TelemetryWrite,
@@ -196,7 +196,7 @@ async fn verify_lifecycle(
         ApiScope::SystemsWrite,
     ] {
         assert!(invalid(
-            verifier
+            &verifier
                 .verify(&key, scope, account_id, Some(system_id))
                 .await
         ));
@@ -330,7 +330,7 @@ async fn verify_lifecycle(
         .api_key;
     assert_ne!(new_key.expose_secret(), key.expose_secret());
     assert!(invalid(
-        verifier
+        &verifier
             .verify(&key, ApiScope::TelemetryWrite, account_id, Some(system_id))
             .await
     ));
@@ -363,7 +363,7 @@ async fn verify_lifecycle(
         .await
         .map_err(failure)?;
     assert!(invalid(
-        verifier
+        &verifier
             .verify(
                 &new_key,
                 ApiScope::TelemetryWrite,
@@ -414,7 +414,7 @@ async fn verify_lifecycle(
     Ok(())
 }
 
-fn invalid<T>(result: Result<T, ApiTokenError>) -> bool {
+fn invalid<T>(result: &Result<T, ApiTokenError>) -> bool {
     matches!(result, Err(ApiTokenError::InvalidToken))
 }
 

@@ -83,14 +83,15 @@ async fn an_upload_key_supplies_a_summary_for_its_system() -> Result<(), Box<dyn
     assert_eq!(body["date"], "2026-06-10");
     assert_eq!(body["basis"], "supplied_complete");
     assert_eq!(body["generationEnergyWh"], 12_000);
-    let stored = supplied.lock().map_err(|_| "poisoned")?;
-    let (source, summary) = stored.first().ok_or("the summary reached the service")?;
-    assert!(source.credential_id.is_some());
-    assert_eq!(summary.date, "2026-06-10");
-    assert!(summary.complete);
-    assert_eq!(summary.import_energy_wh_by_band.get("offPeak"), Some(&800));
-    assert_eq!(summary.device_id, None);
-    drop(stored);
+    {
+        let stored = supplied.lock().map_err(|_| "poisoned")?;
+        let (source, summary) = stored.first().ok_or("the summary reached the service")?;
+        assert!(source.credential_id.is_some());
+        assert_eq!(summary.date, "2026-06-10");
+        assert!(summary.complete);
+        assert_eq!(summary.import_energy_wh_by_band.get("offPeak"), Some(&800));
+        assert_eq!(summary.device_id, None);
+    }
 
     // The yield of one inverter, with its lifetime counter.
     let (status, _) = send(

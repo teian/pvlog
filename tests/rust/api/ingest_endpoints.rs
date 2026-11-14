@@ -50,8 +50,8 @@ fn api_key(scope: ApiScope, system_id: Option<SystemId>) -> (ApiCredentialId, Re
     )
 }
 
-fn user() -> Option<RequestPrincipal> {
-    Some(RequestPrincipal::User(UserId::new()))
+fn user() -> RequestPrincipal {
+    RequestPrincipal::User(UserId::new())
 }
 
 async fn send(
@@ -90,7 +90,7 @@ async fn post(
     body: &Value,
 ) -> Result<(StatusCode, Value), Box<dyn Error>> {
     send(
-        app(user(), received),
+        app(Some(user()), received),
         Method::POST,
         format!("/api/v1/systems/{system}/ingest"),
         None,
@@ -173,7 +173,7 @@ async fn a_compressed_request_is_read_like_a_plain_one() -> Result<(), Box<dyn E
     ] {
         let received = Received::default();
         let (status, _) = send(
-            app(user(), &received),
+            app(Some(user()), &received),
             Method::POST,
             uri.clone(),
             encoding,
@@ -189,7 +189,7 @@ async fn a_compressed_request_is_read_like_a_plain_one() -> Result<(), Box<dyn E
     let received = Received::default();
     // An encoding the server does not accept is named with those it does.
     let (status, problem) = send(
-        app(user(), &received),
+        app(Some(user()), &received),
         Method::POST,
         uri.clone(),
         Some("br"),
@@ -203,7 +203,7 @@ async fn a_compressed_request_is_read_like_a_plain_one() -> Result<(), Box<dyn E
     );
     // A body that claims an encoding it does not have is refused.
     let (status, problem) = send(
-        app(user(), &received),
+        app(Some(user()), &received),
         Method::POST,
         uri.clone(),
         Some("gzip"),
@@ -222,7 +222,7 @@ async fn a_compressed_request_is_read_like_a_plain_one() -> Result<(), Box<dyn E
     let bomb = bomb.finish()?;
     assert!(bomb.len() < 1 << 20);
     let (status, problem) = send(
-        app(user(), &received),
+        app(Some(user()), &received),
         Method::POST,
         uri,
         Some("gzip"),
@@ -259,7 +259,7 @@ async fn an_unknown_member_is_refused_by_its_path() -> Result<(), Box<dyn Error>
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(problem["title"], "malformed_request");
     let (status, _) = send(
-        app(user(), &received),
+        app(Some(user()), &received),
         Method::POST,
         format!("/api/v1/systems/{system}/ingest"),
         None,

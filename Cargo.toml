@@ -15,7 +15,7 @@ members = [
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.95"
+rust-version = "1.100"
 license = "Apache-2.0"
 repository = "https://github.com/pvlog/pvlog"
 
@@ -39,7 +39,6 @@ rust-embed = "=8.13.0"
 openidconnect = { version = "=4.1.0", default-features = false, features = ["reqwest", "rustls-tls"] }
 oauth2 = { version = "=5.0.0", default-features = false, features = ["reqwest", "rustls-tls"] }
 prost = "=0.14.5"
-prost-build = "=0.14.5"
 reqwest = { version = "=0.13.5", default-features = false, features = ["json", "rustls"] }
 secrecy = { version = "=0.10.3", features = ["serde"] }
 serde = { version = "=1.0.229", features = ["derive"] }
@@ -55,7 +54,6 @@ tracing-opentelemetry = "=0.34.0"
 tracing-subscriber = { version = "=0.3.23", features = ["env-filter", "fmt", "json"] }
 url = { version = "=2.5.8", features = ["serde"] }
 utoipa = { version = "=6.0.0", features = ["axum_extras", "time", "url", "uuid", "yaml"] }
-utoipa-axum = "=0.3.0"
 uuid = { version = "=1.29.2", features = ["serde", "std", "v4", "v7"] }
 zeroize = { version = "=1.9.1", features = ["derive"] }
 zstd = "=0.14.3"

@@ -89,11 +89,9 @@ async fn verify_contract(
         repository.rollups(system_id, base, base + 1).await?,
         vec![rollup]
     );
-    assert!(
-        other_account
-            .rollups(system_id, base, base + 1)
-            .await?
-            .is_empty()
+    assert_eq!(
+        other_account.rollups(system_id, base, base + 1).await?,
+        [] as [pvlog_storage::RollupRecord; 0]
     );
 
     let daily = DailySummaryRecord {

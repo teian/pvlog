@@ -215,8 +215,7 @@ impl Fixture {
         let series = repository.execute_plan(self.system_id, &plan).await?;
         Ok(series
             .first()
-            .map(|entry| entry.points.iter().map(|point| point.value).collect())
-            .unwrap_or_default())
+            .map_or_default(|entry| entry.points.iter().map(|point| point.value).collect()))
     }
 }
 

@@ -71,6 +71,7 @@ pub async fn run_cycle(
 /// # Errors
 ///
 /// Returns an error when account storage or the system's timezone is unavailable.
+#[allow(clippy::too_many_lines)]
 pub async fn rebuild_channel_rollups(
     repository: &dyn ChannelRepository,
     system_id: SystemId,

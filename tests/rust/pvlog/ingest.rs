@@ -224,6 +224,8 @@ fn writer(identity: &str) -> IngestWriter {
     }
 }
 
+// Passed to `map_err`, which hands the error over by value.
+#[allow(clippy::needless_pass_by_value)]
 fn failed(error: IngestApiError) -> Box<dyn Error> {
     format!("ingestion failed: {error:?}").into()
 }
@@ -239,8 +241,8 @@ fn flagged(reading: &StoredObservation, flag: QualityFlags) -> bool {
 fn request(members: Value) -> Value {
     let mut body =
         json!({ "schemaVersion": 1, "source": { "name": "smalog", "version": "0.3.0" } });
-    if let (Some(body), Some(members)) = (body.as_object_mut(), members.as_object()) {
-        body.extend(members.clone());
+    if let (Some(body), Value::Object(members)) = (body.as_object_mut(), members) {
+        body.extend(members);
     }
     body
 }
@@ -518,7 +520,10 @@ async fn system_values_alone_are_stored(fixture: Fixture) -> Result<(), Box<dyn 
     )
     .await
     .ok_or("channel storage is unavailable")?;
-    assert!(channels.channels(fixture.system_id).await?.is_empty());
+    assert_eq!(
+        channels.channels(fixture.system_id).await?,
+        [] as [pvlog_storage::ChannelRecord; 0]
+    );
     assert_eq!(response.marks.devices, Vec::new());
     assert_eq!(response.marks.system.measured_at, Some(START + STEP));
 

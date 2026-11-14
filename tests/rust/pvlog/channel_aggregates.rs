@@ -426,12 +426,12 @@ async fn bound_channels_are_aggregated(fixture: Fixture) -> Result<(), Box<dyn E
             (FIRST_DAY + DAY, Some(40), 40, 40, 1),
         ]
     );
-    assert!(
+    assert_eq!(
         fixture
             .channels
             .channel_rollup_buckets(spare, "day", YEAR, YEAR + 366 * DAY)
-            .await?
-            .is_empty()
+            .await?,
+        [] as [pvlog_storage::ChannelRollupRecord; 0]
     );
 
     // Nothing new, nothing to do.
@@ -481,7 +481,10 @@ async fn bound_channels_are_aggregated(fixture: Fixture) -> Result<(), Box<dyn E
     let days = fixture
         .aggregates("inverter", Some(fixture.inverter), "day")
         .await?;
-    assert!(buckets(&days, "inv.1.ac.l1.power").is_empty());
+    assert_eq!(
+        buckets(&days, "inv.1.ac.l1.power"),
+        [] as [(i64, std::option::Option<i64>, i64, i64, i64); 0]
+    );
     assert_eq!(buckets(&days, "inv.1.temperature").len(), 2);
     assert!(fixture.rebuild().await? > 0);
     let plant = fixture.aggregates("plant", None, "day").await?;
@@ -503,7 +506,10 @@ async fn bound_channels_are_aggregated(fixture: Fixture) -> Result<(), Box<dyn E
     let days = fixture
         .aggregates("inverter", Some(fixture.inverter), "day")
         .await?;
-    assert!(buckets(&days, "inv.1.ac.l1.power").is_empty());
+    assert_eq!(
+        buckets(&days, "inv.1.ac.l1.power"),
+        [] as [(i64, std::option::Option<i64>, i64, i64, i64); 0]
+    );
 
     // An unassigned or retired channel keeps its values and has no aggregates.
     fixture

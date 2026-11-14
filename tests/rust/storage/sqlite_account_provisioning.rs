@@ -65,7 +65,7 @@ async fn interrupted_activation_is_resumed_from_the_verified_final_file()
 
     let report = setup.provisioner.reconcile().await?;
     assert_eq!(report.resumed_accounts, vec![account_id.to_string()]);
-    assert!(report.failures.is_empty());
+    assert_eq!(report.failures, [] as [std::string::String; 0]);
     assert!(setup.accounts_dir.join(result.opaque_locator).is_file());
     assert_eq!(setup.registry(account_id).await?.0, "active");
     Ok(())
@@ -120,7 +120,7 @@ async fn reconciliation_isolates_missing_accounts_and_quarantines_orphans()
     let report = setup.provisioner.reconcile().await?;
     assert_eq!(report.unavailable_accounts, vec![account_id.to_string()]);
     assert_eq!(report.quarantined_orphans, vec!["unregistered.sqlite3"]);
-    assert!(report.failures.is_empty());
+    assert_eq!(report.failures, [] as [std::string::String; 0]);
     assert_eq!(setup.registry(account_id).await?.0, "unavailable");
     assert_eq!(setup.account_status(account_id).await?, "suspended");
     assert!(!orphan.exists());

@@ -22,8 +22,7 @@ fn fixture(name: &str) -> Result<String, Box<dyn Error>> {
 fn utc(year: i32, month: u32, day: u32, hour: u32, minute: u32) -> i64 {
     Utc.with_ymd_and_hms(year, month, day, hour, minute, 0)
         .single()
-        .map(|instant| instant.timestamp_millis())
-        .unwrap_or_default()
+        .map_or_default(|instant| instant.timestamp_millis())
 }
 
 fn rejection(row: usize, reason: &'static str, column: &'static str) -> PvOutputRejection {
@@ -120,7 +119,10 @@ fn a_status_service_response_is_read_without_a_header() -> Result<(), Box<dyn Er
     let file = parse_pvoutput_export(&fixture("status-service.txt")?, BERLIN)?;
     assert_eq!(file.kind, PvOutputFileKind::Status);
     assert_eq!(file.rows, 3);
-    assert!(file.rejected.is_empty());
+    assert_eq!(
+        file.rejected,
+        [] as [pvlog_application::PvOutputRejection; 0]
+    );
     assert_eq!(
         file.statuses
             .iter()
@@ -199,7 +201,10 @@ fn an_output_service_response_is_read_in_field_order() -> Result<(), Box<dyn Err
     let service = parse_pvoutput_export(&fixture("output-service.csv")?, BERLIN)?;
     let export = parse_pvoutput_export(&fixture("output-export.csv")?, BERLIN)?;
     assert_eq!(service.kind, PvOutputFileKind::Output);
-    assert!(service.rejected.is_empty());
+    assert_eq!(
+        service.rejected,
+        [] as [pvlog_application::PvOutputRejection; 0]
+    );
     // Both layouts of the same days give the same summaries.
     assert_eq!(
         service

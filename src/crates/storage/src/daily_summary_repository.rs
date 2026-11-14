@@ -289,7 +289,7 @@ impl DailySummaryRepository for PostgresDailySummaryRepository {
         .bind(&r.source_key)
         .bind(&r.device_key)
         .bind(&r.local_date)
-        .bind(r.data_source_id.map(|id| id.as_uuid()))
+        .bind(r.data_source_id.map(pvlog_domain::DataSourceId::as_uuid))
         .bind(r.generation_energy_wh)
         .bind(r.export_energy_wh)
         .bind(r.consumption_energy_wh)

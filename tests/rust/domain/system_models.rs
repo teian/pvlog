@@ -116,7 +116,7 @@ fn system_without_equipment_is_valid_and_reports_missing_equipment() -> Result<(
     system.validate_hierarchy()?;
     let snapshot = system.effective_capacity_snapshot(date!(2025 - 06 - 01))?;
     assert_eq!(snapshot.total_peak_power, Watts::new(0));
-    assert!(snapshot.inverters.is_empty());
+    assert_eq!(snapshot.inverters, []);
     assert_eq!(
         snapshot.completeness,
         ForecastCompleteness::Unavailable {

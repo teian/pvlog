@@ -209,6 +209,8 @@ impl Fixture {
     }
 }
 
+// Passed to `map_err`, which hands the error over by value.
+#[allow(clippy::needless_pass_by_value)]
 fn failed(error: HistoryImportApiError) -> Box<dyn Error> {
     format!("history import failed: {error:?}").into()
 }
@@ -220,12 +222,12 @@ fn read_fixture(name: &str) -> Result<String, Box<dyn Error>> {
     ))?)
 }
 
-fn result(stored: u64, already_present: u64, skipped: u64) -> Option<HistoryImportResult> {
-    Some(HistoryImportResult {
+fn result(stored: u64, already_present: u64, skipped: u64) -> HistoryImportResult {
+    HistoryImportResult {
         stored,
         already_present,
         skipped,
-    })
+    }
 }
 
 #[allow(clippy::too_many_lines)]
@@ -270,7 +272,7 @@ async fn statuses_are_imported_once(fixture: Fixture) -> Result<(), Box<dyn Erro
     assert_eq!(committed.state, "committed");
     assert_eq!(committed.committed_at_epoch_millis, Some(NOW));
     assert_eq!(committed.expires_at_epoch_millis, None);
-    assert_eq!(committed.result, result(8, 0, 1));
+    assert_eq!(committed.result, Some(result(8, 0, 1)));
     let readings = fixture.readings().await?;
     assert_eq!(readings.len(), 9);
     let live = readings
@@ -307,7 +309,10 @@ async fn statuses_are_imported_once(fixture: Fixture) -> Result<(), Box<dyn Erro
             other_sources: 1,
         }
     );
-    assert_eq!(fixture.commit(again.id).await?.result, result(0, 8, 1));
+    assert_eq!(
+        fixture.commit(again.id).await?.result,
+        Some(result(0, 8, 1))
+    );
     assert_eq!(fixture.readings().await?.len(), 9);
 
     // Both imports are listed, newest first.
@@ -336,7 +341,7 @@ async fn days_are_imported_once(fixture: Fixture) -> Result<(), Box<dyn Error>> 
     assert_eq!(dry_run.report.overlap.other_sources, 1);
 
     let committed = fixture.commit(dry_run.id).await?;
-    assert_eq!(committed.result, result(1, 0, 1));
+    assert_eq!(committed.result, Some(result(1, 0, 1)));
     let summaries = fixture
         .summaries
         .source_summaries(fixture.system_id, "2027-01-01", "2027-01-31")
@@ -360,7 +365,10 @@ async fn days_are_imported_once(fixture: Fixture) -> Result<(), Box<dyn Error>> 
     );
 
     let again = fixture.dry_run("output-export.csv").await?;
-    assert_eq!(fixture.commit(again.id).await?.result, result(0, 1, 1));
+    assert_eq!(
+        fixture.commit(again.id).await?.result,
+        Some(result(0, 1, 1))
+    );
     Ok(())
 }
 

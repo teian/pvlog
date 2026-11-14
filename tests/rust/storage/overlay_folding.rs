@@ -25,7 +25,10 @@ async fn fold_resumes_at_every_crash_point_with_immediate_consistency() {
             OverlayFoldPhase::Completed
         );
         assert_eq!(repository.visible_watts(), 20);
-        assert!(repository.inner.lock().unwrap().overlays.is_empty());
+        assert_eq!(
+            repository.inner.lock().unwrap().overlays,
+            [] as [(u64, pvlog_storage::SegmentPoint); 0]
+        );
     }
 }
 

@@ -28,9 +28,6 @@ url.workspace = true
 uuid.workspace = true
 zstd.workspace = true
 
-[build-dependencies]
-prost-build.workspace = true
-
 [dev-dependencies]
 pvlog-application-fakes = { version = "0.1.0", path = "../../../tests/support/rust/application-fakes" }
 secrecy.workspace = true

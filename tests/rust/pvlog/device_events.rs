@@ -420,11 +420,9 @@ async fn device_events_are_stored_once(fixture: Fixture) -> Result<(), Box<dyn E
 
     // Another system has its own events, also for the same device and identifier.
     let other = fixture.system().await?;
-    assert!(
-        fixture
-            .list(other, DeviceEventQuery::default())
-            .await?
-            .is_empty()
+    assert_eq!(
+        fixture.list(other, DeviceEventQuery::default()).await?,
+        [] as [pvlog_api::DeviceEventResponse; 0]
     );
     assert_eq!(
         fixture

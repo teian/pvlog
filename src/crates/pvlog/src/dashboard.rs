@@ -180,6 +180,7 @@ impl StorageDashboardApi {
     }
 
     /// Reads the latest observation, accepted count over the last day and coverage for a system; empty for `PostgreSQL` or no data.
+    #[allow(clippy::too_many_lines)]
     async fn snapshot(
         &self,
         account_id: AccountId,
@@ -386,8 +387,7 @@ fn uuid_text(bytes: Option<&[u8]>) -> String {
     bytes
         .and_then(|value| <[u8; 16]>::try_from(value).ok())
         .map(uuid::Uuid::from_bytes)
-        .map(|value| value.to_string())
-        .unwrap_or_default()
+        .map_or_default(|value| value.to_string())
 }
 
 /// Encodes a system identifier as the 16-byte blob used by `SQLite` keys.

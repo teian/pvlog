@@ -433,7 +433,11 @@ impl DataSourceRepository for PostgresDataSourceRepository {
         .bind(record.system_id.as_uuid())
         .bind(&record.name)
         .bind(&record.profile)
-        .bind(record.credential_id.map(|id| id.as_uuid()))
+        .bind(
+            record
+                .credential_id
+                .map(pvlog_domain::ApiCredentialId::as_uuid),
+        )
         .bind(record.created_at)
         .bind(record.updated_at)
         .bind(record.deleted_at)
@@ -509,7 +513,11 @@ impl DataSourceRepository for PostgresDataSourceRepository {
         .bind(self.account_id.as_uuid())
         .bind(record.id)
         .bind(record.system_id.as_uuid())
-        .bind(record.data_source_id.map(|id| id.as_uuid()))
+        .bind(
+            record
+                .data_source_id
+                .map(pvlog_domain::DataSourceId::as_uuid),
+        )
         .bind(record.measured_at)
         .bind(record.received_at)
         .bind(sqlx::types::Json(&record.values))
