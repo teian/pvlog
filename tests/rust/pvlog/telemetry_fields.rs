@@ -1903,3 +1903,25 @@ impl Clock for TestClock {
             .unwrap_or_else(|_| unreachable!())
     }
 }
+
+#[tokio::test]
+async fn sqlite_statistics_do_not_exhaust_the_account_pool() -> Result<(), Box<dyn Error>> {
+    // Statistics read the month rollups and then the supplied days. Holding
+    // the first connection while asking for the second once deadlocked as
+    // soon as more requests ran at once than the account pool has connections.
+    let fixture = Fixture::sqlite().await?;
+    let reporting = StorageReportingApi::new(fixture.target.clone());
+    let mut requests = tokio::task::JoinSet::new();
+    for _ in 0..16 {
+        let reporting = reporting.clone();
+        let (account_id, system_id) = (fixture.account_id, fixture.system_id);
+        requests.spawn(async move { reporting.statistics(account_id, system_id).await });
+    }
+    let finished = tokio::time::timeout(std::time::Duration::from_secs(5), requests.join_all())
+        .await
+        .map_err(|_| "concurrent statistics requests stalled")?;
+    for statistics in finished {
+        statistics?;
+    }
+    Ok(())
+}

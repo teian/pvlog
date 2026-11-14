@@ -122,6 +122,9 @@ impl ReportingApiUseCases for StorageReportingApi {
                         .bind(id_blob(system_id)).fetch_optional(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     let rows = sqlx::query("SELECT bucket_start,generation_energy_sum_wh,consumption_energy_sum_wh,coverage_basis_points FROM telemetry_rollups r WHERE system_id=? AND scope_kind='system' AND resolution='month' AND generation=(SELECT MAX(latest.generation) FROM telemetry_rollups latest WHERE latest.system_id=r.system_id AND latest.scope_kind=r.scope_kind AND latest.scope_id=r.scope_id AND latest.resolution=r.resolution AND latest.bucket_start=r.bucket_start) ORDER BY bucket_start")
                         .bind(id_blob(system_id)).fetch_all(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
+                    // Supplied days read through the same pool; holding this
+                    // connection meanwhile can exhaust it under load.
+                    drop(connection);
                     let mut response = statistics_response(
                         system_id,
                         lifetime.as_ref().map(LifetimeValues::from_row),
