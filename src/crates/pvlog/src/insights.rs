@@ -21,6 +21,9 @@ use uuid::Uuid;
 
 use crate::tariffs::{TariffInput, overlaps, periods, revenue_for};
 
+#[cfg(feature = "sqlite")]
+const MILLIS_PER_HOUR: i64 = 3_600_000;
+
 /// Serves the dashboard's summary, breakdown, and tariff endpoints.
 pub struct StorageInsightApi {
     target: DatabaseTarget,
@@ -80,6 +83,16 @@ impl StorageInsightApi {
     /// Returns the clock's current time in epoch milliseconds.
     fn now(&self) -> i64 {
         i64::try_from(self.clock.now().epoch_millis()).unwrap_or_default()
+    }
+}
+
+/// The stored resolution whose sums match a window's: quarter-hours are not
+/// stored, and the hours starting in a window hold the same readings.
+#[cfg(feature = "sqlite")]
+fn summed_resolution(resolution: &'static str) -> &'static str {
+    match resolution {
+        "fifteen_minute" => "hour",
+        stored => stored,
     }
 }
 
@@ -279,44 +292,57 @@ impl InsightApiUseCases for StorageInsightApi {
                   AND c.unit='W' AND c.aggregation='mean') AS channel_count,\
                  (SELECT COALESCE(SUM(r.generation_energy_sum_wh),0) FROM telemetry_rollups r \
                   WHERE r.system_id=? AND r.scope_kind='string' AND r.scope_id=p.id \
-                  AND r.resolution=? AND r.bucket_start>=? AND r.bucket_start<?) AS energy_wh,\
-                 (SELECT MAX(r.bucket_end) FROM telemetry_rollups r WHERE r.system_id=? \
-                  AND r.scope_kind='string' AND r.scope_id=p.id) AS last_bucket_end,\
-                 (SELECT r.generation_power_max_watts FROM telemetry_rollups r \
-                  WHERE r.system_id=? AND r.scope_kind='string' AND r.scope_id=p.id \
-                  ORDER BY r.bucket_start DESC LIMIT 1) AS last_peak \
+                  AND r.resolution=? AND r.bucket_start>=? AND r.bucket_start<?) AS energy_wh \
                  FROM pv_strings p JOIN inverters i ON i.id=p.inverter_id \
                  WHERE i.system_id=? ORDER BY i.name,p.name",
             )
             .bind(id_blob(system_id))
-            .bind(window.resolution)
+            .bind(summed_resolution(window.resolution))
             .bind(window.start)
             .bind(window.end)
-            .bind(id_blob(system_id))
-            .bind(id_blob(system_id))
             .bind(id_blob(system_id))
             .fetch_all(&mut *connection)
             .await
             .map_err(|_| InsightApiError::Unavailable)?;
 
-            return rows
-                .iter()
-                .map(|row| {
-                    let metered = row.try_get::<i64, _>("channel_count").unwrap_or_default() > 0;
-                    let last_end: Option<i64> = row.try_get("last_bucket_end").ok().flatten();
-                    let last_peak: Option<i64> = row.try_get("last_peak").ok().flatten();
-                    Ok(StringContribution {
-                        string_id: row_uuid(row, "string_id")?,
-                        name: row.get("name"),
-                        inverter_id: row_uuid(row, "inverter_id")?,
-                        inverter_name: row.get("inverter_name"),
-                        rated_power_watts: row.try_get("rated").unwrap_or_default(),
-                        generation_energy_wh: row.try_get("energy_wh").unwrap_or_default(),
-                        status: string_status(metered, last_end, last_peak, now, interval_millis),
+            let mut contributions = Vec::with_capacity(rows.len());
+            for row in &rows {
+                let metered = row.try_get::<i64, _>("channel_count").unwrap_or_default() > 0;
+                let string_id = row_uuid(row, "string_id")?;
+                // The newest quarter-hour tells whether the string still reports.
+                let latest = if metered {
+                    crate::aggregation::quarter_hours(
+                        &mut connection,
+                        &id_blob(system_id),
+                        "string",
+                        string_id.as_bytes(),
+                        now.saturating_sub(MILLIS_PER_HOUR),
+                        now.saturating_add(1),
+                    )
+                    .await
+                    .map_err(|_| InsightApiError::Unavailable)?
+                    .pop()
+                } else {
+                    None
+                };
+                contributions.push(StringContribution {
+                    string_id,
+                    name: row.get("name"),
+                    inverter_id: row_uuid(row, "inverter_id")?,
+                    inverter_name: row.get("inverter_name"),
+                    rated_power_watts: row.try_get("rated").unwrap_or_default(),
+                    generation_energy_wh: row.try_get("energy_wh").unwrap_or_default(),
+                    status: string_status(
                         metered,
-                    })
-                })
-                .collect();
+                        latest.map(|quarter| quarter.end),
+                        latest.and_then(|quarter| quarter.maximum_watts),
+                        now,
+                        interval_millis,
+                    ),
+                    metered,
+                });
+            }
+            return Ok(contributions);
         }
         #[cfg(not(feature = "sqlite"))]
         {
@@ -663,6 +689,28 @@ async fn read_buckets(
     start: i64,
     end: i64,
 ) -> Result<Vec<SummaryBucket>, InsightApiError> {
+    if resolution == "fifteen_minute" {
+        // Quarter-hours are not stored; they come from the readings.
+        return Ok(crate::aggregation::quarter_hours(
+            connection,
+            &id_blob(system_id),
+            scope_kind,
+            scope_id.as_bytes(),
+            start,
+            end,
+        )
+        .await
+        .map_err(|_| InsightApiError::Unavailable)?
+        .into_iter()
+        .map(|quarter| SummaryBucket {
+            start: quarter.start,
+            energy_wh: quarter.generation_energy_wh,
+            consumption_wh: Some(quarter.consumption_energy_wh),
+            peak_watts: quarter.maximum_watts,
+            last_watts: quarter.last_watts,
+        })
+        .collect());
+    }
     let rows = sqlx::query(
         "SELECT bucket_start,generation_energy_sum_wh,consumption_energy_sum_wh,\
          generation_power_max_watts,generation_power_last_watts FROM telemetry_rollups \

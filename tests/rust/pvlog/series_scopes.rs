@@ -53,6 +53,37 @@ async fn an_aggregate_series_equals_the_sum_of_its_strings() -> Result<(), Box<d
     Ok(())
 }
 
+/// Quarter-hours are worked out from the readings when they are read, per
+/// scope in the same way as the stored rollups: the energy of each power
+/// reading held for one reporting interval.
+#[tokio::test]
+async fn quarter_hours_are_worked_out_per_scope_from_the_readings() -> Result<(), Box<dyn Error>> {
+    let fixture = Fixture::new().await?;
+    let energy = |watts: &[i64; 3]| -> i64 {
+        watts
+            .iter()
+            .map(|watts| watts * STEP_MILLIS / 3_600_000)
+            .sum()
+    };
+    let read = |scope| {
+        fixture.read_at(
+            scope,
+            RequestedResolution::FifteenMinutes,
+            SeriesField::GenerationEnergy,
+        )
+    };
+
+    let east = read(SeriesScope::String(fixture.east_string)).await?;
+    let west = read(SeriesScope::String(fixture.west_string)).await?;
+    let inverter = read(SeriesScope::Inverter(fixture.inverter)).await?;
+
+    // All three readings fall into the first quarter-hour.
+    assert_eq!(east, vec![energy(&EAST)]);
+    assert_eq!(west, vec![energy(&WEST)]);
+    assert_eq!(inverter, vec![energy(&EAST) + energy(&WEST)]);
+    Ok(())
+}
+
 #[tokio::test]
 async fn an_unbound_channel_contributes_to_no_scope() -> Result<(), Box<dyn Error>> {
     let mut fixture = Fixture::new().await?;
@@ -191,6 +222,20 @@ impl Fixture {
     }
 
     async fn read(&self, scope: SeriesScope) -> Result<Vec<i64>, Box<dyn Error>> {
+        self.read_at(
+            scope,
+            RequestedResolution::Raw,
+            SeriesField::GenerationPower,
+        )
+        .await
+    }
+
+    async fn read_at(
+        &self,
+        scope: SeriesScope,
+        resolution: RequestedResolution,
+        field: SeriesField,
+    ) -> Result<Vec<i64>, Box<dyn Error>> {
         let end = FIRST_INSTANT + STEP_MILLIS * 10;
         let repository = AccountSeriesRepository::new(
             self.target.clone(),
@@ -202,13 +247,16 @@ impl Fixture {
         let plan = plan_query(QueryPlanRequest {
             start_epoch_millis: FIRST_INSTANT,
             end_epoch_millis: end,
-            requested_resolution: RequestedResolution::Raw,
-            fields: BTreeSet::from([SeriesField::GenerationPower]),
+            requested_resolution: resolution,
+            fields: BTreeSet::from([field]),
             timezone: "Europe/Berlin".to_owned(),
             maximum_points: 1_000,
             expected_raw_interval_millis: STEP_MILLIS.unsigned_abs(),
             hot_data_start_epoch_millis: i64::MIN,
-            available_rollups: BTreeSet::from([QueryResolution::Hourly]),
+            available_rollups: BTreeSet::from([
+                QueryResolution::FifteenMinutes,
+                QueryResolution::Hourly,
+            ]),
             scope: None,
             scope_id: None,
         })?;

@@ -18,8 +18,10 @@ use pvlog_storage::{DatabaseTarget, ManagementRepository};
 use sqlx::{Connection as _, Row};
 use thiserror::Error;
 
-const RESOLUTIONS: [Resolution; 5] = [
-    Resolution::FifteenMinutes,
+/// Stored resolutions. Quarter-hours hold barely fewer rows than the readings
+/// at the usual cadence of a few minutes, so [`quarter_hours`] works them out
+/// from the readings whenever they are read.
+const RESOLUTIONS: [Resolution; 4] = [
     Resolution::Hour,
     Resolution::Day,
     Resolution::Month,
@@ -448,8 +450,8 @@ struct RebuildRun {
     /// are pending for the next rebuild.
     calculated_at: i64,
     /// Local days that received readings, as `[start, end)`. Outside them the
-    /// quarter-hour, hour and day aggregates are already current; their
-    /// readings are still read for the month and year they belong to.
+    /// hour and day aggregates are already current; their readings are still
+    /// read for the month and year they belong to.
     touched: (i64, i64),
 }
 
@@ -523,6 +525,93 @@ async fn rebuild_run(
         calculated_at: Utc::now().timestamp_millis(),
         touched: (first_day, last_day_end),
     }))
+}
+
+/// One quarter-hour of a scope, worked out from the stored readings.
+#[cfg(feature = "sqlite")]
+#[derive(Clone, Copy, Debug)]
+pub struct QuarterHour {
+    pub start: i64,
+    pub end: i64,
+    pub generation_energy_wh: i64,
+    pub consumption_energy_wh: i64,
+    pub grid_import_energy_wh: Option<i64>,
+    pub grid_export_energy_wh: Option<i64>,
+    pub battery_energy_delta_wh: Option<i64>,
+    pub maximum_temperature: Option<i64>,
+    pub maximum_watts: Option<i64>,
+    pub last_watts: Option<i64>,
+    pub quality_flags: i64,
+    pub coverage_basis_points: i32,
+}
+
+/// Works out the quarter-hours of one scope that start in `[from, to)`,
+/// oldest first, from the same readings and in the same way as the stored
+/// rollups of the other resolutions.
+///
+/// # Errors
+///
+/// Returns an error when the readings or the system's timezone cannot be read.
+#[cfg(feature = "sqlite")]
+pub async fn quarter_hours(
+    connection: &mut sqlx::SqliteConnection,
+    system: &[u8],
+    scope_kind: &str,
+    scope_id: &[u8],
+    from: i64,
+    to: i64,
+) -> Result<Vec<QuarterHour>, AggregationError> {
+    if to <= from {
+        return Ok(Vec::new());
+    }
+    let Some(settings) =
+        sqlx::query("SELECT timezone,status_interval_seconds FROM systems WHERE id=?")
+            .bind(system.to_vec())
+            .fetch_optional(&mut *connection)
+            .await
+            .map_err(|_| AggregationError::Unavailable)?
+    else {
+        return Ok(Vec::new());
+    };
+    let zone: Tz = settings
+        .get::<String, _>("timezone")
+        .parse()
+        .map_err(|_| AggregationError::Timezone)?;
+    let interval_millis = settings
+        .get::<i64, _>("status_interval_seconds")
+        .saturating_mul(1_000);
+    // The last quarter-hour that starts in the range is read whole.
+    let (_, _, end) = window(zone, Resolution::FifteenMinutes, local_time(zone, to - 1)?)?;
+    let samples = if scope_kind == "system" {
+        plant_samples(connection, system, from, end)
+            .await?
+            .unwrap_or_default()
+    } else {
+        metered_scopes(connection, system, from, end, interval_millis)
+            .await?
+            .into_iter()
+            .find(|(kind, id, _)| *kind == scope_kind && id.as_slice() == scope_id)
+            .map_or_default(|(_, _, samples)| samples)
+    };
+    Ok(bucket_samples(zone, Resolution::FifteenMinutes, &samples)?
+        .into_values()
+        // A quarter-hour that starts before the range is only partly read.
+        .filter(|bucket| bucket.start >= from)
+        .map(|bucket| QuarterHour {
+            start: bucket.start,
+            end: bucket.end,
+            generation_energy_wh: bucket.generation_energy_wh,
+            consumption_energy_wh: bucket.consumption_energy_wh,
+            grid_import_energy_wh: bucket.grid_import_energy_wh,
+            grid_export_energy_wh: bucket.grid_export_energy_wh,
+            battery_energy_delta_wh: bucket.battery_energy_delta(),
+            maximum_temperature: bucket.maximum_temperature,
+            maximum_watts: bucket.maximum_watts,
+            last_watts: bucket.last_watts,
+            quality_flags: bucket.quality_flags,
+            coverage_basis_points: bucket.coverage(interval_millis),
+        })
+        .collect())
 }
 
 /// Reads the plant-wide observation columns for one range.
@@ -673,7 +762,7 @@ struct CoarseBuckets(BTreeMap<(&'static str, i64, String), (Resolution, Bucket)>
 
 /// Folds a day's samples into the month and year buckets written once the
 /// year is done and, for a day that received readings, writes its
-/// quarter-hour, hour and day rollups plus the daily summaries they imply.
+/// hour and day rollups plus the daily summaries they imply.
 #[cfg(feature = "sqlite")]
 async fn write_aggregates(
     connection: &mut sqlx::SqliteConnection,

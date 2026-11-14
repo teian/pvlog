@@ -1,10 +1,14 @@
 //! Aggregates of bound measurement channels.
 //!
 //! A channel that is bound to the system, an inverter or a string is reduced
-//! to one row per local-calendar bucket. Quarter-hour, hour and day buckets
-//! are built from the stored values of the days that received something new;
-//! month and year buckets are merged from the day buckets, so a year of
-//! history is never read again because one reading arrived.
+//! to one row per local-calendar bucket. Hour and day buckets are built from
+//! the stored values of the days that received something new; month and year
+//! buckets are merged from the day buckets, so a year of history is never
+//! read again because one reading arrived.
+//!
+//! Quarter-hours are not stored: at the usual cadence of a few minutes they
+//! hold barely fewer rows than the values themselves, so they are worked out
+//! from the values whenever they are read.
 //!
 //! Which values are new is tracked per channel, and a changed binding resets
 //! that mark, so rebinding rebuilds a channel's aggregates under its new
@@ -23,12 +27,8 @@ use crate::aggregation::{
     AggregationError, Resolution, local_time, next_year_start, window, year_start,
 };
 
-/// Resolutions built from stored values.
-const FINE: [Resolution; 3] = [
-    Resolution::FifteenMinutes,
-    Resolution::Hour,
-    Resolution::Day,
-];
+/// Stored resolutions built from stored values.
+const FINE: [Resolution; 2] = [Resolution::Hour, Resolution::Day];
 /// Resolutions merged from day buckets.
 const COARSE: [Resolution; 2] = [Resolution::Month, Resolution::Year];
 
@@ -229,8 +229,8 @@ fn channels_within(runs: &[ChannelRun], (from, to): (i64, i64)) -> Vec<ChannelId
         .collect()
 }
 
-/// The quarter-hour, hour and day aggregates of one channel built for
-/// consecutive days and not yet written.
+/// The hour and day aggregates of one channel built for consecutive days and
+/// not yet written.
 struct Staged {
     /// Start of the first day they cover.
     from: i64,
@@ -239,7 +239,7 @@ struct Staged {
     rollups: Vec<ChannelRollupRecord>,
 }
 
-/// Builds the quarter-hour, hour and day aggregates of the pending channels
+/// Builds the hour and day aggregates of the pending channels
 /// within `[from, to)` from their values there, oldest first, and stages them
 /// under each channel's run.
 fn build_chunk(
@@ -349,6 +349,90 @@ async fn replace<const N: usize>(
         )
         .await
         .map_err(|_| AggregationError::Unavailable)
+}
+
+/// Works out the quarter-hour aggregates of the channels bound to a target
+/// for the quarter-hours that start in `[from, to)`, ordered by channel and
+/// start.
+///
+/// The values are read one local day at a time, so a long range is never
+/// held in memory at once.
+///
+/// # Errors
+///
+/// Returns an error when account storage or the system's timezone is unavailable.
+pub async fn quarter_hour_rollups(
+    repository: &dyn ChannelRepository,
+    system_id: SystemId,
+    channels: &[ChannelRecord],
+    from: i64,
+    to: i64,
+) -> Result<Vec<ChannelRollupRecord>, AggregationError> {
+    let unavailable = |_| AggregationError::Unavailable;
+    if channels.is_empty() || to <= from {
+        return Ok(Vec::new());
+    }
+    let zone: Tz = repository
+        .system_timezone(system_id)
+        .await
+        .map_err(unavailable)?
+        .and_then(|timezone| timezone.parse().ok())
+        .ok_or(AggregationError::Timezone)?;
+    // The last quarter-hour that starts in the range is read whole.
+    let (_, _, end) = window(zone, Resolution::FifteenMinutes, local_time(zone, to - 1)?)?;
+    let mut previous: HashMap<ChannelId, Option<i64>> = HashMap::new();
+    for channel in channels {
+        let before = if channel.aggregation == "counter_delta" {
+            repository
+                .channel_value_before(channel.id, from)
+                .await
+                .map_err(unavailable)?
+                .map(|value| value.value)
+        } else {
+            None
+        };
+        previous.insert(channel.id, before);
+    }
+    let ids: Vec<ChannelId> = channels.iter().map(|channel| channel.id).collect();
+    let mut by_channel: BTreeMap<ChannelId, Vec<ChannelRollupRecord>> = BTreeMap::new();
+    let mut chunk_from = from;
+    while chunk_from < end {
+        let (_, _, day_end) = window(zone, Resolution::Day, local_time(zone, chunk_from)?)?;
+        let chunk_to = day_end.min(end);
+        let mut values: HashMap<ChannelId, Vec<ChannelValueRecord>> = HashMap::new();
+        for (channel_id, value) in repository
+            .system_channel_values(system_id, &ids, chunk_from, chunk_to)
+            .await
+            .map_err(unavailable)?
+        {
+            values.entry(channel_id).or_default().push(value);
+        }
+        for channel in channels {
+            let Some(values) = values.remove(&channel.id) else {
+                continue;
+            };
+            let counter = channel.aggregation == "counter_delta";
+            let predecessor = previous.get(&channel.id).copied().flatten();
+            by_channel.entry(channel.id).or_default().extend(
+                bucket_values(
+                    zone,
+                    Resolution::FifteenMinutes,
+                    channel.id,
+                    &values,
+                    counter,
+                    predecessor,
+                )?
+                .into_iter()
+                // A quarter-hour that starts before the range is only partly read.
+                .filter(|rollup| rollup.bucket_start >= from),
+            );
+            if counter && let Some(last) = values.last() {
+                previous.insert(channel.id, Some(last.value));
+            }
+        }
+        chunk_from = chunk_to;
+    }
+    Ok(by_channel.into_values().flatten().collect())
 }
 
 /// Reduces values, oldest first, to one aggregate per local bucket.

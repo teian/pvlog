@@ -337,7 +337,7 @@ async fn grid_flows(fixture: Fixture) -> Result<(), Box<dyn Error>> {
     pvlog::aggregation::run_cycle(&fixture.target, fixture.management.as_ref()).await?;
     let mut connection = account.acquire().await?;
     let system = fixture.system_id.as_uuid().as_bytes().to_vec();
-    for resolution in ["fifteen_minute", "hour", "day", "month", "year"] {
+    for resolution in ["hour", "day", "month", "year"] {
         let sums: (Option<i64>, Option<i64>) = sqlx::query_as(
             "SELECT SUM(grid_import_energy_sum_wh),SUM(grid_export_energy_sum_wh) \
              FROM telemetry_rollups WHERE system_id=? AND scope_kind='system' AND resolution=?",
@@ -348,6 +348,29 @@ async fn grid_flows(fixture: Fixture) -> Result<(), Box<dyn Error>> {
         .await?;
         assert_eq!(sums, (Some(30), Some(60)), "{resolution} rollups");
     }
+    let quarters = pvlog::aggregation::quarter_hours(
+        &mut connection,
+        &system,
+        "system",
+        &system,
+        START,
+        START + 10 * STEP,
+    )
+    .await?;
+    assert_eq!(
+        (
+            quarters
+                .iter()
+                .filter_map(|quarter| quarter.grid_import_energy_wh)
+                .sum::<i64>(),
+            quarters
+                .iter()
+                .filter_map(|quarter| quarter.grid_export_energy_wh)
+                .sum::<i64>(),
+        ),
+        (30, 60),
+        "quarter-hours"
+    );
     let daily: (Option<i64>, Option<i64>) = sqlx::query_as(
         "SELECT grid_import_energy_wh,grid_export_energy_wh FROM system_daily_summaries \
          WHERE system_id=?",
@@ -424,14 +447,21 @@ async fn sqlite_aggregates_the_hour_that_occurs_twice_when_the_clocks_go_back()
             (night + 3_600_000, Some(40)),
         ]
     );
-    let quarters: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM telemetry_rollups \
-         WHERE system_id=? AND scope_kind='system' AND resolution='fifteen_minute'",
+    let quarters = pvlog::aggregation::quarter_hours(
+        &mut connection,
+        &system,
+        "system",
+        &system,
+        night - 3_600_000,
+        night + 7_200_000,
     )
-    .bind(system.clone())
-    .fetch_one(&mut *connection)
     .await?;
-    assert_eq!(quarters, 12);
+    assert_eq!(quarters.len(), 12);
+    assert!(
+        quarters
+            .iter()
+            .all(|quarter| quarter.end - quarter.start == 900_000)
+    );
     let day: Option<i64> = sqlx::query_scalar(
         "SELECT generation_energy_wh FROM system_daily_summaries WHERE system_id=? AND local_date='2026-10-25'",
     )

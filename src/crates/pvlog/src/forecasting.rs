@@ -477,24 +477,40 @@ impl ForecastApiUseCases for StorageForecastApi {
                 .await
                 .map_err(|_| ForecastApiError::Unavailable)?;
             let (scope_kind, scope_id) = projection_scope(&scope, system_id);
+            // Measured energy comes from the same scoped quarter-hours the
+            // charts draw, so a comparison never mixes two aggregation paths.
+            let quarters = match (
+                modeled
+                    .points
+                    .iter()
+                    .map(|point| point.interval_start)
+                    .min(),
+                modeled.points.iter().map(|point| point.interval_end).max(),
+            ) {
+                (Some(from), Some(to)) => crate::aggregation::quarter_hours(
+                    &mut connection,
+                    system_id.as_uuid().as_bytes(),
+                    scope_kind,
+                    scope_id.as_bytes(),
+                    from,
+                    to,
+                )
+                .await
+                .map_err(|_| ForecastApiError::Unavailable)?,
+                _ => Vec::new(),
+            };
             let mut points = Vec::with_capacity(modeled.points.len());
             for point in &modeled.points {
-                // Measured energy comes from the same scoped rollups the charts
-                // draw, so a comparison never mixes two aggregation paths.
-                let measured: Option<i64> = sqlx::query_scalar(
-                    "SELECT SUM(generation_energy_sum_wh) FROM telemetry_rollups \
-                     WHERE system_id=? AND scope_kind=? AND scope_id=? \
-                     AND resolution='fifteen_minute' \
-                     AND bucket_start>=? AND bucket_start<?",
-                )
-                .bind(system_id.as_uuid().as_bytes().to_vec())
-                .bind(scope_kind)
-                .bind(scope_id.as_bytes().to_vec())
-                .bind(point.interval_start)
-                .bind(point.interval_end)
-                .fetch_one(&mut *connection)
-                .await
-                .map_err(|_| ForecastApiError::Unavailable)?;
+                let first =
+                    quarters.partition_point(|quarter| quarter.start < point.interval_start);
+                let last = quarters.partition_point(|quarter| quarter.start < point.interval_end);
+                let within = quarters.get(first..last).unwrap_or_default();
+                let measured = (!within.is_empty()).then(|| {
+                    within
+                        .iter()
+                        .map(|quarter| quarter.generation_energy_wh)
+                        .sum::<i64>()
+                });
                 points.push(PerformancePointResponse {
                     interval_start: point.interval_start,
                     interval_end: point.interval_end,

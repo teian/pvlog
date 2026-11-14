@@ -406,6 +406,35 @@ impl AccountSeriesRepository {
             .acquire()
             .await
             .map_err(|_| SeriesQueryRepositoryError::Unavailable)?;
+        if resolution == QueryResolution::FifteenMinutes {
+            // Quarter-hours are not stored; they come from the readings.
+            return Ok(crate::aggregation::quarter_hours(
+                &mut connection,
+                &id_blob(system_id),
+                self.scope.name(),
+                self.scope.identifier(system_id).as_bytes(),
+                self.start_epoch_millis,
+                self.end_epoch_millis,
+            )
+            .await
+            .map_err(|_| SeriesQueryRepositoryError::Unavailable)?
+            .iter()
+            .map(|quarter| {
+                rollup_sample(&RollupValues {
+                    bucket_start: quarter.start,
+                    bucket_end: quarter.end,
+                    generation_energy_wh: Some(quarter.generation_energy_wh),
+                    consumption_energy_wh: Some(quarter.consumption_energy_wh),
+                    grid_import_energy_wh: quarter.grid_import_energy_wh,
+                    grid_export_energy_wh: quarter.grid_export_energy_wh,
+                    battery_energy_delta_wh: quarter.battery_energy_delta_wh,
+                    temperature_max_milli_celsius: quarter.maximum_temperature,
+                    quality_flags: quarter.quality_flags,
+                    coverage_basis_points: i64::from(quarter.coverage_basis_points),
+                })
+            })
+            .collect());
+        }
         let rows = sqlx::query(
             "SELECT bucket_start,bucket_end,generation_energy_sum_wh,consumption_energy_sum_wh,\
              grid_import_energy_sum_wh,grid_export_energy_sum_wh,battery_energy_delta_wh,\

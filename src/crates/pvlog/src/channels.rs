@@ -7,7 +7,7 @@
 
 use std::sync::Arc;
 
-use crate::channel_aggregation::aggregate_value;
+use crate::channel_aggregation::{aggregate_value, quarter_hour_rollups};
 use async_trait::async_trait;
 use pvlog_api::{
     ChannelAggregateBucket, ChannelAggregateQuery, ChannelAggregateResponse, ChannelApiError,
@@ -129,21 +129,35 @@ impl ChannelApiUseCases for StorageChannelApi {
         query: ChannelAggregateQuery,
     ) -> Result<Vec<ChannelAggregateResponse>, ChannelApiError> {
         let repository = self.repository(system_id).await?;
-        let rollups = repository
-            .target_channel_rollups(
-                system_id,
-                &query.target_kind,
-                query.target_id,
-                &query.resolution,
-                query.from,
-                query.to,
-            )
-            .await
-            .map_err(|_| ChannelApiError::Unavailable)?;
         let channels = repository
             .channels(system_id)
             .await
             .map_err(|_| ChannelApiError::Unavailable)?;
+        let rollups = if query.resolution == "fifteen_minute" {
+            // Quarter-hours are not stored; they come from the values.
+            let bound: Vec<ChannelRecord> = channels
+                .iter()
+                .filter(|channel| {
+                    channel.target_kind == query.target_kind && channel.target_id == query.target_id
+                })
+                .cloned()
+                .collect();
+            quarter_hour_rollups(repository.as_ref(), system_id, &bound, query.from, query.to)
+                .await
+                .map_err(|_| ChannelApiError::Unavailable)?
+        } else {
+            repository
+                .target_channel_rollups(
+                    system_id,
+                    &query.target_kind,
+                    query.target_id,
+                    &query.resolution,
+                    query.from,
+                    query.to,
+                )
+                .await
+                .map_err(|_| ChannelApiError::Unavailable)?
+        };
         Ok(channels
             .into_iter()
             .filter_map(|channel| {
