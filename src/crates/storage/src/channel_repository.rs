@@ -885,7 +885,7 @@ impl ChannelRepository for SqliteChannelRepository {
                WHERE c.system_id=?1 AND c.lifecycle='active' AND c.target_kind<>'unassigned' \
                AND c.rollup_watermark IS NOT NULL AND (c.last_value_at>c.rollup_watermark \
                  OR (c.last_value_at=c.rollup_watermark AND (\
-                   SELECT COUNT(*) FROM telemetry_hot h INDEXED BY telemetry_hot_received_idx \
+                   SELECT COUNT(*) FROM telemetry_hot h INDEXED BY telemetry_hot_system_received_idx \
                    CROSS JOIN telemetry_hot_extended_values v \
                    ON v.observation_id=h.observation_id AND v.channel_id=c.id \
                    WHERE h.received_at=c.rollup_watermark AND h.system_id=?1\
@@ -894,7 +894,7 @@ impl ChannelRepository for SqliteChannelRepository {
                SELECT v.channel_id AS channel_id,MIN(h.measured_at) AS first_measured_at,\
                MAX(h.measured_at) AS last_measured_at,MAX(h.received_at) AS last_received_at,\
                COUNT(*) AS value_count \
-               FROM telemetry_hot h INDEXED BY telemetry_hot_received_idx \
+               FROM telemetry_hot h INDEXED BY telemetry_hot_system_received_idx \
                CROSS JOIN telemetry_hot_extended_values v ON v.observation_id=h.observation_id \
                CROSS JOIN bound b ON b.id=v.channel_id \
                WHERE h.received_at>=(SELECT COALESCE(MIN(rollup_watermark),\
@@ -1049,10 +1049,14 @@ impl ChannelRepository for SqliteChannelRepository {
     ) -> Result<Vec<ChannelRollupRecord>, AccountRepositoryError> {
         let mut connection = self.account.acquire().await?;
         sqlx::query(
-            "SELECT channel_id,resolution,bucket_start,bucket_end,point_count,value_sum,\
-             value_min,value_max,value_first,value_last,counter_delta FROM channel_rollups \
-             WHERE system_id=? AND target_kind=? AND target_id IS ? AND resolution=? \
-             AND bucket_start>=? AND bucket_start<? ORDER BY channel_id,bucket_start",
+            // Rebinding a channel drops its rollups, so the channels bound to
+            // the target now are the ones whose rollups belong to it.
+            "SELECT r.channel_id,r.resolution,r.bucket_start,r.bucket_end,r.point_count,\
+             r.value_sum,r.value_min,r.value_max,r.value_first,r.value_last,r.counter_delta \
+             FROM channel_definitions c CROSS JOIN channel_rollups r \
+             ON r.channel_id=c.id AND r.resolution=?4 AND r.bucket_start>=?5 AND r.bucket_start<?6 \
+             WHERE c.system_id=?1 AND c.target_kind=?2 AND c.target_id IS ?3 \
+             ORDER BY r.channel_id,r.bucket_start",
         )
         .bind(blob(system_id.as_uuid()))
         .bind(target_kind)
@@ -1713,11 +1717,15 @@ impl ChannelRepository for PostgresChannelRepository {
     ) -> Result<Vec<ChannelRollupRecord>, AccountRepositoryError> {
         let mut connection = self.connection().await?;
         let rows = sqlx::query(
-            "SELECT channel_id,resolution,bucket_start,bucket_end,point_count,value_sum,\
-             value_min,value_max,value_first,value_last,counter_delta \
-             FROM telemetry.channel_rollups WHERE account_id=$1 AND system_id=$2 \
-             AND target_kind=$3 AND target_id IS NOT DISTINCT FROM $4 AND resolution=$5 \
-             AND bucket_start>=$6 AND bucket_start<$7 ORDER BY channel_id,bucket_start",
+            // Rebinding a channel drops its rollups, so the channels bound to
+            // the target now are the ones whose rollups belong to it.
+            "SELECT r.channel_id,r.resolution,r.bucket_start,r.bucket_end,r.point_count,\
+             r.value_sum,r.value_min,r.value_max,r.value_first,r.value_last,r.counter_delta \
+             FROM account_data.channel_definitions c JOIN telemetry.channel_rollups r \
+             ON r.account_id=c.account_id AND r.channel_id=c.id AND r.resolution=$5 \
+             AND r.bucket_start>=$6 AND r.bucket_start<$7 \
+             WHERE c.account_id=$1 AND c.system_id=$2 AND c.target_kind=$3 \
+             AND c.target_id IS NOT DISTINCT FROM $4 ORDER BY r.channel_id,r.bucket_start",
         )
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
