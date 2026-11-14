@@ -8,9 +8,7 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use pvlog_domain::UserId;
 use serde_json::Value;
-#[cfg(feature = "postgres")]
-use sqlx::PgConnection;
-use sqlx::{Connection as _, Row as _};
+use sqlx::Row as _;
 use thiserror::Error;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -68,8 +66,8 @@ impl PostgresAdministrationRepository {
         Self { url }
     }
 
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -144,7 +142,7 @@ impl AdministrationRepository for PostgresAdministrationRepository {
              FROM management.global_configuration WHERE key=$1",
         )
         .bind(key)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| postgres_record(&row)).transpose()
@@ -169,7 +167,7 @@ impl AdministrationRepository for PostgresAdministrationRepository {
         .bind(&record.value_class)
         .bind(record.updated_by.map(pvlog_domain::UserId::as_uuid))
         .bind(record.updated_at)
-        .fetch_one(&mut connection)
+        .fetch_one(&mut *connection)
         .await?;
         connection.close().await?;
         postgres_record(&row)

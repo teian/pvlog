@@ -9,8 +9,6 @@ use std::fmt;
 use async_trait::async_trait;
 use pvlog_domain::{AccountId, SystemId};
 use sqlx::Row as _;
-#[cfg(feature = "postgres")]
-use sqlx::{Connection as _, PgConnection};
 use uuid::Uuid;
 
 use crate::AccountRepositoryError;
@@ -417,8 +415,8 @@ impl PostgresDiscoveryRepository {
         Self { url, account_id }
     }
 
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -490,7 +488,7 @@ impl DiscoveryRepository for PostgresDiscoveryRepository {
         .bind(device.firmware.as_deref())
         .bind(device.transport.as_deref())
         .bind(now)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         // Every right-hand side reads the row as it was before the update.
         let changed = sqlx::query(
@@ -512,7 +510,7 @@ impl DiscoveryRepository for PostgresDiscoveryRepository {
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
         .bind(&device.device_serial)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?
         .rows_affected();
         connection.close().await?;
@@ -531,7 +529,7 @@ impl DiscoveryRepository for PostgresDiscoveryRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(rows.iter().map(reported_device).collect())
@@ -570,7 +568,7 @@ impl DiscoveryRepository for PostgresDiscoveryRepository {
         .bind(device.model.as_deref())
         .bind(device.firmware.as_deref())
         .bind(now)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -589,7 +587,7 @@ impl DiscoveryRepository for PostgresDiscoveryRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter().map(postgres_proposal).collect()
@@ -616,7 +614,7 @@ impl DiscoveryRepository for PostgresDiscoveryRepository {
         .bind(state)
         .bind(inverter_id)
         .bind(now)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?
         .rows_affected();
         connection.close().await?;
@@ -637,7 +635,7 @@ impl DiscoveryRepository for PostgresDiscoveryRepository {
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
         .bind(now)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(serials)

@@ -848,8 +848,8 @@ impl PostgresIngestRepository {
         Self { url, account_id }
     }
 
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -1069,7 +1069,7 @@ impl IngestRepository for PostgresIngestRepository {
         .bind(system_id.as_uuid())
         .bind(from)
         .bind(to)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(rows
@@ -1107,7 +1107,7 @@ impl IngestRepository for PostgresIngestRepository {
         .bind(INGESTION_SOURCE_KIND)
         .bind(source_identity)
         .bind(before)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         let Some(measured_at) = measured_at else {
             connection.close().await?;
@@ -1129,7 +1129,7 @@ impl IngestRepository for PostgresIngestRepository {
         .bind(INGESTION_SOURCE_KIND)
         .bind(source_identity)
         .bind(measured_at)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(Some(DeviceCounters {
@@ -1172,7 +1172,7 @@ impl IngestRepository for PostgresIngestRepository {
         .bind(source_identity)
         .bind(from)
         .bind(to)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?
         .iter()
         .map(crate::telemetry_repository::pg_observation)
@@ -1197,7 +1197,7 @@ impl IngestRepository for PostgresIngestRepository {
         .bind(source_identity)
         .bind(from)
         .bind(to)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         let values = rows
@@ -1274,7 +1274,7 @@ impl IngestRepository for PostgresIngestRepository {
         .bind(filter.from.unwrap_or(i64::MIN))
         .bind(filter.to.unwrap_or(i64::MAX))
         .bind(i64::from(filter.limit))
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter()
@@ -1414,7 +1414,7 @@ impl IngestRepository for PostgresIngestRepository {
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
         .bind(source_key)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(rows.iter().map(mark).collect())

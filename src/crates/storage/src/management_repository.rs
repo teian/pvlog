@@ -8,8 +8,6 @@ use pvlog_domain::{
     SystemId, UserId,
 };
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "postgres")]
-use sqlx::PgConnection;
 use sqlx::{Connection as _, Row as _};
 use thiserror::Error;
 use uuid::Uuid;
@@ -292,8 +290,8 @@ impl PostgresManagementRepository {
     }
 
     #[cfg(feature = "postgres")]
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -945,14 +943,14 @@ impl ManagementRepository for PostgresManagementRepository {
         validate_user(record)?;
         let mut connection = self.connection().await?;
         sqlx::query("INSERT INTO management.users (id,email,display_name,status,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET email=excluded.email,display_name=excluded.display_name,status=excluded.status,updated_at=excluded.updated_at,version=management.users.version+1")
-            .bind(record.id.as_uuid()).bind(&record.email).bind(&record.display_name).bind(&record.status).bind(record.created_at).bind(record.updated_at).execute(&mut connection).await?;
+            .bind(record.id.as_uuid()).bind(&record.email).bind(&record.display_name).bind(&record.status).bind(record.created_at).bind(record.updated_at).execute(&mut *connection).await?;
         connection.close().await?;
         Ok(())
     }
 
     async fn user(&self, id: UserId) -> Result<Option<UserRecord>, ManagementRepositoryError> {
         let mut connection = self.connection().await?;
-        let row = sqlx::query("SELECT id,email,display_name,status,created_at,updated_at FROM management.users WHERE id=$1").bind(id.as_uuid()).fetch_optional(&mut connection).await?;
+        let row = sqlx::query("SELECT id,email,display_name,status,created_at,updated_at FROM management.users WHERE id=$1").bind(id.as_uuid()).fetch_optional(&mut *connection).await?;
         connection.close().await?;
         row.map(|row| postgres_user(&row)).transpose()
     }
@@ -961,7 +959,7 @@ impl ManagementRepository for PostgresManagementRepository {
         validate_account(record)?;
         let mut connection = self.connection().await?;
         sqlx::query("INSERT INTO management.accounts (id,slug,display_name,status,created_by,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET slug=excluded.slug,display_name=excluded.display_name,status=excluded.status,updated_at=excluded.updated_at,version=management.accounts.version+1")
-            .bind(record.id.as_uuid()).bind(&record.slug).bind(&record.display_name).bind(&record.status).bind(record.created_by.map(UserId::as_uuid)).bind(record.created_at).bind(record.updated_at).execute(&mut connection).await?;
+            .bind(record.id.as_uuid()).bind(&record.slug).bind(&record.display_name).bind(&record.status).bind(record.created_by.map(UserId::as_uuid)).bind(record.created_at).bind(record.updated_at).execute(&mut *connection).await?;
         connection.close().await?;
         Ok(())
     }
@@ -971,7 +969,7 @@ impl ManagementRepository for PostgresManagementRepository {
         id: AccountId,
     ) -> Result<Option<AccountRecord>, ManagementRepositoryError> {
         let mut connection = self.connection().await?;
-        let row = sqlx::query("SELECT id,slug,display_name,status,created_by,created_at,updated_at FROM management.accounts WHERE id=$1").bind(id.as_uuid()).fetch_optional(&mut connection).await?;
+        let row = sqlx::query("SELECT id,slug,display_name,status,created_by,created_at,updated_at FROM management.accounts WHERE id=$1").bind(id.as_uuid()).fetch_optional(&mut *connection).await?;
         connection.close().await?;
         row.map(|row| postgres_account(&row)).transpose()
     }
@@ -982,7 +980,7 @@ impl ManagementRepository for PostgresManagementRepository {
     ) -> Result<(), ManagementRepositoryError> {
         let mut connection = self.connection().await?;
         sqlx::query("INSERT INTO management.system_registry (system_id,account_id,created_at,updated_at) VALUES ($1,$2,$3,$4) ON CONFLICT(system_id) DO UPDATE SET account_id=excluded.account_id,updated_at=excluded.updated_at")
-            .bind(record.system_id.as_uuid()).bind(record.account_id.as_uuid()).bind(record.created_at).bind(record.updated_at).execute(&mut connection).await?;
+            .bind(record.system_id.as_uuid()).bind(record.account_id.as_uuid()).bind(record.created_at).bind(record.updated_at).execute(&mut *connection).await?;
         connection.close().await?;
         Ok(())
     }
@@ -993,7 +991,7 @@ impl ManagementRepository for PostgresManagementRepository {
     ) -> Result<Option<SystemRegistryRecord>, ManagementRepositoryError> {
         let mut connection = self.connection().await?;
         let row = sqlx::query("SELECT system_id,account_id,created_at,updated_at FROM management.system_registry WHERE system_id=$1")
-            .bind(system_id.as_uuid()).fetch_optional(&mut connection).await?;
+            .bind(system_id.as_uuid()).fetch_optional(&mut *connection).await?;
         connection.close().await?;
         row.map(|row| postgres_system_registry(&row)).transpose()
     }
@@ -1005,7 +1003,7 @@ impl ManagementRepository for PostgresManagementRepository {
         validate_membership(record)?;
         let mut connection = self.connection().await?;
         sqlx::query("INSERT INTO management.memberships (account_id,id,user_id,status,joined_at,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(account_id,user_id) DO UPDATE SET status=excluded.status,joined_at=excluded.joined_at,updated_at=excluded.updated_at")
-            .bind(record.account_id.as_uuid()).bind(record.id.as_uuid()).bind(record.user_id.as_uuid()).bind(&record.status).bind(record.joined_at).bind(record.created_at).bind(record.updated_at).execute(&mut connection).await?;
+            .bind(record.account_id.as_uuid()).bind(record.id.as_uuid()).bind(record.user_id.as_uuid()).bind(&record.status).bind(record.joined_at).bind(record.created_at).bind(record.updated_at).execute(&mut *connection).await?;
         connection.close().await?;
         Ok(())
     }
@@ -1016,7 +1014,7 @@ impl ManagementRepository for PostgresManagementRepository {
         user_id: UserId,
     ) -> Result<Option<MembershipRecord>, ManagementRepositoryError> {
         let mut connection = self.connection().await?;
-        let row = sqlx::query("SELECT membership.id,membership.account_id,membership.user_id,membership.status,membership.joined_at,membership.created_at,membership.updated_at FROM management.memberships membership JOIN management.users user_record ON user_record.id=membership.user_id AND user_record.status='active' JOIN management.accounts account ON account.id=membership.account_id AND account.status='active' WHERE membership.account_id=$1 AND membership.user_id=$2 AND membership.status='active'").bind(account_id.as_uuid()).bind(user_id.as_uuid()).fetch_optional(&mut connection).await?;
+        let row = sqlx::query("SELECT membership.id,membership.account_id,membership.user_id,membership.status,membership.joined_at,membership.created_at,membership.updated_at FROM management.memberships membership JOIN management.users user_record ON user_record.id=membership.user_id AND user_record.status='active' JOIN management.accounts account ON account.id=membership.account_id AND account.status='active' WHERE membership.account_id=$1 AND membership.user_id=$2 AND membership.status='active'").bind(account_id.as_uuid()).bind(user_id.as_uuid()).fetch_optional(&mut *connection).await?;
         connection.close().await?;
         row.map(|row| postgres_membership(&row)).transpose()
     }
@@ -1027,7 +1025,7 @@ impl ManagementRepository for PostgresManagementRepository {
     ) -> Result<Vec<AccountRecord>, ManagementRepositoryError> {
         let mut connection = self.connection().await?;
         let rows = sqlx::query("SELECT account.id,account.slug,account.display_name,account.status,account.created_by,account.created_at,account.updated_at FROM management.accounts account JOIN management.memberships membership ON membership.account_id=account.id WHERE membership.user_id=$1 AND membership.status='active' AND account.status='active' ORDER BY account.slug")
-            .bind(user_id.as_uuid()).fetch_all(&mut connection).await?;
+            .bind(user_id.as_uuid()).fetch_all(&mut *connection).await?;
         connection.close().await?;
         rows.iter().map(postgres_account).collect()
     }
@@ -1041,7 +1039,7 @@ impl ManagementRepository for PostgresManagementRepository {
             "SELECT system_id FROM management.system_registry WHERE account_id=$1 ORDER BY system_id",
         )
         .bind(account_id.as_uuid())
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.into_iter()
@@ -1057,7 +1055,7 @@ impl ManagementRepository for PostgresManagementRepository {
             "SELECT system_id,account_id,created_at,updated_at FROM management.system_registry \
              ORDER BY account_id,system_id",
         )
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter().map(postgres_system_registry).collect()
@@ -1067,7 +1065,7 @@ impl ManagementRepository for PostgresManagementRepository {
         validate_session(record)?;
         let mut connection = self.connection().await?;
         sqlx::query("INSERT INTO management.sessions (id,user_id,session_digest,csrf_digest,authentication_method,created_at,last_seen_at,idle_expires_at,absolute_expires_at,revoked_at) VALUES ($1,$2,$3,$4,'local',$5,$6,$7,$8,$9) ON CONFLICT(id) DO UPDATE SET last_seen_at=excluded.last_seen_at,idle_expires_at=excluded.idle_expires_at,absolute_expires_at=excluded.absolute_expires_at,revoked_at=excluded.revoked_at")
-            .bind(record.id.as_uuid()).bind(record.user_id.as_uuid()).bind(record.session_digest.as_slice()).bind(record.csrf_digest.as_slice()).bind(record.created_at).bind(record.last_seen_at).bind(record.idle_expires_at).bind(record.absolute_expires_at).bind(record.revoked_at).execute(&mut connection).await?;
+            .bind(record.id.as_uuid()).bind(record.user_id.as_uuid()).bind(record.session_digest.as_slice()).bind(record.csrf_digest.as_slice()).bind(record.created_at).bind(record.last_seen_at).bind(record.idle_expires_at).bind(record.absolute_expires_at).bind(record.revoked_at).execute(&mut *connection).await?;
         connection.close().await?;
         Ok(())
     }
@@ -1078,7 +1076,7 @@ impl ManagementRepository for PostgresManagementRepository {
         now: i64,
     ) -> Result<Option<SessionRecord>, ManagementRepositoryError> {
         let mut connection = self.connection().await?;
-        let row=sqlx::query("SELECT session.id,session.user_id,session.session_digest,session.csrf_digest,session.created_at,session.last_seen_at,session.idle_expires_at,session.absolute_expires_at,session.revoked_at FROM management.sessions session JOIN management.users user_record ON user_record.id=session.user_id AND user_record.status='active' WHERE session.session_digest=$1 AND session.revoked_at IS NULL AND session.idle_expires_at>$2 AND session.absolute_expires_at>$2").bind(digest.as_slice()).bind(now).fetch_optional(&mut connection).await?;
+        let row=sqlx::query("SELECT session.id,session.user_id,session.session_digest,session.csrf_digest,session.created_at,session.last_seen_at,session.idle_expires_at,session.absolute_expires_at,session.revoked_at FROM management.sessions session JOIN management.users user_record ON user_record.id=session.user_id AND user_record.status='active' WHERE session.session_digest=$1 AND session.revoked_at IS NULL AND session.idle_expires_at>$2 AND session.absolute_expires_at>$2").bind(digest.as_slice()).bind(now).fetch_optional(&mut *connection).await?;
         connection.close().await?;
         row.map(|row| postgres_session(&row)).transpose()
     }
@@ -1094,7 +1092,7 @@ impl ManagementRepository for PostgresManagementRepository {
         )
         .bind(now)
         .bind(session_id.as_uuid())
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -1115,7 +1113,7 @@ impl ManagementRepository for PostgresManagementRepository {
         .bind(now)
         .bind(user_id.as_uuid())
         .bind(i64::from(keep))
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -1161,7 +1159,7 @@ impl ManagementRepository for PostgresManagementRepository {
             "SELECT id FROM management.api_credentials WHERE account_id=$1 ORDER BY created_at DESC,id DESC",
         )
         .bind(account_id.as_uuid())
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         let mut credentials = Vec::with_capacity(rows.len());
@@ -1185,7 +1183,7 @@ impl ManagementRepository for PostgresManagementRepository {
             .bind(now)
             .bind(account_id.as_uuid())
             .bind(credential_id.as_uuid())
-            .execute(&mut connection)
+            .execute(&mut *connection)
             .await?;
         connection.close().await?;
         Ok(result.rows_affected() == 1)
@@ -1223,7 +1221,7 @@ impl ManagementRepository for PostgresManagementRepository {
         now: i64,
     ) -> Result<bool, ManagementRepositoryError> {
         let mut connection = self.connection().await?;
-        let allowed=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM management.rbac_role_assignments assignment JOIN management.rbac_roles role ON role.account_id=assignment.account_id AND role.id=assignment.role_id JOIN management.rbac_role_permissions permission ON permission.account_id=role.account_id AND permission.role_id=role.id JOIN management.memberships membership ON membership.account_id=assignment.account_id AND membership.user_id=assignment.principal_id JOIN management.users user_record ON user_record.id=assignment.principal_id AND user_record.status='active' JOIN management.accounts account ON account.id=assignment.account_id AND account.status='active' WHERE assignment.principal_type='user' AND assignment.principal_id=$1 AND assignment.account_id=$2 AND membership.status='active' AND permission.permission=$3 AND assignment.revoked_at IS NULL AND (assignment.expires_at IS NULL OR assignment.expires_at>$4) AND (assignment.scope_type='account' OR (assignment.scope_type='system' AND assignment.system_id=$5)))").bind(user_id.as_uuid()).bind(account_id.as_uuid()).bind(permission_name(permission)).bind(now).bind(system_id.map(SystemId::as_uuid)).fetch_one(&mut connection).await?;
+        let allowed=sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM management.rbac_role_assignments assignment JOIN management.rbac_roles role ON role.account_id=assignment.account_id AND role.id=assignment.role_id JOIN management.rbac_role_permissions permission ON permission.account_id=role.account_id AND permission.role_id=role.id JOIN management.memberships membership ON membership.account_id=assignment.account_id AND membership.user_id=assignment.principal_id JOIN management.users user_record ON user_record.id=assignment.principal_id AND user_record.status='active' JOIN management.accounts account ON account.id=assignment.account_id AND account.status='active' WHERE assignment.principal_type='user' AND assignment.principal_id=$1 AND assignment.account_id=$2 AND membership.status='active' AND permission.permission=$3 AND assignment.revoked_at IS NULL AND (assignment.expires_at IS NULL OR assignment.expires_at>$4) AND (assignment.scope_type='account' OR (assignment.scope_type='system' AND assignment.system_id=$5)))").bind(user_id.as_uuid()).bind(account_id.as_uuid()).bind(permission_name(permission)).bind(now).bind(system_id.map(SystemId::as_uuid)).fetch_one(&mut *connection).await?;
         connection.close().await?;
         Ok(allowed)
     }
@@ -1239,7 +1237,7 @@ impl ManagementRepository for PostgresManagementRepository {
         let (principal_type, principal_id) = postgres_principal(principal);
         let mut connection = self.connection().await?;
         let allowed = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM management.rbac_role_assignments assignment JOIN management.rbac_roles role ON role.account_id=assignment.account_id AND role.id=assignment.role_id JOIN management.rbac_role_permissions permission ON permission.account_id=role.account_id AND permission.role_id=role.id JOIN management.accounts account ON account.id=assignment.account_id AND account.status='active' LEFT JOIN management.memberships membership ON assignment.principal_type='user' AND membership.account_id=assignment.account_id AND membership.user_id=assignment.principal_id AND membership.status='active' LEFT JOIN management.api_credentials credential ON assignment.principal_type='api_credential' AND credential.account_id=assignment.account_id AND credential.id=assignment.principal_id AND credential.revoked_at IS NULL AND (credential.expires_at IS NULL OR credential.expires_at>$1) LEFT JOIN management.users user_record ON user_record.id=COALESCE(membership.user_id,credential.owner_user_id) AND user_record.status='active' WHERE assignment.principal_type=$2 AND assignment.principal_id=$3 AND assignment.account_id=$4 AND permission.permission=$5 AND assignment.revoked_at IS NULL AND (assignment.expires_at IS NULL OR assignment.expires_at>$1) AND (assignment.scope_type='account' OR (assignment.scope_type='system' AND assignment.system_id=$6)) AND ((assignment.principal_type='user' AND membership.id IS NOT NULL) OR (assignment.principal_type='api_credential' AND credential.id IS NOT NULL)))")
-            .bind(now).bind(principal_type).bind(principal_id).bind(account_id.as_uuid()).bind(permission_name(permission)).bind(system_id.map(SystemId::as_uuid)).fetch_one(&mut connection).await?;
+            .bind(now).bind(principal_type).bind(principal_id).bind(account_id.as_uuid()).bind(permission_name(permission)).bind(system_id.map(SystemId::as_uuid)).fetch_one(&mut *connection).await?;
         connection.close().await?;
         Ok(allowed)
     }
@@ -1252,7 +1250,7 @@ impl ManagementRepository for PostgresManagementRepository {
     ) -> Result<bool, ManagementRepositoryError> {
         let mut connection = self.connection().await?;
         let allowed = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM management.rbac_role_assignments assignment JOIN management.rbac_roles role ON role.account_id IS NULL AND role.id=assignment.role_id JOIN management.rbac_role_permissions role_permission ON role_permission.account_id IS NULL AND role_permission.role_id=role.id JOIN management.users user_record ON user_record.id=assignment.principal_id AND user_record.status='active' WHERE assignment.principal_type='user' AND assignment.principal_id=$1 AND assignment.scope_type='instance' AND assignment.account_id IS NULL AND assignment.system_id IS NULL AND assignment.revoked_at IS NULL AND (assignment.expires_at IS NULL OR assignment.expires_at>$2) AND role_permission.permission=$3)")
-            .bind(user_id.as_uuid()).bind(now).bind(permission_name(permission)).fetch_one(&mut connection).await?;
+            .bind(user_id.as_uuid()).bind(now).bind(permission_name(permission)).fetch_one(&mut *connection).await?;
         connection.close().await?;
         Ok(allowed)
     }
@@ -1262,7 +1260,7 @@ impl ManagementRepository for PostgresManagementRepository {
         account_id: AccountId,
     ) -> Result<Option<RoutingRecord>, ManagementRepositoryError> {
         let mut connection = self.connection().await?;
-        let row=sqlx::query("SELECT account_id,migration_state,schema_version FROM management.account_storage_registry WHERE account_id=$1").bind(account_id.as_uuid()).fetch_optional(&mut connection).await?;
+        let row=sqlx::query("SELECT account_id,migration_state,schema_version FROM management.account_storage_registry WHERE account_id=$1").bind(account_id.as_uuid()).fetch_optional(&mut *connection).await?;
         connection.close().await?;
         row.map(|row| {
             Ok(RoutingRecord {
@@ -1279,7 +1277,7 @@ impl ManagementRepository for PostgresManagementRepository {
     async fn append_audit(&self, record: &AuditRecord) -> Result<(), ManagementRepositoryError> {
         validate_audit(record)?;
         let mut connection = self.connection().await?;
-        sqlx::query("INSERT INTO management.global_audit_events (id,occurred_at,request_id,actor_type,actor_id,account_id,action,target_type,target_id,outcome,previous_event_hash,event_hash,safe_metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)").bind(record.id.as_uuid()).bind(record.occurred_at).bind(record.request_id).bind(&record.actor_type).bind(record.actor_id).bind(record.account_id.map(AccountId::as_uuid)).bind(&record.action).bind(&record.target_type).bind(record.target_id).bind(&record.outcome).bind(record.previous_event_hash.map(|h|h.to_vec())).bind(record.event_hash.as_slice()).bind(&record.safe_metadata).execute(&mut connection).await?;
+        sqlx::query("INSERT INTO management.global_audit_events (id,occurred_at,request_id,actor_type,actor_id,account_id,action,target_type,target_id,outcome,previous_event_hash,event_hash,safe_metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)").bind(record.id.as_uuid()).bind(record.occurred_at).bind(record.request_id).bind(&record.actor_type).bind(record.actor_id).bind(record.account_id.map(AccountId::as_uuid)).bind(&record.action).bind(&record.target_type).bind(record.target_id).bind(&record.outcome).bind(record.previous_event_hash.map(|h|h.to_vec())).bind(record.event_hash.as_slice()).bind(&record.safe_metadata).execute(&mut *connection).await?;
         connection.close().await?;
         Ok(())
     }
@@ -1289,7 +1287,7 @@ impl ManagementRepository for PostgresManagementRepository {
         limit: u32,
     ) -> Result<Vec<AuditRecord>, ManagementRepositoryError> {
         let mut connection = self.connection().await?;
-        let rows=sqlx::query("SELECT id,occurred_at,request_id,actor_type,actor_id,account_id,action,target_type,target_id,outcome,previous_event_hash,event_hash,safe_metadata FROM management.global_audit_events WHERE account_id=$1 ORDER BY occurred_at DESC,id DESC LIMIT $2").bind(account_id.as_uuid()).bind(i64::from(limit)).fetch_all(&mut connection).await?;
+        let rows=sqlx::query("SELECT id,occurred_at,request_id,actor_type,actor_id,account_id,action,target_type,target_id,outcome,previous_event_hash,event_hash,safe_metadata FROM management.global_audit_events WHERE account_id=$1 ORDER BY occurred_at DESC,id DESC LIMIT $2").bind(account_id.as_uuid()).bind(i64::from(limit)).fetch_all(&mut *connection).await?;
         connection.close().await?;
         rows.iter().map(postgres_audit).collect()
     }
@@ -1345,6 +1343,11 @@ impl ManagementRepository for SqliteManagementRepository {
         &self,
         _: AccountId,
     ) -> Result<Vec<SystemId>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
+    }
+    async fn registered_systems(
+        &self,
+    ) -> Result<Vec<SystemRegistryRecord>, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("sqlite"))
     }
     async fn save_session(&self, _: &SessionRecord) -> Result<(), ManagementRepositoryError> {
@@ -1504,6 +1507,11 @@ impl ManagementRepository for PostgresManagementRepository {
         &self,
         _: AccountId,
     ) -> Result<Vec<SystemId>, ManagementRepositoryError> {
+        Err(ManagementRepositoryError::AdapterDisabled("postgres"))
+    }
+    async fn registered_systems(
+        &self,
+    ) -> Result<Vec<SystemRegistryRecord>, ManagementRepositoryError> {
         Err(ManagementRepositoryError::AdapterDisabled("postgres"))
     }
     async fn save_session(&self, _: &SessionRecord) -> Result<(), ManagementRepositoryError> {
@@ -1996,9 +2004,9 @@ async fn postgres_credential_by(
 ) -> Result<Option<ApiCredentialRecord>, ManagementRepositoryError> {
     let mut connection = repo.connection().await?;
     let row = if let Some((account, id)) = key {
-        sqlx::query("SELECT id,account_id,owner_user_id,system_id,name,credential_digest,created_at,expires_at,revoked_at FROM management.api_credentials WHERE account_id=$1 AND id=$2").bind(account.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut connection).await?
+        sqlx::query("SELECT id,account_id,owner_user_id,system_id,name,credential_digest,created_at,expires_at,revoked_at FROM management.api_credentials WHERE account_id=$1 AND id=$2").bind(account.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut *connection).await?
     } else if let Some((digest, now)) = digest {
-        sqlx::query("SELECT credential.id,credential.account_id,credential.owner_user_id,credential.system_id,credential.name,credential.credential_digest,credential.created_at,credential.expires_at,credential.revoked_at FROM management.api_credentials credential JOIN management.users user_record ON user_record.id=credential.owner_user_id AND user_record.status='active' JOIN management.accounts account ON account.id=credential.account_id AND account.status='active' WHERE credential.credential_digest=$1 AND credential.revoked_at IS NULL AND (credential.expires_at IS NULL OR credential.expires_at>$2)").bind(digest.as_slice()).bind(now).fetch_optional(&mut connection).await?
+        sqlx::query("SELECT credential.id,credential.account_id,credential.owner_user_id,credential.system_id,credential.name,credential.credential_digest,credential.created_at,credential.expires_at,credential.revoked_at FROM management.api_credentials credential JOIN management.users user_record ON user_record.id=credential.owner_user_id AND user_record.status='active' JOIN management.accounts account ON account.id=credential.account_id AND account.status='active' WHERE credential.credential_digest=$1 AND credential.revoked_at IS NULL AND (credential.expires_at IS NULL OR credential.expires_at>$2)").bind(digest.as_slice()).bind(now).fetch_optional(&mut *connection).await?
     } else {
         return Err(ManagementRepositoryError::InvalidRecord(
             "credential_lookup",
@@ -2010,7 +2018,7 @@ async fn postgres_credential_by(
     };
     let id = pg_id(row.get("id"), ApiCredentialId::from_uuid)?;
     let account_id = pg_id(row.get("account_id"), AccountId::from_uuid)?;
-    let scopes=sqlx::query_scalar::<_,String>("SELECT scope FROM management.api_credential_scopes WHERE account_id=$1 AND credential_id=$2 ORDER BY scope").bind(account_id.as_uuid()).bind(id.as_uuid()).fetch_all(&mut connection).await?.into_iter().collect();
+    let scopes=sqlx::query_scalar::<_,String>("SELECT scope FROM management.api_credential_scopes WHERE account_id=$1 AND credential_id=$2 ORDER BY scope").bind(account_id.as_uuid()).bind(id.as_uuid()).fetch_all(&mut *connection).await?.into_iter().collect();
     let record = ApiCredentialRecord {
         id,
         account_id,

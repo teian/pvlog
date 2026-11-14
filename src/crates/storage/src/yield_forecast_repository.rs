@@ -161,8 +161,8 @@ impl PostgresYieldForecastInputRepository {
         Self { url, account_id }
     }
 
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -397,7 +397,7 @@ impl YieldForecastInputRepository for PostgresYieldForecastInputRepository {
         .bind(record.id.as_uuid())
         .bind(record.effective_to)
         .bind(record.effective_from)
-        .fetch_one(&mut connection)
+        .fetch_one(&mut *connection)
         .await?;
         if overlap != 0 {
             return Err(YieldForecastRepositoryError::Conflict(
@@ -429,7 +429,7 @@ impl YieldForecastInputRepository for PostgresYieldForecastInputRepository {
         .bind(record.configuration_digest.to_vec())
         .bind(record.created_at)
         .bind(record.created_by)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         Ok(())
     }
@@ -453,7 +453,7 @@ impl YieldForecastInputRepository for PostgresYieldForecastInputRepository {
         .bind(self.account_id.as_uuid())
         .bind(string_id.as_uuid())
         .bind(at)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         row.map(|row| postgres_settings(&row)).transpose()
     }
@@ -524,7 +524,7 @@ impl YieldForecastInputRepository for PostgresYieldForecastInputRepository {
         .bind(start)
         .bind(end)
         .bind(cutoff)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         match id {
             Some(id) => {
@@ -553,7 +553,7 @@ impl YieldForecastInputRepository for PostgresYieldForecastInputRepository {
         .bind(referenced_at)
         .bind(self.account_id.as_uuid())
         .bind(id.as_uuid())
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?
         .rows_affected();
         Ok(changed == 1)
@@ -578,7 +578,7 @@ impl YieldForecastInputRepository for PostgresYieldForecastInputRepository {
         .bind(self.account_id.as_uuid())
         .bind(now)
         .bind(i64::from(limit))
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?
         .rows_affected();
         Ok(changed)

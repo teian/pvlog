@@ -7,8 +7,6 @@ use async_trait::async_trait;
 use pvlog_domain::{AccountId, DataSourceId, SystemId};
 use serde_json::Value;
 use sqlx::Row as _;
-#[cfg(feature = "postgres")]
-use sqlx::{Connection as _, PgConnection};
 use uuid::Uuid;
 
 use crate::AccountRepositoryError;
@@ -265,7 +263,7 @@ impl DailySummaryRepository for PostgresDailySummaryRepository {
         &self,
         r: &SourceDailySummaryRecord,
     ) -> Result<(), AccountRepositoryError> {
-        let mut connection = PgConnection::connect(&self.url).await?;
+        let mut connection = crate::postgres_connection(&self.url).await?;
         sqlx::query(
             "INSERT INTO telemetry.source_daily_summaries (account_id,system_id,source_key,\
              device_key,local_date,data_source_id,generation_energy_wh,export_energy_wh,\
@@ -304,7 +302,7 @@ impl DailySummaryRepository for PostgresDailySummaryRepository {
         .bind(r.temperature_max_millidegrees_c)
         .bind(&r.import_energy_by_band)
         .bind(r.received_at)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -316,7 +314,7 @@ impl DailySummaryRepository for PostgresDailySummaryRepository {
         from: &str,
         to: &str,
     ) -> Result<Vec<SourceDailySummaryRecord>, AccountRepositoryError> {
-        let mut connection = PgConnection::connect(&self.url).await?;
+        let mut connection = crate::postgres_connection(&self.url).await?;
         let rows = sqlx::query(
             "SELECT source_key,device_key,local_date::TEXT AS local_date,data_source_id,\
              generation_energy_wh,export_energy_wh,consumption_energy_wh,generation_lifetime_wh,\
@@ -330,7 +328,7 @@ impl DailySummaryRepository for PostgresDailySummaryRepository {
         .bind(system_id.as_uuid())
         .bind(from)
         .bind(to)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter()
@@ -368,7 +366,7 @@ impl DailySummaryRepository for PostgresDailySummaryRepository {
         from: &str,
         to: &str,
     ) -> Result<Vec<ComputedDailySummaryRecord>, AccountRepositoryError> {
-        let mut connection = PgConnection::connect(&self.url).await?;
+        let mut connection = crate::postgres_connection(&self.url).await?;
         let rows = sqlx::query(
             "SELECT local_date::TEXT AS local_date,generation_energy_wh,consumption_energy_wh,\
              grid_export_energy_wh,coverage_basis_points::BIGINT AS coverage_basis_points \
@@ -382,7 +380,7 @@ impl DailySummaryRepository for PostgresDailySummaryRepository {
         .bind(system_id.as_uuid())
         .bind(from)
         .bind(to)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(rows

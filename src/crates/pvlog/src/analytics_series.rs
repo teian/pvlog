@@ -20,10 +20,9 @@ use pvlog_application::{
 };
 use pvlog_domain::{AccountId, SystemId};
 use pvlog_storage::DatabaseTarget;
+#[cfg(feature = "postgres")]
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 use sqlx::Row;
-#[cfg(feature = "postgres")]
-use sqlx::{Connection as _, PgConnection};
 
 const MILLIS_PER_HOUR: i64 = 3_600_000;
 const FULL_COVERAGE: u16 = 10_000;
@@ -346,7 +345,7 @@ impl AccountSeriesRepository {
         url: &str,
         system_id: SystemId,
     ) -> Result<Vec<SampleRow>, SeriesQueryRepositoryError> {
-        let mut connection = PgConnection::connect(url)
+        let mut connection = pvlog_storage::postgres_connection(url)
             .await
             .map_err(|_| SeriesQueryRepositoryError::Unavailable)?;
         let rows = sqlx::query(
@@ -360,7 +359,7 @@ impl AccountSeriesRepository {
         .bind(system_id.as_uuid())
         .bind(self.start_epoch_millis)
         .bind(self.end_epoch_millis)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await
         .map_err(|_| SeriesQueryRepositoryError::Unavailable)?;
         connection
@@ -468,7 +467,7 @@ impl AccountSeriesRepository {
         system_id: SystemId,
         resolution: QueryResolution,
     ) -> Result<Vec<SampleRow>, SeriesQueryRepositoryError> {
-        let mut connection = PgConnection::connect(url)
+        let mut connection = pvlog_storage::postgres_connection(url)
             .await
             .map_err(|_| SeriesQueryRepositoryError::Unavailable)?;
         let rows = sqlx::query(
@@ -492,7 +491,7 @@ impl AccountSeriesRepository {
         .bind(resolution_name(resolution))
         .bind(self.start_epoch_millis)
         .bind(self.end_epoch_millis)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await
         .map_err(|_| SeriesQueryRepositoryError::Unavailable)?;
         connection

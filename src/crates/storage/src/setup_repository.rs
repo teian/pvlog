@@ -5,8 +5,6 @@ use std::fmt;
 use async_trait::async_trait;
 use pvlog_domain::{AccountId, DataSourceId, ObservationId, SystemId};
 use sqlx::Row as _;
-#[cfg(feature = "postgres")]
-use sqlx::{Connection as _, PgConnection};
 use uuid::Uuid;
 
 use crate::AccountRepositoryError;
@@ -212,7 +210,7 @@ impl SetupRepository for PostgresSetupRepository {
         system_id: SystemId,
         now: i64,
     ) -> Result<Option<SetupFactsRecord>, AccountRepositoryError> {
-        let mut connection = PgConnection::connect(&self.url).await?;
+        let mut connection = crate::postgres_connection(&self.url).await?;
         let row = sqlx::query(
             "SELECT s.latitude_e6 IS NOT NULL AS has_location,\
              s.declared_capacity_watts IS NOT NULL AS has_declared_capacity,\
@@ -236,7 +234,7 @@ impl SetupRepository for PostgresSetupRepository {
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
         .bind(now)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| {
@@ -260,7 +258,7 @@ impl SetupRepository for PostgresSetupRepository {
         &self,
         system_id: SystemId,
     ) -> Result<Option<LatestReadingRecord>, AccountRepositoryError> {
-        let mut connection = PgConnection::connect(&self.url).await?;
+        let mut connection = crate::postgres_connection(&self.url).await?;
         let row = sqlx::query(
             "SELECT h.observation_id,h.measured_at,h.received_at,h.generation_power_watts,\
              h.generation_energy_wh,h.consumption_power_watts,h.consumption_energy_wh,h.message,\
@@ -272,7 +270,7 @@ impl SetupRepository for PostgresSetupRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| {

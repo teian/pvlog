@@ -11,8 +11,6 @@ use crate::daily_summaries::{ALL_DATES, daily_repositories, daily_values};
 use pvlog_domain::{AccountId, SystemId};
 use pvlog_storage::{DatabaseTarget, SqliteAccountPoolRouter};
 use sqlx::Row;
-#[cfg(feature = "postgres")]
-use sqlx::{Connection as _, PgConnection};
 
 #[derive(Clone, Debug)]
 pub struct StorageReportingApi {
@@ -70,7 +68,7 @@ impl ReportingApiUseCases for StorageReportingApi {
             DatabaseTarget::Postgres { url } => {
                 #[cfg(feature = "postgres")]
                 {
-                    let mut connection = PgConnection::connect(url)
+                    let mut connection = pvlog_storage::postgres_connection(url)
                         .await
                         .map_err(|_| ReportingApiError::Unavailable)?;
                     let row = sqlx::query(
@@ -86,7 +84,7 @@ impl ReportingApiUseCases for StorageReportingApi {
                          FROM account_data.systems s LEFT JOIN account_data.inverters i ON i.account_id=s.account_id AND i.system_id=s.id \
                          LEFT JOIN account_data.pv_strings p ON p.account_id=i.account_id AND p.inverter_id=i.id \
                          WHERE s.account_id=$1 AND s.id=$2 GROUP BY s.id,s.name,s.timezone,s.lifecycle,s.status_interval_seconds",
-                    ).bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_optional(&mut connection).await.map_err(|_| ReportingApiError::Unavailable)?;
+                    ).bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_optional(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     connection
                         .close()
                         .await
@@ -142,13 +140,13 @@ impl ReportingApiUseCases for StorageReportingApi {
             DatabaseTarget::Postgres { url } => {
                 #[cfg(feature = "postgres")]
                 {
-                    let mut connection = PgConnection::connect(url)
+                    let mut connection = pvlog_storage::postgres_connection(url)
                         .await
                         .map_err(|_| ReportingApiError::Unavailable)?;
                     let lifetime = sqlx::query("SELECT generation_energy_wh,consumption_energy_wh,peak_generation_power_watts,first_observation_at,last_observation_at,coverage_basis_points::BIGINT AS coverage_basis_points FROM telemetry.lifetime_summaries WHERE account_id=$1 AND system_id=$2")
-                        .bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_optional(&mut connection).await.map_err(|_| ReportingApiError::Unavailable)?;
+                        .bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_optional(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     let rows = sqlx::query("SELECT bucket_start,generation_energy_sum_wh,consumption_energy_sum_wh,coverage_basis_points::BIGINT AS coverage_basis_points FROM telemetry.rollups r WHERE account_id=$1 AND system_id=$2 AND scope_kind='system' AND resolution='month' AND generation=(SELECT MAX(latest.generation) FROM telemetry.rollups latest WHERE latest.account_id=r.account_id AND latest.system_id=r.system_id AND latest.scope_kind=r.scope_kind AND latest.scope_id=r.scope_id AND latest.resolution=r.resolution AND latest.bucket_start=r.bucket_start) ORDER BY bucket_start")
-                        .bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_all(&mut connection).await.map_err(|_| ReportingApiError::Unavailable)?;
+                        .bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_all(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     connection
                         .close()
                         .await
@@ -233,11 +231,11 @@ impl ReportingApiUseCases for StorageReportingApi {
             DatabaseTarget::Postgres { url } => {
                 #[cfg(feature = "postgres")]
                 {
-                    let mut connection = PgConnection::connect(url)
+                    let mut connection = pvlog_storage::postgres_connection(url)
                         .await
                         .map_err(|_| ReportingApiError::Unavailable)?;
                     let run = sqlx::query("SELECT id,issued_at,attribution FROM account_data.weather_data_runs WHERE account_id=$1 AND system_id=$2 AND data_kind='forecast' ORDER BY issued_at DESC,fetched_at DESC LIMIT 1")
-                        .bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_optional(&mut connection).await.map_err(|_| ReportingApiError::Unavailable)?;
+                        .bind(account_id.as_uuid()).bind(system_id.as_uuid()).fetch_optional(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     let Some(run) = run else {
                         connection
                             .close()
@@ -247,7 +245,7 @@ impl ReportingApiUseCases for StorageReportingApi {
                     };
                     let run_id: uuid::Uuid = run.get("id");
                     let points = sqlx::query("SELECT w.interval_start,w.interval_end,COALESCE(w.plane_of_array_wm2,w.global_horizontal_wm2)::BIGINT AS irradiance,w.ambient_temperature_millicelsius::BIGINT AS ambient_temperature_millicelsius,w.wind_speed_millimetres_per_second::BIGINT AS wind_speed_millimetres_per_second,w.cloud_cover_basis_points::BIGINT AS cloud_cover_basis_points,(SELECT r.energy_central_wh FROM account_data.yield_result_projections y JOIN account_data.yield_calculation_results r ON r.account_id=y.account_id AND r.id=y.result_id WHERE y.account_id=$1 AND y.system_id=$2 AND y.basis='forecast' AND y.scope_kind='system' AND y.scope_id=$2 AND y.interval_start=w.interval_start LIMIT 1) AS predicted_energy_wh FROM account_data.weather_data_points w WHERE w.account_id=$1 AND w.run_id=$3 ORDER BY w.interval_start")
-                        .bind(account_id.as_uuid()).bind(system_id.as_uuid()).bind(run_id).fetch_all(&mut connection).await.map_err(|_| ReportingApiError::Unavailable)?;
+                        .bind(account_id.as_uuid()).bind(system_id.as_uuid()).bind(run_id).fetch_all(&mut *connection).await.map_err(|_| ReportingApiError::Unavailable)?;
                     connection
                         .close()
                         .await

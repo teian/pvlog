@@ -196,8 +196,8 @@ impl PostgresTelemetryRepository {
     pub fn new(url: String, account_id: AccountId) -> Self {
         Self { url, account_id }
     }
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -454,8 +454,8 @@ impl TelemetryRepository for PostgresTelemetryRepository {
     ) -> Result<LatestCounters, TelemetryRepositoryError> {
         let mut c = self.connection().await?;
         let source = data_source_id.map(|id| id.as_uuid());
-        let generation = sqlx::query("SELECT measured_at,generation_lifetime_wh AS counter FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at<$3 AND generation_lifetime_wh IS NOT NULL AND (($4::uuid IS NOT NULL AND data_source_id=$4) OR ($4::uuid IS NULL AND data_source_id IS NULL AND source_identity=$5)) ORDER BY measured_at DESC LIMIT 1").bind(self.account_id.as_uuid()).bind(system_id.as_uuid()).bind(before).bind(source).bind(source_identity).fetch_optional(&mut c).await?;
-        let consumption = sqlx::query("SELECT measured_at,consumption_lifetime_wh AS counter FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at<$3 AND consumption_lifetime_wh IS NOT NULL AND (($4::uuid IS NOT NULL AND data_source_id=$4) OR ($4::uuid IS NULL AND data_source_id IS NULL AND source_identity=$5)) ORDER BY measured_at DESC LIMIT 1").bind(self.account_id.as_uuid()).bind(system_id.as_uuid()).bind(before).bind(source).bind(source_identity).fetch_optional(&mut c).await?;
+        let generation = sqlx::query("SELECT measured_at,generation_lifetime_wh AS counter FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at<$3 AND generation_lifetime_wh IS NOT NULL AND (($4::uuid IS NOT NULL AND data_source_id=$4) OR ($4::uuid IS NULL AND data_source_id IS NULL AND source_identity=$5)) ORDER BY measured_at DESC LIMIT 1").bind(self.account_id.as_uuid()).bind(system_id.as_uuid()).bind(before).bind(source).bind(source_identity).fetch_optional(&mut *c).await?;
+        let consumption = sqlx::query("SELECT measured_at,consumption_lifetime_wh AS counter FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at<$3 AND consumption_lifetime_wh IS NOT NULL AND (($4::uuid IS NOT NULL AND data_source_id=$4) OR ($4::uuid IS NULL AND data_source_id IS NULL AND source_identity=$5)) ORDER BY measured_at DESC LIMIT 1").bind(self.account_id.as_uuid()).bind(system_id.as_uuid()).bind(before).bind(source).bind(source_identity).fetch_optional(&mut *c).await?;
         Ok(LatestCounters {
             generation: generation.map(|r| (r.get("measured_at"), r.get("counter"))),
             consumption: consumption.map(|r| (r.get("measured_at"), r.get("counter"))),
@@ -469,7 +469,7 @@ impl TelemetryRepository for PostgresTelemetryRepository {
     ) -> Result<Vec<StoredObservation>, TelemetryRepositoryError> {
         validate_range(start, end)?;
         let mut c = self.connection().await?;
-        let rows=sqlx::query("SELECT observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version,data_source_id,generation_lifetime_wh,consumption_lifetime_wh,grid_import_power_watts,grid_import_energy_wh,grid_export_power_watts,grid_export_energy_wh,net_grid_power_watts,battery_power_watts,battery_energy_wh,battery_state_basis_points,temperature_millidegrees_c,voltage_millivolts,message FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at>=$3 AND measured_at<$4 ORDER BY measured_at,observation_id").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
+        let rows=sqlx::query("SELECT observation_id,system_id,measured_at,received_at,source_kind,source_identity,idempotency_identity,quality_flags,generation_power_watts,generation_energy_wh,consumption_power_watts,consumption_energy_wh,provenance,canonical_hash,version,data_source_id,generation_lifetime_wh,consumption_lifetime_wh,grid_import_power_watts,grid_import_energy_wh,grid_export_power_watts,grid_export_energy_wh,net_grid_power_watts,battery_power_watts,battery_energy_wh,battery_state_basis_points,temperature_millidegrees_c,voltage_millivolts,message FROM telemetry.hot_observations WHERE account_id=$1 AND system_id=$2 AND measured_at>=$3 AND measured_at<$4 ORDER BY measured_at,observation_id").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut *c).await?;
         c.close().await?;
         rows.iter().map(pg_observation).collect()
     }
@@ -484,13 +484,13 @@ impl TelemetryRepository for PostgresTelemetryRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(r.created_at)
-        .execute(&mut c)
+        .execute(&mut *c)
         .await?;
         if let Some(existing) = pg_idempotency(&mut c, self.account_id, r).await? {
             c.close().await?;
             return idempotency_outcome(existing, r);
         }
-        let result=sqlx::query("INSERT INTO telemetry.idempotency_records (account_id,id,principal_type,principal_id,operation,idempotency_key,request_hash,response_status,response,created_at,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING").bind(self.account_id.as_uuid()).bind(r.id).bind(&r.principal_type).bind(r.principal_id).bind(&r.operation).bind(&r.key).bind(r.request_hash.as_slice()).bind(r.response_status).bind(&r.response).bind(r.created_at).bind(r.expires_at).execute(&mut c).await?;
+        let result=sqlx::query("INSERT INTO telemetry.idempotency_records (account_id,id,principal_type,principal_id,operation,idempotency_key,request_hash,response_status,response,created_at,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT DO NOTHING").bind(self.account_id.as_uuid()).bind(r.id).bind(&r.principal_type).bind(r.principal_id).bind(&r.operation).bind(&r.key).bind(r.request_hash.as_slice()).bind(r.response_status).bind(&r.response).bind(r.created_at).bind(r.expires_at).execute(&mut *c).await?;
         if result.rows_affected() == 1 {
             c.close().await?;
             return Ok(IdempotencyOutcome::Stored);
@@ -507,7 +507,7 @@ impl TelemetryRepository for PostgresTelemetryRepository {
     ) -> Result<(), TelemetryRepositoryError> {
         validate_correction(r)?;
         let mut c = self.connection().await?;
-        let result=sqlx::query("INSERT INTO telemetry.correction_overlays (account_id,id,system_id,observation_id,measured_at,operation,expected_version,replacement,reason,actor_id,request_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.system_id.as_uuid()).bind(r.observation_id.as_uuid()).bind(r.measured_at).bind(&r.operation).bind(r.expected_version).bind(&r.replacement).bind(&r.reason).bind(r.actor_id).bind(r.request_id).bind(r.created_at).execute(&mut c).await?;
+        let result=sqlx::query("INSERT INTO telemetry.correction_overlays (account_id,id,system_id,observation_id,measured_at,operation,expected_version,replacement,reason,actor_id,request_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT DO NOTHING").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.system_id.as_uuid()).bind(r.observation_id.as_uuid()).bind(r.measured_at).bind(&r.operation).bind(r.expected_version).bind(&r.replacement).bind(&r.reason).bind(r.actor_id).bind(r.request_id).bind(r.created_at).execute(&mut *c).await?;
         c.close().await?;
         if result.rows_affected() == 0 {
             return Err(TelemetryRepositoryError::OptimisticConflict);
@@ -522,7 +522,7 @@ impl TelemetryRepository for PostgresTelemetryRepository {
     ) -> Result<Vec<CorrectionRecord>, TelemetryRepositoryError> {
         validate_range(start, end)?;
         let mut c = self.connection().await?;
-        let rows=sqlx::query("SELECT id,system_id,observation_id,measured_at,operation,expected_version,replacement,reason,actor_id,request_id,created_at FROM telemetry.correction_overlays WHERE account_id=$1 AND system_id=$2 AND measured_at>=$3 AND measured_at<$4 ORDER BY measured_at,id").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
+        let rows=sqlx::query("SELECT id,system_id,observation_id,measured_at,operation,expected_version,replacement,reason,actor_id,request_id,created_at FROM telemetry.correction_overlays WHERE account_id=$1 AND system_id=$2 AND measured_at>=$3 AND measured_at<$4 ORDER BY measured_at,id").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut *c).await?;
         c.close().await?;
         rows.iter().map(pg_correction).collect()
     }

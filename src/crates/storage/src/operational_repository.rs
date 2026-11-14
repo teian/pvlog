@@ -8,9 +8,7 @@ use std::path::PathBuf;
 use async_trait::async_trait;
 use pvlog_domain::{AccountId, AlertRuleId, JobId, ProviderId, SystemId, WebhookSubscriptionId};
 use serde_json::Value;
-#[cfg(feature = "postgres")]
-use sqlx::PgConnection;
-use sqlx::{Connection as _, Row as _};
+use sqlx::Row as _;
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -247,8 +245,8 @@ impl PostgresOperationalRepository {
     pub fn new(url: String, account_id: AccountId) -> Self {
         Self { url, account_id }
     }
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 #[cfg(feature = "postgres")]
@@ -514,7 +512,7 @@ impl OperationalRepository for PostgresOperationalRepository {
     async fn save_rollup(&self, r: &RollupRecord) -> Result<(), OperationalRepositoryError> {
         validate_period(r.bucket_start, r.bucket_end)?;
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO telemetry.rollups (account_id,system_id,scope_kind,scope_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) ON CONFLICT(account_id,system_id,scope_kind,scope_id,resolution,bucket_start,generation) DO UPDATE SET bucket_end=excluded.bucket_end,point_count=excluded.point_count,expected_count=excluded.expected_count,generation_energy_sum_wh=excluded.generation_energy_sum_wh,consumption_energy_sum_wh=excluded.consumption_energy_sum_wh,generation_power_min_watts=excluded.generation_power_min_watts,generation_power_max_watts=excluded.generation_power_max_watts,generation_power_first_watts=excluded.generation_power_first_watts,generation_power_last_watts=excluded.generation_power_last_watts,quality_flags=excluded.quality_flags,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(self.account_id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.scope_kind).bind(r.scope_id).bind(&r.resolution).bind(r.bucket_start).bind(r.bucket_end).bind(&r.timezone).bind(r.generation).bind(r.point_count).bind(r.expected_count).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.generation_power_min_watts).bind(r.generation_power_max_watts).bind(r.generation_power_first_watts).bind(r.generation_power_last_watts).bind(r.quality_flags).bind(r.coverage_basis_points).bind(r.calculated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO telemetry.rollups (account_id,system_id,scope_kind,scope_id,resolution,bucket_start,bucket_end,timezone,generation,source_generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,1,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20) ON CONFLICT(account_id,system_id,scope_kind,scope_id,resolution,bucket_start,generation) DO UPDATE SET bucket_end=excluded.bucket_end,point_count=excluded.point_count,expected_count=excluded.expected_count,generation_energy_sum_wh=excluded.generation_energy_sum_wh,consumption_energy_sum_wh=excluded.consumption_energy_sum_wh,generation_power_min_watts=excluded.generation_power_min_watts,generation_power_max_watts=excluded.generation_power_max_watts,generation_power_first_watts=excluded.generation_power_first_watts,generation_power_last_watts=excluded.generation_power_last_watts,quality_flags=excluded.quality_flags,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(self.account_id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.scope_kind).bind(r.scope_id).bind(&r.resolution).bind(r.bucket_start).bind(r.bucket_end).bind(&r.timezone).bind(r.generation).bind(r.point_count).bind(r.expected_count).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.generation_power_min_watts).bind(r.generation_power_max_watts).bind(r.generation_power_first_watts).bind(r.generation_power_last_watts).bind(r.quality_flags).bind(r.coverage_basis_points).bind(r.calculated_at).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
@@ -526,7 +524,7 @@ impl OperationalRepository for PostgresOperationalRepository {
     ) -> Result<Vec<RollupRecord>, OperationalRepositoryError> {
         validate_period(start, end)?;
         let mut c = self.connection().await?;
-        let rows=sqlx::query("SELECT system_id,scope_kind,scope_id,resolution,bucket_start,bucket_end,timezone,generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at FROM telemetry.rollups WHERE account_id=$1 AND system_id=$2 AND bucket_start>=$3 AND bucket_start<$4 ORDER BY bucket_start,resolution,generation").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut c).await?;
+        let rows=sqlx::query("SELECT system_id,scope_kind,scope_id,resolution,bucket_start,bucket_end,timezone,generation,point_count,expected_count,generation_energy_sum_wh,consumption_energy_sum_wh,generation_power_min_watts,generation_power_max_watts,generation_power_first_watts,generation_power_last_watts,quality_flags,coverage_basis_points,calculated_at FROM telemetry.rollups WHERE account_id=$1 AND system_id=$2 AND bucket_start>=$3 AND bucket_start<$4 ORDER BY bucket_start,resolution,generation").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(start).bind(end).fetch_all(&mut *c).await?;
         c.close().await?;
         rows.iter().map(pg_rollup).collect()
     }
@@ -535,7 +533,7 @@ impl OperationalRepository for PostgresOperationalRepository {
         r: &DailySummaryRecord,
     ) -> Result<(), OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO telemetry.daily_summaries (account_id,system_id,local_date,timezone,generation,generation_energy_wh,consumption_energy_wh,coverage_basis_points,quality_flags,calculated_at) VALUES ($1,$2,$3::date,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(account_id,system_id,local_date,generation) DO UPDATE SET generation_energy_wh=excluded.generation_energy_wh,consumption_energy_wh=excluded.consumption_energy_wh,coverage_basis_points=excluded.coverage_basis_points,quality_flags=excluded.quality_flags,calculated_at=excluded.calculated_at").bind(self.account_id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.local_date).bind(&r.timezone).bind(r.generation).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.coverage_basis_points).bind(r.quality_flags).bind(r.calculated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO telemetry.daily_summaries (account_id,system_id,local_date,timezone,generation,generation_energy_wh,consumption_energy_wh,coverage_basis_points,quality_flags,calculated_at) VALUES ($1,$2,$3::date,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(account_id,system_id,local_date,generation) DO UPDATE SET generation_energy_wh=excluded.generation_energy_wh,consumption_energy_wh=excluded.consumption_energy_wh,coverage_basis_points=excluded.coverage_basis_points,quality_flags=excluded.quality_flags,calculated_at=excluded.calculated_at").bind(self.account_id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.local_date).bind(&r.timezone).bind(r.generation).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.coverage_basis_points).bind(r.quality_flags).bind(r.calculated_at).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
@@ -545,7 +543,7 @@ impl OperationalRepository for PostgresOperationalRepository {
         date: &str,
     ) -> Result<Option<DailySummaryRecord>, OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        let row=sqlx::query("SELECT system_id,local_date::text AS local_date,timezone,generation,generation_energy_wh,consumption_energy_wh,coverage_basis_points,quality_flags,calculated_at FROM telemetry.daily_summaries WHERE account_id=$1 AND system_id=$2 AND local_date=$3::date ORDER BY generation DESC LIMIT 1").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(date).fetch_optional(&mut c).await?;
+        let row=sqlx::query("SELECT system_id,local_date::text AS local_date,timezone,generation,generation_energy_wh,consumption_energy_wh,coverage_basis_points,quality_flags,calculated_at FROM telemetry.daily_summaries WHERE account_id=$1 AND system_id=$2 AND local_date=$3::date ORDER BY generation DESC LIMIT 1").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(date).fetch_optional(&mut *c).await?;
         c.close().await?;
         row.map(|r| pg_daily(&r)).transpose()
     }
@@ -554,7 +552,7 @@ impl OperationalRepository for PostgresOperationalRepository {
         r: &LifetimeSummaryRecord,
     ) -> Result<(), OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO telemetry.lifetime_summaries (account_id,system_id,generation,first_observation_at,last_observation_at,generation_energy_wh,consumption_energy_wh,coverage_basis_points,calculated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(account_id,system_id) DO UPDATE SET generation=excluded.generation,first_observation_at=excluded.first_observation_at,last_observation_at=excluded.last_observation_at,generation_energy_wh=excluded.generation_energy_wh,consumption_energy_wh=excluded.consumption_energy_wh,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(self.account_id.as_uuid()).bind(r.system_id.as_uuid()).bind(r.generation).bind(r.first_observation_at).bind(r.last_observation_at).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.coverage_basis_points).bind(r.calculated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO telemetry.lifetime_summaries (account_id,system_id,generation,first_observation_at,last_observation_at,generation_energy_wh,consumption_energy_wh,coverage_basis_points,calculated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(account_id,system_id) DO UPDATE SET generation=excluded.generation,first_observation_at=excluded.first_observation_at,last_observation_at=excluded.last_observation_at,generation_energy_wh=excluded.generation_energy_wh,consumption_energy_wh=excluded.consumption_energy_wh,coverage_basis_points=excluded.coverage_basis_points,calculated_at=excluded.calculated_at").bind(self.account_id.as_uuid()).bind(r.system_id.as_uuid()).bind(r.generation).bind(r.first_observation_at).bind(r.last_observation_at).bind(r.generation_energy_wh).bind(r.consumption_energy_wh).bind(r.coverage_basis_points).bind(r.calculated_at).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
@@ -563,13 +561,13 @@ impl OperationalRepository for PostgresOperationalRepository {
         s: SystemId,
     ) -> Result<Option<LifetimeSummaryRecord>, OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        let row=sqlx::query("SELECT system_id,generation,first_observation_at,last_observation_at,generation_energy_wh,consumption_energy_wh,coverage_basis_points,calculated_at FROM telemetry.lifetime_summaries WHERE account_id=$1 AND system_id=$2").bind(self.account_id.as_uuid()).bind(s.as_uuid()).fetch_optional(&mut c).await?;
+        let row=sqlx::query("SELECT system_id,generation,first_observation_at,last_observation_at,generation_energy_wh,consumption_energy_wh,coverage_basis_points,calculated_at FROM telemetry.lifetime_summaries WHERE account_id=$1 AND system_id=$2").bind(self.account_id.as_uuid()).bind(s.as_uuid()).fetch_optional(&mut *c).await?;
         c.close().await?;
         row.map(|r| pg_lifetime(&r)).transpose()
     }
     async fn save_alert(&self, r: &AlertRuleRecord) -> Result<(), OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO account_data.alert_rules (account_id,id,system_id,name,alert_kind,enabled,condition,schedule,debounce_seconds,cooldown_seconds,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,alert_kind=excluded.alert_kind,enabled=excluded.enabled,condition=excluded.condition,schedule=excluded.schedule,debounce_seconds=excluded.debounce_seconds,cooldown_seconds=excluded.cooldown_seconds,updated_at=excluded.updated_at,version=account_data.alert_rules.version+1").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.name).bind(&r.alert_kind).bind(r.enabled).bind(&r.condition).bind(&r.schedule).bind(r.debounce_seconds).bind(r.cooldown_seconds).bind(r.created_at).bind(r.updated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO account_data.alert_rules (account_id,id,system_id,name,alert_kind,enabled,condition,schedule,debounce_seconds,cooldown_seconds,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,alert_kind=excluded.alert_kind,enabled=excluded.enabled,condition=excluded.condition,schedule=excluded.schedule,debounce_seconds=excluded.debounce_seconds,cooldown_seconds=excluded.cooldown_seconds,updated_at=excluded.updated_at,version=account_data.alert_rules.version+1").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.name).bind(&r.alert_kind).bind(r.enabled).bind(&r.condition).bind(&r.schedule).bind(r.debounce_seconds).bind(r.cooldown_seconds).bind(r.created_at).bind(r.updated_at).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
@@ -578,14 +576,14 @@ impl OperationalRepository for PostgresOperationalRepository {
         id: AlertRuleId,
     ) -> Result<Option<AlertRuleRecord>, OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        let row=sqlx::query("SELECT id,system_id,name,alert_kind,enabled,condition,schedule,debounce_seconds,cooldown_seconds,created_at,updated_at FROM account_data.alert_rules WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut c).await?;
+        let row=sqlx::query("SELECT id,system_id,name,alert_kind,enabled,condition,schedule,debounce_seconds,cooldown_seconds,created_at,updated_at FROM account_data.alert_rules WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut *c).await?;
         c.close().await?;
         row.map(|r| pg_alert(&r)).transpose()
     }
     async fn alerts(&self) -> Result<Vec<AlertRuleRecord>, OperationalRepositoryError> {
         let mut c = self.connection().await?;
         let rows = sqlx::query("SELECT id,system_id,name,alert_kind,enabled,condition,schedule,debounce_seconds,cooldown_seconds,created_at,updated_at FROM account_data.alert_rules WHERE account_id=$1 ORDER BY name,id")
-            .bind(self.account_id.as_uuid()).fetch_all(&mut c).await?;
+            .bind(self.account_id.as_uuid()).fetch_all(&mut *c).await?;
         c.close().await?;
         rows.iter().map(pg_alert).collect()
     }
@@ -595,7 +593,7 @@ impl OperationalRepository for PostgresOperationalRepository {
             sqlx::query("DELETE FROM account_data.alert_rules WHERE account_id=$1 AND id=$2")
                 .bind(self.account_id.as_uuid())
                 .bind(id.as_uuid())
-                .execute(&mut c)
+                .execute(&mut *c)
                 .await?;
         c.close().await?;
         Ok(result.rows_affected() == 1)
@@ -605,7 +603,7 @@ impl OperationalRepository for PostgresOperationalRepository {
         r: &WebhookSubscriptionRecord,
     ) -> Result<(), OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO integrations.webhook_subscriptions (account_id,id,name,endpoint_url,state,event_types,encryption_key_id,encrypted_signing_secret,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,endpoint_url=excluded.endpoint_url,state=excluded.state,event_types=excluded.event_types,encryption_key_id=excluded.encryption_key_id,encrypted_signing_secret=excluded.encrypted_signing_secret,updated_at=excluded.updated_at").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(&r.name).bind(&r.endpoint_url).bind(&r.state).bind(&r.event_types).bind(&r.encryption_key_id).bind(&r.encrypted_signing_secret).bind(r.created_at).bind(r.updated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO integrations.webhook_subscriptions (account_id,id,name,endpoint_url,state,event_types,encryption_key_id,encrypted_signing_secret,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,endpoint_url=excluded.endpoint_url,state=excluded.state,event_types=excluded.event_types,encryption_key_id=excluded.encryption_key_id,encrypted_signing_secret=excluded.encrypted_signing_secret,updated_at=excluded.updated_at").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(&r.name).bind(&r.endpoint_url).bind(&r.state).bind(&r.event_types).bind(&r.encryption_key_id).bind(&r.encrypted_signing_secret).bind(r.created_at).bind(r.updated_at).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
@@ -614,14 +612,14 @@ impl OperationalRepository for PostgresOperationalRepository {
         id: WebhookSubscriptionId,
     ) -> Result<Option<WebhookSubscriptionRecord>, OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        let row=sqlx::query("SELECT id,name,endpoint_url,state,event_types,encryption_key_id,encrypted_signing_secret,created_at,updated_at FROM integrations.webhook_subscriptions WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut c).await?;
+        let row=sqlx::query("SELECT id,name,endpoint_url,state,event_types,encryption_key_id,encrypted_signing_secret,created_at,updated_at FROM integrations.webhook_subscriptions WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut *c).await?;
         c.close().await?;
         row.map(|r| pg_webhook(&r)).transpose()
     }
     async fn webhooks(&self) -> Result<Vec<WebhookSubscriptionRecord>, OperationalRepositoryError> {
         let mut c = self.connection().await?;
         let rows = sqlx::query("SELECT id,name,endpoint_url,state,event_types,encryption_key_id,encrypted_signing_secret,created_at,updated_at FROM integrations.webhook_subscriptions WHERE account_id=$1 AND state<>'deleted' ORDER BY name,id")
-            .bind(self.account_id.as_uuid()).fetch_all(&mut c).await?;
+            .bind(self.account_id.as_uuid()).fetch_all(&mut *c).await?;
         c.close().await?;
         rows.iter().map(pg_webhook).collect()
     }
@@ -631,13 +629,13 @@ impl OperationalRepository for PostgresOperationalRepository {
     ) -> Result<bool, OperationalRepositoryError> {
         let mut c = self.connection().await?;
         let result = sqlx::query("UPDATE integrations.webhook_subscriptions SET state='deleted',updated_at=updated_at+1 WHERE account_id=$1 AND id=$2 AND state<>'deleted'")
-            .bind(self.account_id.as_uuid()).bind(id.as_uuid()).execute(&mut c).await?;
+            .bind(self.account_id.as_uuid()).bind(id.as_uuid()).execute(&mut *c).await?;
         c.close().await?;
         Ok(result.rows_affected() == 1)
     }
     async fn save_provider(&self, r: &ProviderRecord) -> Result<(), OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO integrations.providers (account_id,id,provider_kind,name,enabled,endpoint_url,credential_secret_ref,configuration,license_metadata,circuit_state,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,enabled=excluded.enabled,endpoint_url=excluded.endpoint_url,credential_secret_ref=excluded.credential_secret_ref,configuration=excluded.configuration,license_metadata=excluded.license_metadata,circuit_state=excluded.circuit_state,updated_at=excluded.updated_at").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(&r.provider_kind).bind(&r.name).bind(r.enabled).bind(&r.endpoint_url).bind(&r.credential_secret_ref).bind(&r.configuration).bind(&r.license_metadata).bind(&r.circuit_state).bind(r.created_at).bind(r.updated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO integrations.providers (account_id,id,provider_kind,name,enabled,endpoint_url,credential_secret_ref,configuration,license_metadata,circuit_state,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,enabled=excluded.enabled,endpoint_url=excluded.endpoint_url,credential_secret_ref=excluded.credential_secret_ref,configuration=excluded.configuration,license_metadata=excluded.license_metadata,circuit_state=excluded.circuit_state,updated_at=excluded.updated_at").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(&r.provider_kind).bind(&r.name).bind(r.enabled).bind(&r.endpoint_url).bind(&r.credential_secret_ref).bind(&r.configuration).bind(&r.license_metadata).bind(&r.circuit_state).bind(r.created_at).bind(r.updated_at).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
@@ -646,19 +644,19 @@ impl OperationalRepository for PostgresOperationalRepository {
         id: ProviderId,
     ) -> Result<Option<ProviderRecord>, OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        let row=sqlx::query("SELECT id,provider_kind,name,enabled,endpoint_url,credential_secret_ref,configuration,license_metadata,circuit_state,created_at,updated_at FROM integrations.providers WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut c).await?;
+        let row=sqlx::query("SELECT id,provider_kind,name,enabled,endpoint_url,credential_secret_ref,configuration,license_metadata,circuit_state,created_at,updated_at FROM integrations.providers WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut *c).await?;
         c.close().await?;
         row.map(|r| pg_provider(&r)).transpose()
     }
     async fn save_job(&self, r: &JobRecord) -> Result<(), OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO jobs.account_jobs (account_id,id,job_kind,state,payload,idempotency_key,priority,attempt_count,max_attempts,available_at,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(account_id,id) DO UPDATE SET state=excluded.state,payload=excluded.payload,priority=excluded.priority,attempt_count=excluded.attempt_count,max_attempts=excluded.max_attempts,available_at=excluded.available_at,updated_at=excluded.updated_at").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(&r.job_kind).bind(&r.state).bind(&r.payload).bind(&r.idempotency_key).bind(r.priority).bind(r.attempt_count).bind(r.max_attempts).bind(r.available_at).bind(r.created_at).bind(r.updated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO jobs.account_jobs (account_id,id,job_kind,state,payload,idempotency_key,priority,attempt_count,max_attempts,available_at,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(account_id,id) DO UPDATE SET state=excluded.state,payload=excluded.payload,priority=excluded.priority,attempt_count=excluded.attempt_count,max_attempts=excluded.max_attempts,available_at=excluded.available_at,updated_at=excluded.updated_at").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(&r.job_kind).bind(&r.state).bind(&r.payload).bind(&r.idempotency_key).bind(r.priority).bind(r.attempt_count).bind(r.max_attempts).bind(r.available_at).bind(r.created_at).bind(r.updated_at).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
     async fn job(&self, id: JobId) -> Result<Option<JobRecord>, OperationalRepositoryError> {
         let mut c = self.connection().await?;
-        let row=sqlx::query("SELECT id,job_kind,state,payload,idempotency_key,priority,attempt_count,max_attempts,available_at,created_at,updated_at FROM jobs.account_jobs WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut c).await?;
+        let row=sqlx::query("SELECT id,job_kind,state,payload,idempotency_key,priority,attempt_count,max_attempts,available_at,created_at,updated_at FROM jobs.account_jobs WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut *c).await?;
         c.close().await?;
         row.map(|r| pg_job(&r)).transpose()
     }
@@ -671,7 +669,7 @@ impl OperationalRepository for PostgresOperationalRepository {
         validate_lease(owner, now, lease_expires_at)?;
         let mut c = self.connection().await?;
         let row = sqlx::query("WITH candidate AS (SELECT id FROM jobs.account_jobs WHERE account_id=$1 AND available_at<=$2 AND (state IN ('pending','retry_wait') OR (state='leased' AND lease_expires_at<=$2)) ORDER BY priority DESC,available_at,id FOR UPDATE SKIP LOCKED LIMIT 1) UPDATE jobs.account_jobs j SET state='leased',lease_owner=$3,lease_expires_at=$4,last_heartbeat_at=$2,attempt_count=j.attempt_count+1,updated_at=$2 FROM candidate WHERE j.account_id=$1 AND j.id=candidate.id RETURNING j.id,j.job_kind,j.state,j.payload,j.idempotency_key,j.priority,j.attempt_count,j.max_attempts,j.available_at,j.created_at,j.updated_at")
-            .bind(self.account_id.as_uuid()).bind(now).bind(owner).bind(lease_expires_at).fetch_optional(&mut c).await?;
+            .bind(self.account_id.as_uuid()).bind(now).bind(owner).bind(lease_expires_at).fetch_optional(&mut *c).await?;
         c.close().await?;
         row.map(|row| {
             pg_job(&row).map(|job| JobLease {
@@ -692,7 +690,7 @@ impl OperationalRepository for PostgresOperationalRepository {
         validate_lease(owner, now, lease_expires_at)?;
         let mut c = self.connection().await?;
         let result = sqlx::query("UPDATE jobs.account_jobs SET lease_expires_at=$1,last_heartbeat_at=$2,updated_at=$2 WHERE account_id=$3 AND id=$4 AND state='leased' AND lease_owner=$5 AND lease_expires_at>$2")
-            .bind(lease_expires_at).bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).bind(owner).execute(&mut c).await?;
+            .bind(lease_expires_at).bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).bind(owner).execute(&mut *c).await?;
         c.close().await?;
         Ok(result.rows_affected() == 1)
     }
@@ -704,7 +702,7 @@ impl OperationalRepository for PostgresOperationalRepository {
     ) -> Result<bool, OperationalRepositoryError> {
         let mut c = self.connection().await?;
         let result = sqlx::query("UPDATE jobs.account_jobs SET state='completed',lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,completed_at=$1,updated_at=$1 WHERE account_id=$2 AND id=$3 AND ((state='leased' AND lease_owner=$4) OR state='completed')")
-            .bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).bind(owner).execute(&mut c).await?;
+            .bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).bind(owner).execute(&mut *c).await?;
         c.close().await?;
         Ok(result.rows_affected() == 1)
     }
@@ -728,7 +726,7 @@ impl OperationalRepository for PostgresOperationalRepository {
         };
         let mut c = self.connection().await?;
         let result = sqlx::query("UPDATE jobs.account_jobs SET state=$1,available_at=$2,lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,safe_error_code=$3,updated_at=$4 WHERE account_id=$5 AND id=$6 AND state='leased' AND lease_owner=$7")
-            .bind(state).bind(available_at).bind(safe_error_code).bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).bind(owner).execute(&mut c).await?;
+            .bind(state).bind(available_at).bind(safe_error_code).bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).bind(owner).execute(&mut *c).await?;
         c.close().await?;
         if result.rows_affected() == 1 {
             Ok(disposition)
@@ -742,21 +740,21 @@ impl OperationalRepository for PostgresOperationalRepository {
     ) -> Result<Vec<JobRecord>, OperationalRepositoryError> {
         let mut c = self.connection().await?;
         let rows = sqlx::query("SELECT id,job_kind,state,payload,idempotency_key,priority,attempt_count,max_attempts,available_at,created_at,updated_at FROM jobs.account_jobs WHERE account_id=$1 AND state='dead_letter' ORDER BY updated_at DESC,id LIMIT $2")
-            .bind(self.account_id.as_uuid()).bind(i64::from(limit.min(1_000))).fetch_all(&mut c).await?;
+            .bind(self.account_id.as_uuid()).bind(i64::from(limit.min(1_000))).fetch_all(&mut *c).await?;
         c.close().await?;
         rows.iter().map(pg_job).collect()
     }
     async fn cancel_job(&self, id: JobId, now: i64) -> Result<bool, OperationalRepositoryError> {
         let mut c = self.connection().await?;
         let result = sqlx::query("UPDATE jobs.account_jobs SET state='cancelled',lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,completed_at=$1,updated_at=$1 WHERE account_id=$2 AND id=$3 AND state NOT IN ('completed','cancelled')")
-            .bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).execute(&mut c).await?;
+            .bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).execute(&mut *c).await?;
         c.close().await?;
         Ok(result.rows_affected() == 1)
     }
     async fn requeue_job(&self, id: JobId, now: i64) -> Result<bool, OperationalRepositoryError> {
         let mut c = self.connection().await?;
         let result = sqlx::query("UPDATE jobs.account_jobs SET state='pending',attempt_count=0,available_at=$1,lease_owner=NULL,lease_expires_at=NULL,last_heartbeat_at=NULL,safe_error_code=NULL,safe_error_detail=NULL,completed_at=NULL,updated_at=$1 WHERE account_id=$2 AND id=$3 AND state IN ('dead_letter','failed','cancelled')")
-            .bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).execute(&mut c).await?;
+            .bind(now).bind(self.account_id.as_uuid()).bind(id.as_uuid()).execute(&mut *c).await?;
         c.close().await?;
         Ok(result.rows_affected() == 1)
     }

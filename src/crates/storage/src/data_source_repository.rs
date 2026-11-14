@@ -10,8 +10,6 @@ use std::fmt;
 use async_trait::async_trait;
 use pvlog_domain::{AccountId, ApiCredentialId, DataSourceId, SystemId};
 use sqlx::Row as _;
-#[cfg(feature = "postgres")]
-use sqlx::{Connection as _, PgConnection};
 use uuid::Uuid;
 
 use crate::AccountRepositoryError;
@@ -376,8 +374,8 @@ impl PostgresDataSourceRepository {
         Self { url, account_id }
     }
 
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -439,7 +437,7 @@ impl DataSourceRepository for PostgresDataSourceRepository {
         .bind(record.created_at)
         .bind(record.updated_at)
         .bind(record.deleted_at)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -456,7 +454,7 @@ impl DataSourceRepository for PostgresDataSourceRepository {
 )
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter().map(postgres_record).collect()
@@ -475,7 +473,7 @@ impl DataSourceRepository for PostgresDataSourceRepository {
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
         .bind(id.as_uuid())
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.as_ref().map(postgres_record).transpose()
@@ -492,7 +490,7 @@ impl DataSourceRepository for PostgresDataSourceRepository {
 )
         .bind(self.account_id.as_uuid())
         .bind(credential_id.as_uuid())
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.as_ref().map(postgres_record).transpose()
@@ -515,7 +513,7 @@ impl DataSourceRepository for PostgresDataSourceRepository {
         .bind(record.measured_at)
         .bind(record.received_at)
         .bind(sqlx::types::Json(&record.values))
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -533,7 +531,7 @@ impl DataSourceRepository for PostgresDataSourceRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| {
@@ -564,7 +562,7 @@ impl DataSourceRepository for PostgresDataSourceRepository {
             sqlx::query("DELETE FROM telemetry.test_readings WHERE account_id=$1 AND system_id=$2")
                 .bind(self.account_id.as_uuid())
                 .bind(system_id.as_uuid())
-                .execute(&mut connection)
+                .execute(&mut *connection)
                 .await?
                 .rows_affected();
         connection.close().await?;
@@ -588,7 +586,7 @@ impl DataSourceRepository for PostgresDataSourceRepository {
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
         .bind(recent_since)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter()

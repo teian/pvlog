@@ -9,8 +9,6 @@ use pvlog_domain::{
     InverterId, ModelVersion, StringId, SystemId, TimeRange, UtcTimestamp, WattHours, Watts,
     WeatherDataRunId, YieldCalculationResult, YieldCalculationRunId, YieldResultId, YieldScope,
 };
-#[cfg(feature = "postgres")]
-use sqlx::PgConnection;
 use sqlx::{Connection as _, Row as _};
 use thiserror::Error;
 use uuid::Uuid;
@@ -228,8 +226,8 @@ impl PostgresYieldResultRepository {
         Self { url, account_id }
     }
 
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -1307,7 +1305,7 @@ impl YieldResultRepository for PostgresYieldResultRepository {
         .bind(self.account_id.as_uuid())
         .bind(run.system_id.as_uuid())
         .bind(&run.idempotency_key)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         if let Some(existing) = existing {
             return if existing == run.id.as_uuid() {
@@ -1340,7 +1338,7 @@ impl YieldResultRepository for PostgresYieldResultRepository {
         .bind(run.retain_until)
         .bind(run.referenced_at)
         .bind(&run.idempotency_key)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         Ok(WeatherRunInsertOutcome::Inserted)
     }
@@ -1357,7 +1355,7 @@ impl YieldResultRepository for PostgresYieldResultRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(id.as_uuid())
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         row.map(|row| postgres_run(&row)).transpose()
     }
@@ -1380,7 +1378,7 @@ impl YieldResultRepository for PostgresYieldResultRepository {
         .bind(safe_error_code)
         .bind(self.account_id.as_uuid())
         .bind(id.as_uuid())
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?
         .rows_affected();
         Ok(changed == 1)
@@ -1457,7 +1455,7 @@ impl YieldResultRepository for PostgresYieldResultRepository {
         .bind(self.account_id.as_uuid())
         .bind(invalidation.system_id.as_uuid())
         .bind(&invalidation.idempotency_key)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         if let Some(existing) = existing {
             return if existing == invalidation.id {
@@ -1481,7 +1479,7 @@ impl YieldResultRepository for PostgresYieldResultRepository {
         .bind(invalidation.reason.as_str())
         .bind(&invalidation.idempotency_key)
         .bind(invalidation.created_at)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         Ok(WeatherRunInsertOutcome::Inserted)
     }
@@ -1504,7 +1502,7 @@ impl YieldResultRepository for PostgresYieldResultRepository {
         .bind(timestamp_i64(range.end)?)
         .bind(timestamp_i64(range.start)?)
         .bind(i64::from(limit))
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         rows.iter().map(postgres_invalidation).collect()
     }
@@ -1522,7 +1520,7 @@ impl YieldResultRepository for PostgresYieldResultRepository {
         .bind(completed_at)
         .bind(self.account_id.as_uuid())
         .bind(id)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?
         .rows_affected();
         Ok(changed == 1)
@@ -1546,7 +1544,7 @@ impl YieldResultRepository for PostgresYieldResultRepository {
         .bind(referenced_at)
         .bind(self.account_id.as_uuid())
         .bind(id.as_uuid())
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?
         .rows_affected();
         Ok(changed == 1)
@@ -1572,7 +1570,7 @@ impl YieldResultRepository for PostgresYieldResultRepository {
         .bind(self.account_id.as_uuid())
         .bind(now)
         .bind(i64::from(limit))
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?
         .rows_affected();
         Ok(changed)
@@ -1617,7 +1615,7 @@ impl PostgresYieldResultRepository {
             .bind(timestamp_i64(range.end)?)
             .bind(timestamp_i64(range.start)?)
             .bind(i64::from(limit))
-            .fetch_all(&mut connection)
+            .fetch_all(&mut *connection)
             .await?;
         rows.iter().map(postgres_result).collect()
     }

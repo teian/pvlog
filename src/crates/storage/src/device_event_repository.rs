@@ -8,9 +8,9 @@ use std::fmt;
 
 use async_trait::async_trait;
 use pvlog_domain::{AccountId, DataSourceId, SystemId};
-use sqlx::Row as _;
 #[cfg(feature = "postgres")]
-use sqlx::{Connection as _, PgConnection};
+use sqlx::Connection as _;
+use sqlx::Row as _;
 use uuid::Uuid;
 
 use crate::AccountRepositoryError;
@@ -294,8 +294,8 @@ impl PostgresDeviceEventRepository {
         Self { url, account_id }
     }
 
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -387,7 +387,7 @@ impl DeviceEventRepository for PostgresDeviceEventRepository {
         .bind(filter.from.unwrap_or(i64::MIN))
         .bind(filter.to.unwrap_or(i64::MAX))
         .bind(i64::from(filter.limit))
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter()
@@ -425,7 +425,7 @@ impl DeviceEventRepository for PostgresDeviceEventRepository {
         .bind(self.account_id.as_uuid())
         .bind(inverter_id)
         .bind(system_id.as_uuid())
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(row.map(|row| row.get("serial_reference")))

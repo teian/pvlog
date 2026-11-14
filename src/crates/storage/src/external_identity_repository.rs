@@ -10,11 +10,9 @@ use pvlog_application::{
     ExternalIdentityLinkingRepository, IdentityClaims, LinkedIdentityRecord, PortError,
 };
 use pvlog_domain::{ConnectorId, ExternalIdentityId, UserId};
-#[cfg(feature = "postgres")]
-use sqlx::PgConnection;
-use sqlx::{Connection as _, Row as _};
+use sqlx::Row as _;
 #[cfg(feature = "sqlite")]
-use sqlx::{SqliteConnection, sqlite::SqliteConnectOptions};
+use sqlx::{Connection as _, SqliteConnection, sqlite::SqliteConnectOptions};
 use uuid::Uuid;
 
 #[cfg(feature = "sqlite")]
@@ -49,8 +47,8 @@ impl PostgresExternalIdentityRepository {
     pub fn new(url: String) -> Self {
         Self { url }
     }
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -192,7 +190,7 @@ impl ExternalIdentityLinkingRepository for PostgresExternalIdentityRepository {
     async fn list_for_user(&self, user_id: UserId) -> Result<Vec<LinkedIdentityRecord>, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
         let rows = sqlx::query("SELECT id,connector_id,user_id,provider_subject,linked_at,last_authenticated_at FROM management.external_identities WHERE user_id=$1 ORDER BY linked_at,id")
-            .bind(user_id.as_uuid()).fetch_all(&mut connection).await.map_err(port)?;
+            .bind(user_id.as_uuid()).fetch_all(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         rows.iter().map(postgres_identity).collect()
     }
@@ -203,7 +201,7 @@ impl ExternalIdentityLinkingRepository for PostgresExternalIdentityRepository {
     ) -> Result<Option<LinkedIdentityRecord>, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
         let row = sqlx::query("SELECT id,connector_id,user_id,provider_subject,linked_at,last_authenticated_at FROM management.external_identities WHERE connector_id=$1 AND provider_subject=$2")
-            .bind(connector_id.as_uuid()).bind(subject).fetch_optional(&mut connection).await.map_err(port)?;
+            .bind(connector_id.as_uuid()).bind(subject).fetch_optional(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         row.as_ref().map(postgres_identity).transpose()
     }
@@ -224,7 +222,7 @@ impl ExternalIdentityLinkingRepository for PostgresExternalIdentityRepository {
             .unwrap_or_else(|| "External user".to_owned());
         let mut connection = self.connection().await.map_err(port)?;
         sqlx::query("INSERT INTO management.users (id,email,display_name,status,email_verified_at,created_at,updated_at) VALUES ($1,$2,$3,'active',$4,$5,$5)")
-            .bind(user_id.as_uuid()).bind(email).bind(display_name).bind(claims.email_verified.filter(|verified| *verified).map(|_| now)).bind(now).execute(&mut connection).await.map_err(port)?;
+            .bind(user_id.as_uuid()).bind(email).bind(display_name).bind(claims.email_verified.filter(|verified| *verified).map(|_| now)).bind(now).execute(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         Ok(user_id)
     }
@@ -232,7 +230,7 @@ impl ExternalIdentityLinkingRepository for PostgresExternalIdentityRepository {
     async fn link(&self, identity: LinkedIdentityRecord) -> Result<(), PortError> {
         let mut connection = self.connection().await.map_err(port)?;
         sqlx::query("INSERT INTO management.external_identities (id,connector_id,user_id,provider_subject,linked_at,last_authenticated_at) VALUES ($1,$2,$3,$4,$5,$6)")
-            .bind(identity.id.as_uuid()).bind(identity.connector_id.as_uuid()).bind(identity.user_id.as_uuid()).bind(identity.subject).bind(identity.linked_at_epoch_millis).bind(identity.last_login_at_epoch_millis).execute(&mut connection).await.map_err(port)?;
+            .bind(identity.id.as_uuid()).bind(identity.connector_id.as_uuid()).bind(identity.user_id.as_uuid()).bind(identity.subject).bind(identity.linked_at_epoch_millis).bind(identity.last_login_at_epoch_millis).execute(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)
     }
 
@@ -247,7 +245,7 @@ impl ExternalIdentityLinkingRepository for PostgresExternalIdentityRepository {
         )
         .bind(now)
         .bind(identity_id.as_uuid())
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)
@@ -260,7 +258,7 @@ impl ExternalIdentityLinkingRepository for PostgresExternalIdentityRepository {
     ) -> Result<Option<LinkedIdentityRecord>, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
         let row = sqlx::query("SELECT id,connector_id,user_id,provider_subject,linked_at,last_authenticated_at FROM management.external_identities WHERE id=$1 AND user_id=$2")
-            .bind(identity_id.as_uuid()).bind(user_id.as_uuid()).fetch_optional(&mut connection).await.map_err(port)?;
+            .bind(identity_id.as_uuid()).bind(user_id.as_uuid()).fetch_optional(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         row.as_ref().map(postgres_identity).transpose()
     }
@@ -271,7 +269,7 @@ impl ExternalIdentityLinkingRepository for PostgresExternalIdentityRepository {
             "SELECT EXISTS(SELECT 1 FROM management.local_credentials WHERE user_id=$1)",
         )
         .bind(user_id.as_uuid())
-        .fetch_one(&mut connection)
+        .fetch_one(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -284,7 +282,7 @@ impl ExternalIdentityLinkingRepository for PostgresExternalIdentityRepository {
             "SELECT COUNT(*) FROM management.external_identities WHERE user_id=$1",
         )
         .bind(user_id.as_uuid())
-        .fetch_one(&mut connection)
+        .fetch_one(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -295,7 +293,7 @@ impl ExternalIdentityLinkingRepository for PostgresExternalIdentityRepository {
         let mut connection = self.connection().await.map_err(port)?;
         sqlx::query("DELETE FROM management.external_identities WHERE id=$1")
             .bind(identity_id.as_uuid())
-            .execute(&mut connection)
+            .execute(&mut *connection)
             .await
             .map_err(port)?;
         connection.close().await.map_err(port)
@@ -311,7 +309,7 @@ impl ExternalIdentityLinkingRepository for PostgresExternalIdentityRepository {
         let id = Uuid::now_v7();
         let hash = audit_hash(id);
         sqlx::query("INSERT INTO management.global_audit_events (id,occurred_at,actor_type,actor_id,action,target_type,target_id,outcome,event_hash,safe_metadata) VALUES ($1,$2,'user',$3,$4,'external_identity',$3,'succeeded',$5,'{}'::jsonb)")
-            .bind(id).bind(now).bind(user_id.as_uuid()).bind(action).bind(hash.as_slice()).execute(&mut connection).await.map_err(port)?;
+            .bind(id).bind(now).bind(user_id.as_uuid()).bind(action).bind(hash.as_slice()).execute(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)
     }
 }

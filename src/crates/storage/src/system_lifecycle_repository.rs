@@ -6,8 +6,7 @@ use async_trait::async_trait;
 use pvlog_application::{PortError, SystemLifecycleRecord, SystemLifecycleRepository};
 use pvlog_domain::{AccountId, AuditEventId, SystemId, SystemLifecycle, UserId, Visibility};
 use sqlx::Row as _;
-#[cfg(feature = "postgres")]
-use sqlx::{Connection as _, PgConnection};
+#[cfg(feature = "sqlite")]
 use uuid::Uuid;
 
 #[cfg(feature = "sqlite")]
@@ -217,11 +216,11 @@ impl SystemLifecycleRepository for PostgresSystemLifecycleRepository {
             Err(PortError::NotFound) => return Ok(None),
             Err(error) => return Err(error),
         };
-        let mut connection = PgConnection::connect(&self.url)
+        let mut connection = crate::postgres_connection(&self.url)
             .await
             .map_err(|_| PortError::Unavailable)?;
         let row = sqlx::query("SELECT id,name,description,commissioning_date::TEXT AS commissioning_date,timezone,location_label,country_code,latitude_e6,longitude_e6,status_interval_seconds,declared_capacity_watts,visibility,lifecycle,version,created_at,updated_at,(SELECT SUM(p.rated_power_watts)::BIGINT FROM account_data.pv_strings p JOIN account_data.inverters i ON i.account_id=p.account_id AND i.id=p.inverter_id WHERE i.account_id=account_data.systems.account_id AND i.system_id=account_data.systems.id) AS derived_capacity_watts FROM account_data.systems WHERE account_id=$1 AND id=$2")
-            .bind(account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut connection).await
+            .bind(account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut *connection).await
             .map_err(|_| PortError::Unavailable)?;
         connection
             .close()
@@ -231,11 +230,11 @@ impl SystemLifecycleRepository for PostgresSystemLifecycleRepository {
     }
 
     async fn create(&self, record: SystemLifecycleRecord) -> Result<(), PortError> {
-        let mut connection = PgConnection::connect(&self.url)
+        let mut connection = crate::postgres_connection(&self.url)
             .await
             .map_err(|_| PortError::Unavailable)?;
         sqlx::query("INSERT INTO account_data.systems (account_id,id,name,description,commissioning_date,timezone,location_label,country_code,latitude_e6,longitude_e6,status_interval_seconds,declared_capacity_watts,visibility,lifecycle,power_calculation_mode,net_calculation_mode,created_at,updated_at) VALUES ($1,$2,$3,$4,$5::DATE,$6,$7,$8,$9,$10,$11,$12,$13,$14,'reported','separate_flows',$15,$16)")
-            .bind(record.account_id.as_uuid()).bind(record.id.as_uuid()).bind(&record.name).bind(&record.description).bind(record.commissioning_date.as_deref()).bind(&record.timezone).bind(record.location_label.as_deref()).bind(record.country_code.as_deref()).bind(record.latitude_microdegrees).bind(record.longitude_microdegrees).bind(i32::try_from(record.status_interval_seconds).map_err(|_| PortError::Unavailable)?).bind(record.declared_capacity_watts).bind(visibility_name(record.visibility)).bind(lifecycle_name(record.lifecycle)).bind(record.created_at).bind(record.updated_at).execute(&mut connection).await.map_err(|_| PortError::Unavailable)?;
+            .bind(record.account_id.as_uuid()).bind(record.id.as_uuid()).bind(&record.name).bind(&record.description).bind(record.commissioning_date.as_deref()).bind(&record.timezone).bind(record.location_label.as_deref()).bind(record.country_code.as_deref()).bind(record.latitude_microdegrees).bind(record.longitude_microdegrees).bind(i32::try_from(record.status_interval_seconds).map_err(|_| PortError::Unavailable)?).bind(record.declared_capacity_watts).bind(visibility_name(record.visibility)).bind(lifecycle_name(record.lifecycle)).bind(record.created_at).bind(record.updated_at).execute(&mut *connection).await.map_err(|_| PortError::Unavailable)?;
         connection
             .close()
             .await
@@ -260,11 +259,11 @@ impl SystemLifecycleRepository for PostgresSystemLifecycleRepository {
         if account_id != record.account_id {
             return Err(PortError::Conflict);
         }
-        let mut connection = PgConnection::connect(&self.url)
+        let mut connection = crate::postgres_connection(&self.url)
             .await
             .map_err(|_| PortError::Unavailable)?;
         let changed = sqlx::query("UPDATE account_data.systems SET name=$1,description=$2,commissioning_date=$3::DATE,timezone=$4,location_label=$5,country_code=$6,latitude_e6=$7,longitude_e6=$8,status_interval_seconds=$9,declared_capacity_watts=$10,visibility=$11,lifecycle=$12,updated_at=$13,version=version+1 WHERE account_id=$14 AND id=$15 AND version=$16")
-            .bind(&record.name).bind(&record.description).bind(record.commissioning_date.as_deref()).bind(&record.timezone).bind(record.location_label.as_deref()).bind(record.country_code.as_deref()).bind(record.latitude_microdegrees).bind(record.longitude_microdegrees).bind(i32::try_from(record.status_interval_seconds).map_err(|_| PortError::Unavailable)?).bind(record.declared_capacity_watts).bind(visibility_name(record.visibility)).bind(lifecycle_name(record.lifecycle)).bind(record.updated_at).bind(account_id.as_uuid()).bind(record.id.as_uuid()).bind(i64::try_from(expected_version).map_err(|_| PortError::Conflict)?).execute(&mut connection).await.map_err(|_| PortError::Unavailable)?.rows_affected() == 1;
+            .bind(&record.name).bind(&record.description).bind(record.commissioning_date.as_deref()).bind(&record.timezone).bind(record.location_label.as_deref()).bind(record.country_code.as_deref()).bind(record.latitude_microdegrees).bind(record.longitude_microdegrees).bind(i32::try_from(record.status_interval_seconds).map_err(|_| PortError::Unavailable)?).bind(record.declared_capacity_watts).bind(visibility_name(record.visibility)).bind(lifecycle_name(record.lifecycle)).bind(record.updated_at).bind(account_id.as_uuid()).bind(record.id.as_uuid()).bind(i64::try_from(expected_version).map_err(|_| PortError::Conflict)?).execute(&mut *connection).await.map_err(|_| PortError::Unavailable)?.rows_affected() == 1;
         connection
             .close()
             .await
@@ -285,7 +284,7 @@ impl SystemLifecycleRepository for PostgresSystemLifecycleRepository {
 
     async fn delete(&self, id: SystemId, expected_version: u64) -> Result<bool, PortError> {
         let account_id = self.account_for(id).await?;
-        let mut connection = PgConnection::connect(&self.url)
+        let mut connection = crate::postgres_connection(&self.url)
             .await
             .map_err(|_| PortError::Unavailable)?;
         let deleted = sqlx::query(
@@ -294,7 +293,7 @@ impl SystemLifecycleRepository for PostgresSystemLifecycleRepository {
         .bind(account_id.as_uuid())
         .bind(id.as_uuid())
         .bind(i64::try_from(expected_version).map_err(|_| PortError::Conflict)?)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await
         .map_err(|_| PortError::Unavailable)?
         .rows_affected()

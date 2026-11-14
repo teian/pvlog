@@ -30,9 +30,9 @@ pub(crate) struct ManagementConnection(PoolConnection<Sqlite>);
 
 impl ManagementConnection {
     /// Returns the connection to the pool. It stays open for the next query.
-    #[allow(clippy::unused_async)]
-    pub(crate) async fn close(self) -> Result<(), sqlx::Error> {
-        Ok(())
+    pub(crate) fn close(self) -> std::future::Ready<Result<(), sqlx::Error>> {
+        drop(self);
+        std::future::ready(Ok(()))
     }
 }
 

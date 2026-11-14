@@ -10,8 +10,6 @@ use pvlog_domain::{
     SystemId, TEMPERATURE_COEFFICIENT_PPM_RANGE, TariffId,
 };
 use serde_json::Value;
-#[cfg(feature = "postgres")]
-use sqlx::PgConnection;
 use sqlx::{Connection as _, Row as _};
 use thiserror::Error;
 use uuid::Uuid;
@@ -237,8 +235,8 @@ impl PostgresAccountConfigurationRepository {
         Self { url, account_id }
     }
 
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -467,7 +465,7 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
     ) -> Result<(), AccountRepositoryError> {
         validate_system(r)?;
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO account_data.systems (account_id,id,name,description,timezone,visibility,lifecycle,status_interval_seconds,power_calculation_mode,net_calculation_mode,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,description=excluded.description,timezone=excluded.timezone,visibility=excluded.visibility,lifecycle=excluded.lifecycle,status_interval_seconds=excluded.status_interval_seconds,power_calculation_mode=excluded.power_calculation_mode,net_calculation_mode=excluded.net_calculation_mode,updated_at=excluded.updated_at,version=account_data.systems.version+1").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(&r.name).bind(&r.description).bind(&r.timezone).bind(&r.visibility).bind(&r.lifecycle).bind(r.status_interval_seconds).bind(&r.power_calculation_mode).bind(&r.net_calculation_mode).bind(r.created_at).bind(r.updated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO account_data.systems (account_id,id,name,description,timezone,visibility,lifecycle,status_interval_seconds,power_calculation_mode,net_calculation_mode,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,description=excluded.description,timezone=excluded.timezone,visibility=excluded.visibility,lifecycle=excluded.lifecycle,status_interval_seconds=excluded.status_interval_seconds,power_calculation_mode=excluded.power_calculation_mode,net_calculation_mode=excluded.net_calculation_mode,updated_at=excluded.updated_at,version=account_data.systems.version+1").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(&r.name).bind(&r.description).bind(&r.timezone).bind(&r.visibility).bind(&r.lifecycle).bind(r.status_interval_seconds).bind(&r.power_calculation_mode).bind(&r.net_calculation_mode).bind(r.created_at).bind(r.updated_at).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
@@ -476,7 +474,7 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
         id: SystemId,
     ) -> Result<Option<SystemConfigurationRecord>, AccountRepositoryError> {
         let mut c = self.connection().await?;
-        let row=sqlx::query("SELECT id,name,description,timezone,visibility,lifecycle,status_interval_seconds,power_calculation_mode,net_calculation_mode,created_at,updated_at FROM account_data.systems WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut c).await?;
+        let row=sqlx::query("SELECT id,name,description,timezone,visibility,lifecycle,status_interval_seconds,power_calculation_mode,net_calculation_mode,created_at,updated_at FROM account_data.systems WHERE account_id=$1 AND id=$2").bind(self.account_id.as_uuid()).bind(id.as_uuid()).fetch_optional(&mut *c).await?;
         c.close().await?;
         row.map(|row| pg_system(&row)).transpose()
     }
@@ -564,12 +562,12 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
     ) -> Result<Vec<InverterRecord>, AccountRepositoryError> {
         let mut connection = self.connection().await?;
         let rows = sqlx::query("SELECT id,system_id,name,manufacturer,model,serial_reference,rated_power_watts,catalog_entry_id,catalog_revision,value_provenance,specification_snapshot,effective_from,effective_to,created_at,updated_at,firmware_version,firmware_changed_at FROM account_data.inverters WHERE account_id=$1 AND system_id=$2 AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>$3) ORDER BY effective_from,id")
-            .bind(self.account_id.as_uuid()).bind(system_id.as_uuid()).bind(at).fetch_all(&mut connection).await?;
+            .bind(self.account_id.as_uuid()).bind(system_id.as_uuid()).bind(at).fetch_all(&mut *connection).await?;
         let mut records = Vec::with_capacity(rows.len());
         for row in &rows {
             let mut inverter = pg_inverter(row)?;
             let strings = sqlx::query("SELECT id,inverter_id,name,panel_count,panel_manufacturer,panel_model,rated_power_watts,module_catalog_entry_id,module_catalog_revision,value_provenance,module_specification_snapshot,module_peak_power_watts,total_peak_power_watts,orientation_degrees,tilt_degrees,temperature_coefficient_ppm_per_celsius,shading,effective_from,effective_to,created_at,updated_at FROM account_data.pv_strings WHERE account_id=$1 AND inverter_id=$2 AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>$3) ORDER BY effective_from,id")
-                .bind(self.account_id.as_uuid()).bind(inverter.id.as_uuid()).bind(at).fetch_all(&mut connection).await?;
+                .bind(self.account_id.as_uuid()).bind(inverter.id.as_uuid()).bind(at).fetch_all(&mut *connection).await?;
             inverter.strings = strings.iter().map(pg_pv_string).collect::<Result<_, _>>()?;
             records.push(inverter);
         }
@@ -588,7 +586,7 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
         .bind(self.account_id.as_uuid())
         .bind(inverter_id.as_uuid())
         .bind(system_id.as_uuid())
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(result.rows_affected() == 1)
@@ -603,7 +601,7 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(inverter_id.as_uuid())
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         ids.into_iter()
@@ -613,7 +611,7 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
     async fn save_equipment(&self, r: &EquipmentRecord) -> Result<(), AccountRepositoryError> {
         validate_range(r.effective_from, r.effective_to)?;
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO account_data.equipment (account_id,id,system_id,equipment_kind,name,capacity_watts,effective_from,effective_to,configuration,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,capacity_watts=excluded.capacity_watts,effective_from=excluded.effective_from,effective_to=excluded.effective_to,configuration=excluded.configuration,updated_at=excluded.updated_at,version=account_data.equipment.version+1").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.equipment_kind).bind(&r.name).bind(r.capacity_watts).bind(r.effective_from).bind(r.effective_to).bind(&r.configuration).bind(r.created_at).bind(r.updated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO account_data.equipment (account_id,id,system_id,equipment_kind,name,capacity_watts,effective_from,effective_to,configuration,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,capacity_watts=excluded.capacity_watts,effective_from=excluded.effective_from,effective_to=excluded.effective_to,configuration=excluded.configuration,updated_at=excluded.updated_at,version=account_data.equipment.version+1").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.equipment_kind).bind(&r.name).bind(r.capacity_watts).bind(r.effective_from).bind(r.effective_to).bind(&r.configuration).bind(r.created_at).bind(r.updated_at).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
@@ -623,14 +621,14 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
         at: i64,
     ) -> Result<Vec<EquipmentRecord>, AccountRepositoryError> {
         let mut c = self.connection().await?;
-        let rows=sqlx::query("SELECT id,system_id,equipment_kind,name,capacity_watts,effective_from,effective_to,configuration,created_at,updated_at FROM account_data.equipment WHERE account_id=$1 AND system_id=$2 AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>$3) ORDER BY effective_from,id").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(at).fetch_all(&mut c).await?;
+        let rows=sqlx::query("SELECT id,system_id,equipment_kind,name,capacity_watts,effective_from,effective_to,configuration,created_at,updated_at FROM account_data.equipment WHERE account_id=$1 AND system_id=$2 AND effective_from<=$3 AND (effective_to IS NULL OR effective_to>$3) ORDER BY effective_from,id").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(at).fetch_all(&mut *c).await?;
         c.close().await?;
         rows.iter().map(pg_equipment).collect()
     }
     async fn save_tariff(&self, r: &TariffRecord) -> Result<(), AccountRepositoryError> {
         validate_range(r.effective_from, r.effective_to)?;
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO account_data.tariffs (account_id,id,system_id,name,direction,currency_code,minor_units_per_kwh,schedule,effective_from,effective_to,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,direction=excluded.direction,currency_code=excluded.currency_code,minor_units_per_kwh=excluded.minor_units_per_kwh,schedule=excluded.schedule,effective_from=excluded.effective_from,effective_to=excluded.effective_to,updated_at=excluded.updated_at,version=account_data.tariffs.version+1").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.name).bind(&r.direction).bind(&r.currency_code).bind(r.minor_units_per_kwh).bind(&r.schedule).bind(r.effective_from).bind(r.effective_to).bind(r.created_at).bind(r.updated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO account_data.tariffs (account_id,id,system_id,name,direction,currency_code,minor_units_per_kwh,schedule,effective_from,effective_to,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT(account_id,id) DO UPDATE SET name=excluded.name,direction=excluded.direction,currency_code=excluded.currency_code,minor_units_per_kwh=excluded.minor_units_per_kwh,schedule=excluded.schedule,effective_from=excluded.effective_from,effective_to=excluded.effective_to,updated_at=excluded.updated_at,version=account_data.tariffs.version+1").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.name).bind(&r.direction).bind(&r.currency_code).bind(r.minor_units_per_kwh).bind(&r.schedule).bind(r.effective_from).bind(r.effective_to).bind(r.created_at).bind(r.updated_at).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
@@ -641,7 +639,7 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
         at: i64,
     ) -> Result<Option<TariffRecord>, AccountRepositoryError> {
         let mut c = self.connection().await?;
-        let row=sqlx::query("SELECT id,system_id,name,direction,currency_code,minor_units_per_kwh,schedule,effective_from,effective_to,created_at,updated_at FROM account_data.tariffs WHERE account_id=$1 AND system_id=$2 AND direction=$3 AND effective_from<=$4 AND (effective_to IS NULL OR effective_to>$4) ORDER BY effective_from DESC,id DESC LIMIT 1").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(direction).bind(at).fetch_optional(&mut c).await?;
+        let row=sqlx::query("SELECT id,system_id,name,direction,currency_code,minor_units_per_kwh,schedule,effective_from,effective_to,created_at,updated_at FROM account_data.tariffs WHERE account_id=$1 AND system_id=$2 AND direction=$3 AND effective_from<=$4 AND (effective_to IS NULL OR effective_to>$4) ORDER BY effective_from DESC,id DESC LIMIT 1").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(direction).bind(at).fetch_optional(&mut *c).await?;
         c.close().await?;
         row.map(|row| pg_tariff(&row)).transpose()
     }
@@ -651,7 +649,7 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
     ) -> Result<(), AccountRepositoryError> {
         validate_range(r.effective_from, r.effective_to)?;
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO account_data.channel_definitions (account_id,id,system_id,channel_key,display_name,data_type,unit,scale,minimum_value,maximum_value,lifecycle,effective_from,effective_to,display,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT(account_id,id) DO UPDATE SET display_name=excluded.display_name,data_type=excluded.data_type,unit=excluded.unit,scale=excluded.scale,minimum_value=excluded.minimum_value,maximum_value=excluded.maximum_value,lifecycle=excluded.lifecycle,effective_from=excluded.effective_from,effective_to=excluded.effective_to,display=excluded.display,updated_at=excluded.updated_at,version=account_data.channel_definitions.version+1").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.channel_key).bind(&r.display_name).bind(&r.data_type).bind(&r.unit).bind(r.scale).bind(r.minimum_value).bind(r.maximum_value).bind(&r.lifecycle).bind(r.effective_from).bind(r.effective_to).bind(&r.display).bind(r.created_at).bind(r.updated_at).execute(&mut c).await?;
+        sqlx::query("INSERT INTO account_data.channel_definitions (account_id,id,system_id,channel_key,display_name,data_type,unit,scale,minimum_value,maximum_value,lifecycle,effective_from,effective_to,display,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) ON CONFLICT(account_id,id) DO UPDATE SET display_name=excluded.display_name,data_type=excluded.data_type,unit=excluded.unit,scale=excluded.scale,minimum_value=excluded.minimum_value,maximum_value=excluded.maximum_value,lifecycle=excluded.lifecycle,effective_from=excluded.effective_from,effective_to=excluded.effective_to,display=excluded.display,updated_at=excluded.updated_at,version=account_data.channel_definitions.version+1").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.system_id.as_uuid()).bind(&r.channel_key).bind(&r.display_name).bind(&r.data_type).bind(&r.unit).bind(r.scale).bind(r.minimum_value).bind(r.maximum_value).bind(&r.lifecycle).bind(r.effective_from).bind(r.effective_to).bind(&r.display).bind(r.created_at).bind(r.updated_at).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
@@ -662,20 +660,20 @@ impl AccountConfigurationRepository for PostgresAccountConfigurationRepository {
         at: i64,
     ) -> Result<Option<ChannelDefinitionRecord>, AccountRepositoryError> {
         let mut c = self.connection().await?;
-        let row=sqlx::query("SELECT id,system_id,channel_key,display_name,data_type,unit,scale,minimum_value,maximum_value,lifecycle,effective_from,effective_to,display,created_at,updated_at FROM account_data.channel_definitions WHERE account_id=$1 AND system_id=$2 AND channel_key=$3 AND lifecycle='active' AND effective_from<=$4 AND (effective_to IS NULL OR effective_to>$4) LIMIT 1").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(key).bind(at).fetch_optional(&mut c).await?;
+        let row=sqlx::query("SELECT id,system_id,channel_key,display_name,data_type,unit,scale,minimum_value,maximum_value,lifecycle,effective_from,effective_to,display,created_at,updated_at FROM account_data.channel_definitions WHERE account_id=$1 AND system_id=$2 AND channel_key=$3 AND lifecycle='active' AND effective_from<=$4 AND (effective_to IS NULL OR effective_to>$4) LIMIT 1").bind(self.account_id.as_uuid()).bind(s.as_uuid()).bind(key).bind(at).fetch_optional(&mut *c).await?;
         c.close().await?;
         row.map(|row| pg_channel(&row)).transpose()
     }
     async fn append_audit(&self, r: &AccountAuditRecord) -> Result<(), AccountRepositoryError> {
         validate_audit(r)?;
         let mut c = self.connection().await?;
-        sqlx::query("INSERT INTO account_data.audit_events (account_id,id,occurred_at,request_id,actor_type,actor_id,action,target_type,target_id,outcome,previous_event_hash,event_hash,safe_metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.occurred_at).bind(r.request_id).bind(&r.actor_type).bind(r.actor_id).bind(&r.action).bind(&r.target_type).bind(r.target_id).bind(&r.outcome).bind(r.previous_event_hash.map(|h|h.to_vec())).bind(r.event_hash.as_slice()).bind(&r.safe_metadata).execute(&mut c).await?;
+        sqlx::query("INSERT INTO account_data.audit_events (account_id,id,occurred_at,request_id,actor_type,actor_id,action,target_type,target_id,outcome,previous_event_hash,event_hash,safe_metadata) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)").bind(self.account_id.as_uuid()).bind(r.id.as_uuid()).bind(r.occurred_at).bind(r.request_id).bind(&r.actor_type).bind(r.actor_id).bind(&r.action).bind(&r.target_type).bind(r.target_id).bind(&r.outcome).bind(r.previous_event_hash.map(|h|h.to_vec())).bind(r.event_hash.as_slice()).bind(&r.safe_metadata).execute(&mut *c).await?;
         c.close().await?;
         Ok(())
     }
     async fn audit(&self, limit: u32) -> Result<Vec<AccountAuditRecord>, AccountRepositoryError> {
         let mut c = self.connection().await?;
-        let rows=sqlx::query("SELECT id,occurred_at,request_id,actor_type,actor_id,action,target_type,target_id,outcome,previous_event_hash,event_hash,safe_metadata FROM account_data.audit_events WHERE account_id=$1 ORDER BY occurred_at DESC,id DESC LIMIT $2").bind(self.account_id.as_uuid()).bind(i64::from(limit)).fetch_all(&mut c).await?;
+        let rows=sqlx::query("SELECT id,occurred_at,request_id,actor_type,actor_id,action,target_type,target_id,outcome,previous_event_hash,event_hash,safe_metadata FROM account_data.audit_events WHERE account_id=$1 ORDER BY occurred_at DESC,id DESC LIMIT $2").bind(self.account_id.as_uuid()).bind(i64::from(limit)).fetch_all(&mut *c).await?;
         c.close().await?;
         rows.iter().map(pg_audit).collect()
     }

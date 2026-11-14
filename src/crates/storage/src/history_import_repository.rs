@@ -9,9 +9,9 @@ use std::fmt;
 
 use async_trait::async_trait;
 use pvlog_domain::{AccountId, DataSourceId, SystemId};
-use sqlx::Row as _;
 #[cfg(feature = "postgres")]
-use sqlx::{Connection as _, PgConnection};
+use sqlx::Connection as _;
+use sqlx::Row as _;
 use uuid::Uuid;
 
 use crate::AccountRepositoryError;
@@ -302,8 +302,8 @@ impl PostgresHistoryImportRepository {
         Self { url, account_id }
     }
 
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -410,7 +410,7 @@ impl HistoryImportRepository for PostgresHistoryImportRepository {
         .bind(system_id.as_uuid())
         .bind(id)
         .bind(now)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         row.map(|row| pg_record(&row, true)).transpose()
@@ -430,7 +430,7 @@ impl HistoryImportRepository for PostgresHistoryImportRepository {
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
         .bind(now)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter().map(|row| pg_record(row, false)).collect()
@@ -454,7 +454,7 @@ impl HistoryImportRepository for PostgresHistoryImportRepository {
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
         .bind(id)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?
         .rows_affected();
         connection.close().await?;

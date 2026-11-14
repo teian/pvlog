@@ -11,8 +11,6 @@ use pvlog_application::{
     LocalCredentialRepository, PasswordRecoveryRecord, PortError, UserLifecycleRepository,
 };
 use pvlog_domain::{CredentialDigest, PasswordHash, UserId, UserStatus};
-#[cfg(feature = "postgres")]
-use sqlx::PgConnection;
 use sqlx::{Connection as _, Row as _};
 use uuid::Uuid;
 
@@ -49,8 +47,8 @@ impl PostgresUserLifecycleRepository {
         Self { url }
     }
 
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -357,7 +355,7 @@ impl UserLifecycleRepository for PostgresUserLifecycleRepository {
              ORDER BY lower(user_record.display_name),lower(user_record.email),user_record.id LIMIT $1",
         )
         .bind(i64::from(limit))
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -366,7 +364,7 @@ impl UserLifecycleRepository for PostgresUserLifecycleRepository {
 
     async fn user(&self, id: UserId) -> Result<Option<LifecycleUserRecord>, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
-        let row=sqlx::query("SELECT user_record.id,user_record.email,user_record.display_name,user_record.status,user_record.email_verified_at,user_record.disabled_at,credential.locked_until,user_record.created_at,user_record.updated_at FROM management.users user_record LEFT JOIN management.local_credentials credential ON credential.user_id=user_record.id WHERE user_record.id=$1").bind(id.as_uuid()).fetch_optional(&mut connection).await.map_err(port)?;
+        let row=sqlx::query("SELECT user_record.id,user_record.email,user_record.display_name,user_record.status,user_record.email_verified_at,user_record.disabled_at,credential.locked_until,user_record.created_at,user_record.updated_at FROM management.users user_record LEFT JOIN management.local_credentials credential ON credential.user_id=user_record.id WHERE user_record.id=$1").bind(id.as_uuid()).fetch_optional(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         row.map(|row| postgres_user(&row)).transpose()
     }
@@ -376,7 +374,7 @@ impl UserLifecycleRepository for PostgresUserLifecycleRepository {
         record: &LifecycleUserRecord,
     ) -> Result<LifecycleCreateOutcome, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
-        let result=sqlx::query("INSERT INTO management.users (id,email,display_name,status,email_verified_at,disabled_at,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING").bind(record.id.as_uuid()).bind(&record.email).bind(&record.display_name).bind(status_name(record.status)).bind(record.email_verified_at).bind(record.disabled_at).bind(record.created_at).bind(record.updated_at).execute(&mut connection).await.map_err(port)?;
+        let result=sqlx::query("INSERT INTO management.users (id,email,display_name,status,email_verified_at,disabled_at,created_at,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING").bind(record.id.as_uuid()).bind(&record.email).bind(&record.display_name).bind(status_name(record.status)).bind(record.email_verified_at).bind(record.disabled_at).bind(record.created_at).bind(record.updated_at).execute(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         Ok(if result.rows_affected() == 1 {
             LifecycleCreateOutcome::Created
@@ -399,7 +397,7 @@ impl UserLifecycleRepository for PostgresUserLifecycleRepository {
         .bind(display_name)
         .bind(now)
         .bind(id.as_uuid())
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await
         .map_err(port)?;
         connection.close().await.map_err(port)?;
@@ -408,7 +406,7 @@ impl UserLifecycleRepository for PostgresUserLifecycleRepository {
 
     async fn create_invitation(&self, invitation: &InvitationRecord) -> Result<(), PortError> {
         let mut connection = self.connection().await.map_err(port)?;
-        sqlx::query("INSERT INTO management.user_invitations (id,email,token_digest,invited_by,expires_at,created_at) VALUES ($1,$2,$3,$4,$5,$6)").bind(invitation.id.as_uuid()).bind(&invitation.email).bind(invitation.token_digest.as_bytes().as_slice()).bind(invitation.invited_by.as_uuid()).bind(invitation.expires_at).bind(invitation.created_at).execute(&mut connection).await.map_err(port)?;
+        sqlx::query("INSERT INTO management.user_invitations (id,email,token_digest,invited_by,expires_at,created_at) VALUES ($1,$2,$3,$4,$5,$6)").bind(invitation.id.as_uuid()).bind(&invitation.email).bind(invitation.token_digest.as_bytes().as_slice()).bind(invitation.invited_by.as_uuid()).bind(invitation.expires_at).bind(invitation.created_at).execute(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         Ok(())
     }
@@ -454,7 +452,7 @@ impl UserLifecycleRepository for PostgresUserLifecycleRepository {
         now: i64,
     ) -> Result<bool, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
-        let result=sqlx::query("UPDATE management.users SET status='active',email_verified_at=COALESCE(email_verified_at,$1),disabled_at=NULL,updated_at=$2,version=version+1 WHERE id=$3 AND status<>'deleted'").bind(email_verified_at).bind(now).bind(id.as_uuid()).execute(&mut connection).await.map_err(port)?;
+        let result=sqlx::query("UPDATE management.users SET status='active',email_verified_at=COALESCE(email_verified_at,$1),disabled_at=NULL,updated_at=$2,version=version+1 WHERE id=$3 AND status<>'deleted'").bind(email_verified_at).bind(now).bind(id.as_uuid()).execute(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         Ok(result.rows_affected() == 1)
     }
@@ -705,7 +703,7 @@ impl LocalCredentialRepository for PostgresUserLifecycleRepository {
         normalized_email: &str,
     ) -> Result<Option<LocalCredentialRecord>, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
-        let row=sqlx::query("SELECT user_record.id AS user_id,user_record.email,user_record.status,credential.password_hash,credential.failed_attempts,credential.locked_until,credential.rehash_required FROM management.users user_record JOIN management.local_credentials credential ON credential.user_id=user_record.id WHERE lower(user_record.email)=lower($1)").bind(normalized_email).fetch_optional(&mut connection).await.map_err(port)?;
+        let row=sqlx::query("SELECT user_record.id AS user_id,user_record.email,user_record.status,credential.password_hash,credential.failed_attempts,credential.locked_until,credential.rehash_required FROM management.users user_record JOIN management.local_credentials credential ON credential.user_id=user_record.id WHERE lower(user_record.email)=lower($1)").bind(normalized_email).fetch_optional(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         row.map(|row| postgres_credential(&row)).transpose()
     }
@@ -715,7 +713,7 @@ impl LocalCredentialRepository for PostgresUserLifecycleRepository {
         user_id: UserId,
     ) -> Result<Option<LocalCredentialRecord>, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
-        let row=sqlx::query("SELECT user_record.id AS user_id,user_record.email,user_record.status,credential.password_hash,credential.failed_attempts,credential.locked_until,credential.rehash_required FROM management.users user_record JOIN management.local_credentials credential ON credential.user_id=user_record.id WHERE user_record.id=$1").bind(user_id.as_uuid()).fetch_optional(&mut connection).await.map_err(port)?;
+        let row=sqlx::query("SELECT user_record.id AS user_id,user_record.email,user_record.status,credential.password_hash,credential.failed_attempts,credential.locked_until,credential.rehash_required FROM management.users user_record JOIN management.local_credentials credential ON credential.user_id=user_record.id WHERE user_record.id=$1").bind(user_id.as_uuid()).fetch_optional(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         row.map(|row| postgres_credential(&row)).transpose()
     }
@@ -728,7 +726,7 @@ impl LocalCredentialRepository for PostgresUserLifecycleRepository {
         rehash_required: bool,
     ) -> Result<bool, PortError> {
         let mut connection = self.connection().await.map_err(port)?;
-        let result=sqlx::query("INSERT INTO management.local_credentials (user_id,password_hash,password_changed_at,failed_attempts,locked_until,rehash_required) SELECT id,$1,$2,0,NULL,$3 FROM management.users WHERE id=$4 AND status<>'deleted' ON CONFLICT(user_id) DO UPDATE SET password_hash=excluded.password_hash,password_changed_at=excluded.password_changed_at,failed_attempts=0,locked_until=NULL,rehash_required=excluded.rehash_required").bind(hash.expose_encoded()).bind(changed_at).bind(rehash_required).bind(user_id.as_uuid()).execute(&mut connection).await.map_err(port)?;
+        let result=sqlx::query("INSERT INTO management.local_credentials (user_id,password_hash,password_changed_at,failed_attempts,locked_until,rehash_required) SELECT id,$1,$2,0,NULL,$3 FROM management.users WHERE id=$4 AND status<>'deleted' ON CONFLICT(user_id) DO UPDATE SET password_hash=excluded.password_hash,password_changed_at=excluded.password_changed_at,failed_attempts=0,locked_until=NULL,rehash_required=excluded.rehash_required").bind(hash.expose_encoded()).bind(changed_at).bind(rehash_required).bind(user_id.as_uuid()).execute(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         Ok(result.rows_affected() == 1)
     }
@@ -740,14 +738,14 @@ impl LocalCredentialRepository for PostgresUserLifecycleRepository {
         locked_until: i64,
     ) -> Result<(), PortError> {
         let mut connection = self.connection().await.map_err(port)?;
-        sqlx::query("UPDATE management.local_credentials SET failed_attempts=failed_attempts+1,locked_until=CASE WHEN failed_attempts+1>=$1 THEN $2 ELSE locked_until END WHERE user_id=$3").bind(i32::from(maximum_attempts)).bind(locked_until).bind(user_id.as_uuid()).execute(&mut connection).await.map_err(port)?;
+        sqlx::query("UPDATE management.local_credentials SET failed_attempts=failed_attempts+1,locked_until=CASE WHEN failed_attempts+1>=$1 THEN $2 ELSE locked_until END WHERE user_id=$3").bind(i32::from(maximum_attempts)).bind(locked_until).bind(user_id.as_uuid()).execute(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         Ok(())
     }
 
     async fn clear_failed_attempts(&self, user_id: UserId) -> Result<(), PortError> {
         let mut connection = self.connection().await.map_err(port)?;
-        sqlx::query("UPDATE management.local_credentials SET failed_attempts=0,locked_until=NULL WHERE user_id=$1").bind(user_id.as_uuid()).execute(&mut connection).await.map_err(port)?;
+        sqlx::query("UPDATE management.local_credentials SET failed_attempts=0,locked_until=NULL WHERE user_id=$1").bind(user_id.as_uuid()).execute(&mut *connection).await.map_err(port)?;
         connection.close().await.map_err(port)?;
         Ok(())
     }

@@ -261,8 +261,7 @@ impl StorageDashboardApi {
             DatabaseTarget::Postgres { url } => {
                 #[cfg(feature = "postgres")]
                 {
-                    use sqlx::Connection as _;
-                    let mut connection = sqlx::PgConnection::connect(url)
+                    let mut connection = pvlog_storage::postgres_connection(url)
                         .await
                         .map_err(|_| DashboardApiError::Unavailable)?;
                     let latest = sqlx::query(
@@ -273,7 +272,7 @@ impl StorageDashboardApi {
                     )
                     .bind(account_id.as_uuid())
                     .bind(system_id.as_uuid())
-                    .fetch_optional(&mut connection)
+                    .fetch_optional(&mut *connection)
                     .await
                     .map_err(|_| DashboardApiError::Unavailable)?;
                     let accepted: i64 = sqlx::query_scalar(
@@ -283,7 +282,7 @@ impl StorageDashboardApi {
                     .bind(account_id.as_uuid())
                     .bind(system_id.as_uuid())
                     .bind(now - MILLIS_PER_DAY)
-                    .fetch_one(&mut connection)
+                    .fetch_one(&mut *connection)
                     .await
                     .map_err(|_| DashboardApiError::Unavailable)?;
                     let coverage: Option<i64> = sqlx::query_scalar(
@@ -292,7 +291,7 @@ impl StorageDashboardApi {
                     )
                     .bind(account_id.as_uuid())
                     .bind(system_id.as_uuid())
-                    .fetch_optional(&mut connection)
+                    .fetch_optional(&mut *connection)
                     .await
                     .map_err(|_| DashboardApiError::Unavailable)?
                     .flatten();

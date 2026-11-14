@@ -1083,8 +1083,8 @@ impl PostgresChannelRepository {
         Self { url, account_id }
     }
 
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 
@@ -1258,7 +1258,7 @@ impl ChannelRepository for PostgresChannelRepository {
             .bind(registration.scale)
             .bind(&registration.aggregation)
             .bind(now)
-            .execute(&mut connection)
+            .execute(&mut *connection)
             .await?;
             inserted = true;
         }
@@ -1280,7 +1280,7 @@ impl ChannelRepository for PostgresChannelRepository {
         ))
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter().map(postgres_channel).collect()
@@ -1322,7 +1322,7 @@ impl ChannelRepository for PostgresChannelRepository {
                 .bind(self.account_id.as_uuid())
                 .bind(target_id)
                 .bind(system_id.as_uuid())
-                .fetch_optional(&mut connection)
+                .fetch_optional(&mut *connection)
                 .await?;
             if known.is_none() {
                 connection.close().await?;
@@ -1344,7 +1344,7 @@ impl ChannelRepository for PostgresChannelRepository {
         .bind(binding.display_name.as_deref())
         .bind(binding.aggregation.as_deref())
         .bind(now)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         if updated.rows_affected() == 0 {
             connection.close().await?;
@@ -1358,7 +1358,7 @@ impl ChannelRepository for PostgresChannelRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         self.drop_rollups(&mut connection, system_id, channel_key)
             .await?;
@@ -1385,7 +1385,7 @@ impl ChannelRepository for PostgresChannelRepository {
         .bind(system_id.as_uuid())
         .bind(channel_key)
         .bind(now)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?
         .rows_affected();
         self.drop_rollups(&mut connection, system_id, channel_key)
@@ -1465,7 +1465,7 @@ impl ChannelRepository for PostgresChannelRepository {
         .bind(&ids)
         .bind(from)
         .bind(to)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter()
@@ -1497,7 +1497,7 @@ impl ChannelRepository for PostgresChannelRepository {
         .bind(channel_id.as_uuid())
         .bind(from)
         .bind(to)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(rows
@@ -1519,7 +1519,7 @@ impl ChannelRepository for PostgresChannelRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(timezone)
@@ -1539,7 +1539,7 @@ impl ChannelRepository for PostgresChannelRepository {
         .bind(self.account_id.as_uuid())
         .bind(channel_id.as_uuid())
         .bind(before)
-        .fetch_optional(&mut connection)
+        .fetch_optional(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(row.map(|row| ChannelValueRecord {
@@ -1583,7 +1583,7 @@ impl ChannelRepository for PostgresChannelRepository {
         )
         .bind(self.account_id.as_uuid())
         .bind(system_id.as_uuid())
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter()
@@ -1675,7 +1675,7 @@ impl ChannelRepository for PostgresChannelRepository {
         .bind(resolution)
         .bind(from)
         .bind(to)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter().map(postgres_rollup).collect()
@@ -1696,7 +1696,7 @@ impl ChannelRepository for PostgresChannelRepository {
         .bind(channel_id.as_uuid())
         .bind(received_at)
         .bind(values)
-        .execute(&mut connection)
+        .execute(&mut *connection)
         .await?;
         connection.close().await?;
         Ok(())
@@ -1726,7 +1726,7 @@ impl ChannelRepository for PostgresChannelRepository {
         .bind(resolution)
         .bind(from)
         .bind(to)
-        .fetch_all(&mut connection)
+        .fetch_all(&mut *connection)
         .await?;
         connection.close().await?;
         rows.iter().map(postgres_rollup).collect()

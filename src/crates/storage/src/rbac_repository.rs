@@ -47,8 +47,8 @@ impl PostgresRbacRepository {
     pub fn new(url: String) -> Self {
         Self { url }
     }
-    async fn connection(&self) -> Result<PgConnection, sqlx::Error> {
-        PgConnection::connect(&self.url).await
+    async fn connection(&self) -> Result<crate::PostgresConnection, sqlx::Error> {
+        crate::postgres_connection(&self.url).await
     }
 }
 #[cfg(feature = "postgres")]
@@ -176,9 +176,9 @@ impl RbacRepository for PostgresRbacRepository {
     async fn roles(&self, account_id: Option<AccountId>) -> Result<Vec<RbacRoleRecord>, PortError> {
         let mut c = self.connection().await.map_err(port)?;
         let rows = if let Some(account) = account_id {
-            sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM management.rbac_roles WHERE account_id=$1 ORDER BY name,id").bind(account.as_uuid()).fetch_all(&mut c).await.map_err(port)?
+            sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM management.rbac_roles WHERE account_id=$1 ORDER BY name,id").bind(account.as_uuid()).fetch_all(&mut *c).await.map_err(port)?
         } else {
-            sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM management.rbac_roles WHERE account_id IS NULL ORDER BY name,id").fetch_all(&mut c).await.map_err(port)?
+            sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM management.rbac_roles WHERE account_id IS NULL ORDER BY name,id").fetch_all(&mut *c).await.map_err(port)?
         };
         let mut result = Vec::with_capacity(rows.len());
         for row in rows {
@@ -189,7 +189,7 @@ impl RbacRepository for PostgresRbacRepository {
     }
     async fn role(&self, id: RoleId) -> Result<Option<RbacRoleRecord>, PortError> {
         let mut c = self.connection().await.map_err(port)?;
-        let row=sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM management.rbac_roles WHERE id=$1 LIMIT 1").bind(id.as_uuid()).fetch_optional(&mut c).await.map_err(port)?;
+        let row=sqlx::query("SELECT id,account_id,name,role_kind,built_in_key,created_by,created_at,updated_at,version FROM management.rbac_roles WHERE id=$1 LIMIT 1").bind(id.as_uuid()).fetch_optional(&mut *c).await.map_err(port)?;
         let result = if let Some(row) = row {
             Some(pg_role(&mut c, &row).await?)
         } else {
@@ -218,7 +218,7 @@ impl RbacRepository for PostgresRbacRepository {
         let mut c = self.connection().await.map_err(port)?;
         let r = sqlx::query("DELETE FROM management.rbac_roles WHERE id=$1 AND role_kind='custom'")
             .bind(id.as_uuid())
-            .execute(&mut c)
+            .execute(&mut *c)
             .await
             .map_err(port)?;
         c.close().await.map_err(port)?;
@@ -231,7 +231,7 @@ impl RbacRepository for PostgresRbacRepository {
     ) -> Result<Vec<RoleAssignment>, PortError> {
         let (pt, pid) = principal_parts(principal);
         let mut c = self.connection().await.map_err(port)?;
-        let rows=sqlx::query("SELECT id,role_id,principal_type,principal_id,scope_type,account_id,system_id,delegated_by,created_at,expires_at FROM management.rbac_role_assignments assignment WHERE principal_type=$1 AND principal_id=$2 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>$3) AND (principal_type<>'user' OR EXISTS(SELECT 1 FROM management.users user_record WHERE user_record.id=assignment.principal_id AND user_record.status='active')) AND (scope_type='instance' OR principal_type<>'user' OR EXISTS(SELECT 1 FROM management.memberships membership WHERE membership.account_id=assignment.account_id AND membership.user_id=assignment.principal_id AND membership.status='active')) ORDER BY created_at,id").bind(pt).bind(pid).bind(now).fetch_all(&mut c).await.map_err(port)?;
+        let rows=sqlx::query("SELECT id,role_id,principal_type,principal_id,scope_type,account_id,system_id,delegated_by,created_at,expires_at FROM management.rbac_role_assignments assignment WHERE principal_type=$1 AND principal_id=$2 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at>$3) AND (principal_type<>'user' OR EXISTS(SELECT 1 FROM management.users user_record WHERE user_record.id=assignment.principal_id AND user_record.status='active')) AND (scope_type='instance' OR principal_type<>'user' OR EXISTS(SELECT 1 FROM management.memberships membership WHERE membership.account_id=assignment.account_id AND membership.user_id=assignment.principal_id AND membership.status='active')) ORDER BY created_at,id").bind(pt).bind(pid).bind(now).fetch_all(&mut *c).await.map_err(port)?;
         c.close().await.map_err(port)?;
         rows.iter().map(pg_assignment).collect()
     }
@@ -239,13 +239,13 @@ impl RbacRepository for PostgresRbacRepository {
         let (pt, pid) = principal_parts(a.principal);
         let (scope, account, system) = scope_parts(a.scope);
         let mut c = self.connection().await.map_err(port)?;
-        sqlx::query("INSERT INTO management.rbac_role_assignments (account_id,id,role_id,principal_type,principal_id,scope_type,system_id,delegated_by,created_at,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(account_id,role_id,principal_type,principal_id,scope_type,system_id) DO UPDATE SET delegated_by=excluded.delegated_by,created_at=excluded.created_at,expires_at=excluded.expires_at,revoked_at=NULL").bind(account.map(AccountId::as_uuid)).bind(a.id.as_uuid()).bind(a.role_id.as_uuid()).bind(pt).bind(pid).bind(scope).bind(system.map(SystemId::as_uuid)).bind(a.granted_by.as_uuid()).bind(epoch(a.granted_at)?).bind(a.expires_at.map(epoch).transpose()?).execute(&mut c).await.map_err(port)?;
+        sqlx::query("INSERT INTO management.rbac_role_assignments (account_id,id,role_id,principal_type,principal_id,scope_type,system_id,delegated_by,created_at,expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(account_id,role_id,principal_type,principal_id,scope_type,system_id) DO UPDATE SET delegated_by=excluded.delegated_by,created_at=excluded.created_at,expires_at=excluded.expires_at,revoked_at=NULL").bind(account.map(AccountId::as_uuid)).bind(a.id.as_uuid()).bind(a.role_id.as_uuid()).bind(pt).bind(pid).bind(scope).bind(system.map(SystemId::as_uuid)).bind(a.granted_by.as_uuid()).bind(epoch(a.granted_at)?).bind(a.expires_at.map(epoch).transpose()?).execute(&mut *c).await.map_err(port)?;
         c.close().await.map_err(port)?;
         Ok(())
     }
     async fn revoke_assignment(&self, id: RoleAssignmentId, now: i64) -> Result<bool, PortError> {
         let mut c = self.connection().await.map_err(port)?;
-        let r=sqlx::query("UPDATE management.rbac_role_assignments SET revoked_at=$1 WHERE id=$2 AND revoked_at IS NULL").bind(now).bind(id.as_uuid()).execute(&mut c).await.map_err(port)?;
+        let r=sqlx::query("UPDATE management.rbac_role_assignments SET revoked_at=$1 WHERE id=$2 AND revoked_at IS NULL").bind(now).bind(id.as_uuid()).execute(&mut *c).await.map_err(port)?;
         c.close().await.map_err(port)?;
         Ok(r.rows_affected() == 1)
     }

@@ -28,12 +28,15 @@ mod history_import_repository;
 mod ingest_repository;
 mod integrity_planner;
 mod job_dispatch;
+#[cfg(feature = "sqlite")]
 mod management_pool;
 mod management_repository;
 mod merged_reader;
 mod migrations;
 mod operational_repository;
 mod overlay_folding;
+#[cfg(feature = "postgres")]
+mod postgres_pool;
 #[cfg(feature = "sqlite")]
 mod provisioning;
 mod rbac_repository;
@@ -154,6 +157,8 @@ pub use overlay_folding::{
     OverlayFoldError, OverlayFoldKey, OverlayFoldPhase, OverlayFoldRepository, OverlayFoldService,
     OverlayFoldState,
 };
+#[cfg(feature = "postgres")]
+pub use postgres_pool::{PostgresConnection, postgres_connection};
 #[cfg(feature = "sqlite")]
 pub use provisioning::{
     AccountDatabaseLifecycle, AccountProvisioningResult, ReconciliationReport,

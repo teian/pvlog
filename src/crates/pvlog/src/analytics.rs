@@ -17,10 +17,9 @@ use pvlog_application::{
 };
 use pvlog_domain::{AccountId, SystemId, UserId};
 use pvlog_storage::{DatabaseTarget, ManagementRepository};
+#[cfg(feature = "postgres")]
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 use sqlx::Row;
-#[cfg(feature = "postgres")]
-use sqlx::{Connection as _, PgConnection};
 
 use crate::analytics_series::{AccountSeriesRepository, SeriesScope};
 
@@ -345,7 +344,7 @@ impl StorageAnalyticsApi {
             DatabaseTarget::Postgres { url } => {
                 #[cfg(feature = "postgres")]
                 {
-                    let mut connection = PgConnection::connect(url)
+                    let mut connection = pvlog_storage::postgres_connection(url)
                         .await
                         .map_err(|_| ModernAnalyticsError::Unavailable)?;
                     let rows = sqlx::query(
@@ -358,7 +357,7 @@ impl StorageAnalyticsApi {
                     )
                     .bind(account_id.as_uuid())
                     .bind(system_id.as_uuid())
-                    .fetch_all(&mut connection)
+                    .fetch_all(&mut *connection)
                     .await
                     .map_err(|_| ModernAnalyticsError::Unavailable)?;
                     connection
@@ -427,7 +426,7 @@ impl StorageAnalyticsApi {
             DatabaseTarget::Postgres { url } => {
                 #[cfg(feature = "postgres")]
                 {
-                    let mut connection = PgConnection::connect(url)
+                    let mut connection = pvlog_storage::postgres_connection(url)
                         .await
                         .map_err(|_| ModernAnalyticsError::Unavailable)?;
                     let total: Option<i64> = sqlx::query_scalar(
@@ -437,7 +436,7 @@ impl StorageAnalyticsApi {
                     )
                     .bind(account_id.as_uuid())
                     .bind(system_id.as_uuid())
-                    .fetch_one(&mut connection)
+                    .fetch_one(&mut *connection)
                     .await
                     .map_err(|_| ModernAnalyticsError::Unavailable)?;
                     connection
